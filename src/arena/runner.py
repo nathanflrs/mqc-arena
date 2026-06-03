@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -132,6 +133,10 @@ def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
 def main() -> None:
     print("✅ Runner started (IBKR READ-ONLY + ORDER PLAN)")
 
+    ci_mode = os.getenv("CI", "").lower() == "true"
+    if ci_mode:
+        print("ℹ️  CI mode detected — Telegram disabled, no approval required.")
+
     ib = None
     ibkr_ok = False
     try:
@@ -140,7 +145,8 @@ def main() -> None:
     except Exception as e:
         msg = f"⚠️ IBKR unavailable ({e}). Running in analysis-only mode (no execution)."
         print(msg)
-        send_message(msg)
+        if not ci_mode:
+            send_message(msg)
 
     try:
         if ibkr_ok:
@@ -257,8 +263,10 @@ def main() -> None:
         log_order_plan(plans, plan_id=plan_id)
 
         if not plans:
-            send_message(f"Milan Capital — ORDER PLAN ready\nplan_id={plan_id}\nNo plans.")
-            print("No plans -> exiting.")
+            msg = f"Milan Capital — ORDER PLAN ready\nplan_id={plan_id}\nNo plans."
+            print(msg)
+            if not ci_mode:
+                send_message(msg)
             return
 
         lines = []
@@ -266,7 +274,7 @@ def main() -> None:
             side = "BUY" if p.delta_qty > 0 else ("SELL" if p.delta_qty < 0 else "HOLD")
             lines.append(f"{p.symbol}: {side} | delta={p.delta_qty:+.0f} | est$={p.est_notional:.0f}")
 
-        send_message(
+        plan_summary = (
             f"🌍 Régime: {regime.upper()} | Vol: {regime_data['vol_regime']}\n"
             "Milan Capital — ORDER PLAN ready\n"
             f"plan_id={plan_id}\n\n"
@@ -275,8 +283,14 @@ def main() -> None:
             + alloc_result.telegram_summary()
             + "\n\n"
             + risk_report.telegram_summary()
-            + "\n\nReply APPROVE / REJECT (15 min)"
         )
+        print(plan_summary)
+
+        if ci_mode:
+            print("ℹ️  CI mode — order plan logged to logs/order_plan.csv. No Telegram, no approval, no execution.")
+            return
+
+        send_message(plan_summary + "\n\nReply APPROVE / REJECT (15 min)")
 
         last_id = drain_updates()
         approved, _ = wait_for_approval(
