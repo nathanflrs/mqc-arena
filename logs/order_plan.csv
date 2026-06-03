@@ -1,0 +1,3 @@
+plan_id,timestamp,symbol,side,delta_qty,target_qty,last_price,est_notional,target_weight,reason
+8248e232,2026-06-03T18:12:32+00:00,AAPL,SELL,-60.0,330.0,309.3900146484375,18563.40087890625,0.1,Buffett screen passed (stable + trend + near-high)
+8248e232,2026-06-03T18:12:32+00:00,SPY,BUY,135.0,135.0,755.3900146484375,101977.65197753906,0.1,Buffett screen passed (stable + trend + near-high)

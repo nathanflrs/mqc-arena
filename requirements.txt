@@ -1,0 +1,18 @@
+# Core data & ML
+pandas>=2.0
+numpy>=1.26
+yfinance>=0.2
+
+# Broker
+ib_insync>=0.9.86
+
+# Notifications
+requests>=2.31
+python-dotenv>=1.0
+
+# Dashboard (optional — not needed for GitHub Actions runner)
+plotly>=5.0
+streamlit>=1.35
+
+# Testing
+pytest>=8.0

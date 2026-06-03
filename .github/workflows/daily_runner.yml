@@ -1,0 +1,48 @@
+name: Daily Runner
+
+on:
+  schedule:
+    - cron: '15 13 * * 1-5'   # Mon–Fri 13:15 UTC (market open +45 min)
+  workflow_dispatch:            # manual trigger from GitHub UI
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run arena runner
+        env:
+          # Broker (IBKR unavailable on CI — runner degrades gracefully)
+          IBKR_PORT: ${{ secrets.IBKR_PORT }}
+          IBKR_CLIENT_ID: ${{ secrets.IBKR_CLIENT_ID }}
+          # Execution guard (keep false on CI — no live orders from GitHub Actions)
+          EXECUTION_ENABLED: "false"
+          MAX_ORDERS_PER_RUN: ${{ secrets.MAX_ORDERS_PER_RUN }}
+          MAX_NOTIONAL_PCT: ${{ secrets.MAX_NOTIONAL_PCT }}
+          LIMIT_BUFFER_BPS: ${{ secrets.LIMIT_BUFFER_BPS }}
+          # Risk manager
+          RISK_MAX_NET_LONG_PCT: ${{ secrets.RISK_MAX_NET_LONG_PCT }}
+          RISK_MAX_SINGLE_POSITION_PCT: ${{ secrets.RISK_MAX_SINGLE_POSITION_PCT }}
+          RISK_MIN_CASH_PCT: ${{ secrets.RISK_MIN_CASH_PCT }}
+          RISK_SELL_ONLY_MODE: ${{ secrets.RISK_SELL_ONLY_MODE }}
+          # Telegram
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_APPROVAL_TIMEOUT: ${{ secrets.TELEGRAM_APPROVAL_TIMEOUT }}
+          # Misc
+          MAX_LEVERAGE: ${{ secrets.MAX_LEVERAGE }}
+          MIN_SCORE_THRESHOLD: ${{ secrets.MIN_SCORE_THRESHOLD }}
+        run: python -m src.arena.runner

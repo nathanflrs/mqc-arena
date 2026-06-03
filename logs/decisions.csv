@@ -1,0 +1,106 @@
+ts,symbol,regime,winner_agent,action,confidence,target_weight,reason,meta,plan_id,timestamp,agent
+2026-01-22 16:56:47,AAPL,bull,BuffettAgent,BUY,0.7,0.1,Buffett screen passed (stable + trend + near-high),"{'regime': 'bull', 'vol20': 0.009854302728713689, 'sma200': 234.4049779510498, 'price': 249.6300048828125, 'near_high_252': 0.8722527088762335, 'flags': {'sma_ok': True, 'vol_ok': True, 'high_ok': False}}",,,
+2026-01-22 16:56:47,MSFT,bull,NONE,HOLD,0.0,0.0,No agent passed min_score,{},,,
+2026-01-22 16:56:47,NVDA,bull,BuffettAgent,BUY,0.7,0.1,Buffett screen passed (stable + trend + near-high),"{'regime': 'bull', 'vol20': 0.017191058907149618, 'sma200': 165.24506908416748, 'price': 185.66990661621094, 'near_high_252': 0.8968327110519908, 'flags': {'sma_ok': True, 'vol_ok': True, 'high_ok': False}}",,,
+AAPL,bull,BuffettAgent,BUY,0.7,0.1,Buffett screen passed (stable + trend + near-high),,,,,
+MSFT,bull,NONE,HOLD,0.0,0.0,No signal above threshold,,,,,
+SPY,bull,BuffettAgent,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,,,,
+,AAPL,choppy,,HOLD,0.0,0.0,Baseline hold,,eaabb6be,2026-03-15T14:58:39+00:00,DummyHoldAgent
+,AAPL,choppy,,BUY,0.7,0.1,Buffett screen passed (stable + trend + near-high),,eaabb6be,2026-03-15T14:58:39+00:00,BuffettAgent
+,AAPL,choppy,,HOLD,0.3,0.0,No Citadel momentum setup,,eaabb6be,2026-03-15T14:58:39+00:00,CitadelAgent
+,MSFT,choppy,,HOLD,0.0,0.0,Baseline hold,,eaabb6be,2026-03-15T14:58:39+00:00,DummyHoldAgent
+,MSFT,choppy,,HOLD,0.55,0.0,Buffett screen not strong enough,,eaabb6be,2026-03-15T14:58:39+00:00,BuffettAgent
+,MSFT,choppy,,HOLD,0.1,0.0,No Citadel momentum setup,,eaabb6be,2026-03-15T14:58:39+00:00,CitadelAgent
+,SPY,choppy,,HOLD,0.0,0.0,Baseline hold,,eaabb6be,2026-03-15T14:58:40+00:00,DummyHoldAgent
+,SPY,choppy,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,eaabb6be,2026-03-15T14:58:40+00:00,BuffettAgent
+,SPY,choppy,,HOLD,0.3,0.0,No Citadel momentum setup,,eaabb6be,2026-03-15T14:58:40+00:00,CitadelAgent
+,AAPL,choppy,,HOLD,0.0,0.0,Baseline hold,,9867d5a3,2026-03-15T15:07:13+00:00,DummyHoldAgent
+,AAPL,choppy,,BUY,0.7,0.1,Buffett screen passed (stable + trend + near-high),,9867d5a3,2026-03-15T15:07:13+00:00,BuffettAgent
+,AAPL,choppy,,HOLD,0.3,0.0,No Citadel momentum setup,,9867d5a3,2026-03-15T15:07:13+00:00,CitadelAgent
+,MSFT,choppy,,HOLD,0.0,0.0,Baseline hold,,9867d5a3,2026-03-15T15:07:13+00:00,DummyHoldAgent
+,MSFT,choppy,,HOLD,0.55,0.0,Buffett screen not strong enough,,9867d5a3,2026-03-15T15:07:13+00:00,BuffettAgent
+,MSFT,choppy,,HOLD,0.1,0.0,No Citadel momentum setup,,9867d5a3,2026-03-15T15:07:13+00:00,CitadelAgent
+,SPY,choppy,,HOLD,0.0,0.0,Baseline hold,,9867d5a3,2026-03-15T15:07:13+00:00,DummyHoldAgent
+,SPY,choppy,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,9867d5a3,2026-03-15T15:07:13+00:00,BuffettAgent
+,SPY,choppy,,HOLD,0.3,0.0,No Citadel momentum setup,,9867d5a3,2026-03-15T15:07:13+00:00,CitadelAgent
+,AAPL,choppy,,HOLD,0.0,0.0,Baseline hold,,f6f248a2,2026-03-15T15:11:29+00:00,DummyHoldAgent
+,AAPL,choppy,,BUY,0.7,0.1,Buffett screen passed (stable + trend + near-high),,f6f248a2,2026-03-15T15:11:29+00:00,BuffettAgent
+,AAPL,choppy,,HOLD,0.3,0.0,No Citadel momentum setup,,f6f248a2,2026-03-15T15:11:29+00:00,CitadelAgent
+,MSFT,choppy,,HOLD,0.0,0.0,Baseline hold,,f6f248a2,2026-03-15T15:11:29+00:00,DummyHoldAgent
+,MSFT,choppy,,HOLD,0.55,0.0,Buffett screen not strong enough,,f6f248a2,2026-03-15T15:11:29+00:00,BuffettAgent
+,MSFT,choppy,,HOLD,0.1,0.0,No Citadel momentum setup,,f6f248a2,2026-03-15T15:11:29+00:00,CitadelAgent
+,SPY,choppy,,HOLD,0.0,0.0,Baseline hold,,f6f248a2,2026-03-15T15:11:29+00:00,DummyHoldAgent
+,SPY,choppy,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,f6f248a2,2026-03-15T15:11:29+00:00,BuffettAgent
+,SPY,choppy,,HOLD,0.3,0.0,No Citadel momentum setup,,f6f248a2,2026-03-15T15:11:29+00:00,CitadelAgent
+,AAPL,bull,,HOLD,0.0,0.0,Baseline hold,,beba62f3,2026-04-29T17:06:22+00:00,DummyHoldAgent
+,AAPL,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,beba62f3,2026-04-29T17:06:22+00:00,BuffettAgent
+,AAPL,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,beba62f3,2026-04-29T17:06:22+00:00,CitadelAgent
+,AAPL,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=61.1),,beba62f3,2026-04-29T17:06:22+00:00,MeanReversionAgent
+,MSFT,bull,,HOLD,0.0,0.0,Baseline hold,,beba62f3,2026-04-29T17:06:23+00:00,DummyHoldAgent
+,MSFT,bull,,HOLD,0.55,0.0,Buffett screen not strong enough,,beba62f3,2026-04-29T17:06:23+00:00,BuffettAgent
+,MSFT,bull,,HOLD,0.1,0.0,No Citadel momentum setup,,beba62f3,2026-04-29T17:06:23+00:00,CitadelAgent
+,MSFT,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=72.1),,beba62f3,2026-04-29T17:06:23+00:00,MeanReversionAgent
+,SPY,bull,,HOLD,0.0,0.0,Baseline hold,,beba62f3,2026-04-29T17:06:23+00:00,DummyHoldAgent
+,SPY,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,beba62f3,2026-04-29T17:06:23+00:00,BuffettAgent
+,SPY,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,beba62f3,2026-04-29T17:06:23+00:00,CitadelAgent
+,SPY,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=75.2),,beba62f3,2026-04-29T17:06:23+00:00,MeanReversionAgent
+,AAPL,bull,,HOLD,0.0,0.0,Baseline hold,,6af532de,2026-04-29T17:13:55+00:00,DummyHoldAgent
+,AAPL,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,6af532de,2026-04-29T17:13:55+00:00,BuffettAgent
+,AAPL,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,6af532de,2026-04-29T17:13:55+00:00,CitadelAgent
+,AAPL,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=60.7),,6af532de,2026-04-29T17:13:55+00:00,MeanReversionAgent
+,AAPL,bull,,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,,6af532de,2026-04-29T17:13:55+00:00,MacroAgent
+,AAPL,bull,,HOLD,0.3,0.0,"No trend setup (ADX=14.9, bull=True)",,6af532de,2026-04-29T17:13:55+00:00,TrendFollowingAgent
+,MSFT,bull,,HOLD,0.0,0.0,Baseline hold,,6af532de,2026-04-29T17:13:56+00:00,DummyHoldAgent
+,MSFT,bull,,HOLD,0.55,0.0,Buffett screen not strong enough,,6af532de,2026-04-29T17:13:56+00:00,BuffettAgent
+,MSFT,bull,,HOLD,0.1,0.0,No Citadel momentum setup,,6af532de,2026-04-29T17:13:56+00:00,CitadelAgent
+,MSFT,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=72.0),,6af532de,2026-04-29T17:13:56+00:00,MeanReversionAgent
+,MSFT,bull,,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,,6af532de,2026-04-29T17:13:56+00:00,MacroAgent
+,MSFT,bull,,HOLD,0.3,0.0,"No trend setup (ADX=50.4, bull=False)",,6af532de,2026-04-29T17:13:56+00:00,TrendFollowingAgent
+,SPY,bull,,HOLD,0.0,0.0,Baseline hold,,6af532de,2026-04-29T17:13:56+00:00,DummyHoldAgent
+,SPY,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,6af532de,2026-04-29T17:13:56+00:00,BuffettAgent
+,SPY,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,6af532de,2026-04-29T17:13:56+00:00,CitadelAgent
+,SPY,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=74.9),,6af532de,2026-04-29T17:13:56+00:00,MeanReversionAgent
+,SPY,bull,,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,,6af532de,2026-04-29T17:13:56+00:00,MacroAgent
+,SPY,bull,,BUY,0.8,0.1,TrendFollow BUY: MAs alignées + ADX=43.1 + mom20=9.10%,,6af532de,2026-04-29T17:13:56+00:00,TrendFollowingAgent
+,AAPL,bull,,HOLD,0.0,0.0,Baseline hold,,54eb6ef3,2026-04-30T18:43:44+00:00,DummyHoldAgent
+,AAPL,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,54eb6ef3,2026-04-30T18:43:44+00:00,BuffettAgent
+,AAPL,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,54eb6ef3,2026-04-30T18:43:44+00:00,CitadelAgent
+,AAPL,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=63.6),,54eb6ef3,2026-04-30T18:43:44+00:00,MeanReversionAgent
+,AAPL,bull,,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,,54eb6ef3,2026-04-30T18:43:44+00:00,MacroAgent
+,AAPL,bull,,HOLD,0.3,0.0,"No trend setup (ADX=15.9, bull=True)",,54eb6ef3,2026-04-30T18:43:44+00:00,TrendFollowingAgent
+,SPY,bull,,HOLD,0.0,0.0,Baseline hold,,54eb6ef3,2026-04-30T18:43:45+00:00,DummyHoldAgent
+,SPY,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,54eb6ef3,2026-04-30T18:43:45+00:00,BuffettAgent
+,SPY,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,54eb6ef3,2026-04-30T18:43:45+00:00,CitadelAgent
+,SPY,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=80.6),,54eb6ef3,2026-04-30T18:43:45+00:00,MeanReversionAgent
+,SPY,bull,,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,,54eb6ef3,2026-04-30T18:43:45+00:00,MacroAgent
+,SPY,bull,,BUY,0.9,0.1,TrendFollow BUY: MAs alignées + ADX=45.5 + mom20=9.68%,,54eb6ef3,2026-04-30T18:43:45+00:00,TrendFollowingAgent
+,AAPL,bull,,HOLD,0.0,0.0,Baseline hold,,a22f7cda,2026-06-03T18:04:53+00:00,DummyHoldAgent
+,AAPL,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,a22f7cda,2026-06-03T18:04:53+00:00,BuffettAgent
+,AAPL,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,a22f7cda,2026-06-03T18:04:53+00:00,CitadelAgent
+,AAPL,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=62.6),,a22f7cda,2026-06-03T18:04:53+00:00,MeanReversionAgent
+,AAPL,bull,,BUY,0.6,0.08,Macro RISK ON: SPY=11.20% GLD=-12.57% TLT=-2.83%,,a22f7cda,2026-06-03T18:04:53+00:00,MacroAgent
+,AAPL,bull,,BUY,0.9,0.1,TrendFollow BUY: MAs alignées + ADX=76.1 + mom20=8.95%,,a22f7cda,2026-06-03T18:04:53+00:00,TrendFollowingAgent
+,SPY,bull,,HOLD,0.0,0.0,Baseline hold,,a22f7cda,2026-06-03T18:04:54+00:00,DummyHoldAgent
+,SPY,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,a22f7cda,2026-06-03T18:04:54+00:00,BuffettAgent
+,SPY,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,a22f7cda,2026-06-03T18:04:54+00:00,CitadelAgent
+,SPY,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=63.1),,a22f7cda,2026-06-03T18:04:54+00:00,MeanReversionAgent
+,SPY,bull,,BUY,0.6,0.08,Macro RISK ON: SPY=11.20% GLD=-12.57% TLT=-2.83%,,a22f7cda,2026-06-03T18:04:54+00:00,MacroAgent
+,SPY,bull,,BUY,0.9,0.1,TrendFollow BUY: MAs alignées + ADX=35.6 + mom20=4.39%,,a22f7cda,2026-06-03T18:04:54+00:00,TrendFollowingAgent
+,AAPL,bull,,HOLD,0.0,0.0,Baseline hold,,8248e232,2026-06-03T18:12:30+00:00,DummyHoldAgent
+,AAPL,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,8248e232,2026-06-03T18:12:30+00:00,BuffettAgent
+,AAPL,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,8248e232,2026-06-03T18:12:30+00:00,CitadelAgent
+,AAPL,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=62.6),,8248e232,2026-06-03T18:12:30+00:00,MeanReversionAgent
+,AAPL,bull,,BUY,0.6,0.08,Macro RISK ON: SPY=11.18% GLD=-12.61% TLT=-2.83%,,8248e232,2026-06-03T18:12:30+00:00,MacroAgent
+,AAPL,bull,,BUY,0.9,0.1,TrendFollow BUY: MAs alignées + ADX=76.1 + mom20=8.97%,,8248e232,2026-06-03T18:12:30+00:00,TrendFollowingAgent
+,AAPL,bull,,HOLD,0.2,0.0,DivArb: yield=0.087% trop faible,,8248e232,2026-06-03T18:12:30+00:00,DividendArbitrageAgent
+,AAPL,bull,,HOLD,0.3,0.0,PairsTrading HOLD: z-score=1.25 (seuil=2.0),,8248e232,2026-06-03T18:12:30+00:00,PairsTradingAgent
+,AAPL,bull,,HOLD,0.3,0.0,Vol HOLD: VIX=16.03 | z=-0.63 | mom5=-1.6%,,8248e232,2026-06-03T18:12:30+00:00,VolatilityAgent
+,SPY,bull,,HOLD,0.0,0.0,Baseline hold,,8248e232,2026-06-03T18:12:32+00:00,DummyHoldAgent
+,SPY,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,8248e232,2026-06-03T18:12:32+00:00,BuffettAgent
+,SPY,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,8248e232,2026-06-03T18:12:32+00:00,CitadelAgent
+,SPY,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=62.9),,8248e232,2026-06-03T18:12:32+00:00,MeanReversionAgent
+,SPY,bull,,BUY,0.6,0.08,Macro RISK ON: SPY=11.17% GLD=-12.61% TLT=-2.83%,,8248e232,2026-06-03T18:12:32+00:00,MacroAgent
+,SPY,bull,,BUY,0.9,0.1,TrendFollow BUY: MAs alignées + ADX=35.6 + mom20=4.37%,,8248e232,2026-06-03T18:12:32+00:00,TrendFollowingAgent
+,SPY,bull,,HOLD,0.2,0.0,No dividend data available,,8248e232,2026-06-03T18:12:32+00:00,DividendArbitrageAgent
+,SPY,bull,,HOLD,0.3,0.0,PairsTrading HOLD: z-score=-1.86 (seuil=2.0),,8248e232,2026-06-03T18:12:32+00:00,PairsTradingAgent
+,SPY,bull,,HOLD,0.3,0.0,Vol HOLD: VIX=16.03 | z=-0.63 | mom5=-1.6%,,8248e232,2026-06-03T18:12:32+00:00,VolatilityAgent
