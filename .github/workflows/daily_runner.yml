@@ -3,10 +3,13 @@ name: Daily Runner
 on:
   schedule:
     - cron: '15 13 * * 1-5'   # Mon–Fri 13:15 UTC (market open +45 min)
+    - cron: '0 7 * * 1-5'     # Mon–Fri 07:00 UTC (8h00 CET heure d'été)
+    - cron: '15 7 * * 1'      # Mon only 07:15 UTC (tearsheet hebdomadaire)
   workflow_dispatch:            # manual trigger from GitHub UI
 
 jobs:
   run:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '15 13 * * 1-5'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -46,3 +49,51 @@ jobs:
           MAX_LEVERAGE: ${{ secrets.MAX_LEVERAGE }}
           MIN_SCORE_THRESHOLD: ${{ secrets.MIN_SCORE_THRESHOLD }}
         run: python -m src.arena.runner
+
+  weekly_tearsheet:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '15 7 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Send weekly tearsheet
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -m src.notify.weekly_tearsheet
+
+  morning_briefing:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 7 * * 1-5'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run morning briefing
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -m src.notify.morning_briefing

@@ -29,6 +29,8 @@ from src.arena.selector import select_best
 from src.data.market_data import download_ohlcv
 from src.data.regime import detect_regime
 from src.config import WATCHLIST
+from src.risk.correlation import CorrelationGuard
+from src.risk.live_scorer import LiveScorer
 
 st.set_page_config(
     page_title="Milan Capital",
@@ -257,6 +259,44 @@ with st.sidebar:
 # ====== MAIN — LOAD DATA ======
 with st.spinner("Chargement des données de marché..."):
     regime_data, results = load_data()
+
+# ── Sidebar: Corrélation portfolio (nécessite results) ────────────────────────
+with st.sidebar:
+    st.markdown(
+        "<div style='border-top:1px solid #2a2d3a; margin:18px 0 12px;'></div>"
+        "<div style='color:#888; font-size:11px; letter-spacing:1px;"
+        "text-transform:uppercase; margin-bottom:10px;'>Corrélation Portfolio</div>",
+        unsafe_allow_html=True,
+    )
+    try:
+        _buy_syms = (
+            list(_df_plan[_df_plan["side"] == "BUY"]["symbol"].unique())
+            if not _df_plan.empty else []
+        )
+        if len(_buy_syms) >= 2:
+            _price_data = {s: results[s]["df"] for s in _buy_syms if s in results}
+            _corr = CorrelationGuard().correlation_matrix(_buy_syms, _price_data)
+            if not _corr.empty:
+                _corr_masked = _corr.copy()
+                for _c in _corr_masked.columns:
+                    _corr_masked.loc[_c, _c] = float("nan")
+                _max_c = float(_corr_masked.abs().max().max())
+                _cc = "#ff4444" if _max_c >= 0.7 else ("#ffaa00" if _max_c >= 0.5 else "#00ff88")
+                st.markdown(f"""
+<div class="sb-card" style="border-color:{_cc}55;">
+    <div class="sb-label">Max corrélation pairwise</div>
+    <div class="sb-val" style="color:{_cc};">{_max_c:.2f}</div>
+    <div class="sb-delta" style="color:#555;">{len(_buy_syms)} positions BUY
+        {'&nbsp;⚠️ sur-concentration' if _max_c >= 0.7 else ''}</div>
+</div>""", unsafe_allow_html=True)
+        else:
+            st.markdown(
+                "<div style='color:#444; font-size:12px; padding:4px 0;'>"
+                "≥ 2 positions BUY requises</div>",
+                unsafe_allow_html=True,
+            )
+    except Exception:
+        pass
 
 regime = regime_data["regime"]
 
@@ -583,6 +623,110 @@ try:
         st.markdown("<div style='color:#555; padding:24px; text-align:center; background:#1a1d27; border-radius:10px;'>Lancez d'abord le backtest.</div>", unsafe_allow_html=True)
 except FileNotFoundError:
     st.markdown("<div style='color:#555; padding:24px; text-align:center; background:#1a1d27; border-radius:10px;'>Lancez d'abord : python -m src.backtest.run_backtest</div>", unsafe_allow_html=True)
+
+
+# ====== CORRELATION HEATMAP ======
+st.markdown("""
+<div class="sec-header">
+    <div class="sec-dot" style="color:#ffaa00;">⬡</div>
+    <div class="sec-title">Corrélation Portfolio</div>
+    <div class="sec-sub">• 60 jours glissants | seuil BUY bloqué ≥ 0.70</div>
+</div>
+""", unsafe_allow_html=True)
+
+try:
+    _all_syms = [s for s in WATCHLIST if s in results]
+    _price_data_all = {s: results[s]["df"] for s in _all_syms}
+    _corr_full = CorrelationGuard(lookback_days=60).correlation_matrix(_all_syms, _price_data_all)
+    if not _corr_full.empty:
+        _fig_corr = go.Figure(go.Heatmap(
+            z=_corr_full.values,
+            x=list(_corr_full.columns),
+            y=list(_corr_full.index),
+            colorscale=[
+                [0.0, "#1a0000"], [0.35, "#0e1117"],
+                [0.5, "#1a1d27"],
+                [0.65, "#001a0d"], [1.0, "#00ff88"],
+            ],
+            zmin=-1, zmax=1,
+            text=_corr_full.round(2).values,
+            texttemplate="%{text}",
+            textfont=dict(size=9, color="#ccc"),
+            hovertemplate="%{y} / %{x}: %{z:.2f}<extra></extra>",
+        ))
+        _fig_corr.update_layout(
+            paper_bgcolor="#0e1117", plot_bgcolor="#1a1d27",
+            font=dict(color="#aaa", size=10),
+            margin=dict(l=0, r=0, t=10, b=0),
+            height=400,
+        )
+        st.plotly_chart(_fig_corr, use_container_width=True)
+        st.caption("Corrélation des rendements journaliers sur 60 jours. "
+                   "Rouge = corrélation négative, Vert = positive.")
+    else:
+        st.markdown("<div style='color:#555; padding:20px; text-align:center; background:#1a1d27; "
+                    "border-radius:10px;'>Données insuffisantes.</div>", unsafe_allow_html=True)
+except Exception as _e:
+    st.markdown(f"<div style='color:#555; padding:20px;'>Erreur heatmap : {_e}</div>",
+                unsafe_allow_html=True)
+
+
+# ====== TEARSHEET ======
+st.markdown("""
+<div class="sec-header">
+    <div class="sec-dot" style="color:#aa88ff;">📊</div>
+    <div class="sec-title">Tearsheet PnL Attribution</div>
+    <div class="sec-sub">• par agent • live round-trips</div>
+</div>
+""", unsafe_allow_html=True)
+
+try:
+    import glob as _glob
+    _sheets = sorted(_glob.glob(os.path.join(ROOT, "logs/tearsheet_*.csv")))
+    if _sheets:
+        _df_tear = pd.read_csv(_sheets[-1])
+        _week_label = os.path.basename(_sheets[-1]).replace("tearsheet_", "").replace(".csv", "")
+        st.caption(f"Semaine {_week_label} — {len(_sheets)} tearsheet(s) disponibles")
+        c1, c2, c3, c4 = st.columns(4)
+        _best_row = _df_tear.sort_values("sharpe", ascending=False).iloc[0]
+        with c1:
+            st.metric("🤖 Meilleur agent", _best_row["agent"].replace("Agent", ""))
+        with c2:
+            st.metric("⚡ Sharpe", f"{_best_row['sharpe']:.2f}")
+        with c3:
+            st.metric("✅ Win rate", f"{_best_row['win_rate']:.0%}")
+        with c4:
+            st.metric("📉 Max DD", f"{_best_row['max_drawdown']:.1%}")
+        st.markdown("<br>", unsafe_allow_html=True)
+        _df_tear_disp = _df_tear.copy().sort_values("sharpe", ascending=False)
+        _df_tear_disp["win_rate"]        = _df_tear_disp["win_rate"].map("{:.0%}".format)
+        _df_tear_disp["avg_return_pct"]  = _df_tear_disp["avg_return_pct"].map("{:+.2%}".format)
+        _df_tear_disp["total_pnl_pct"]   = _df_tear_disp["total_pnl_pct"].map("{:+.1%}".format)
+        _df_tear_disp["max_drawdown"]    = _df_tear_disp["max_drawdown"].map("{:.1%}".format)
+        _df_tear_disp["sharpe"]          = _df_tear_disp["sharpe"].map("{:.2f}".format)
+        _df_tear_disp["avg_holding_days"]= _df_tear_disp["avg_holding_days"].map("{:.0f}j".format)
+        _df_tear_disp.columns = [
+            "Agent", "Trades", "Win Rate", "Avg/Trade",
+            "PnL Total", "Max DD", "Sharpe", "Hold Moy",
+        ]
+        st.dataframe(_df_tear_disp, use_container_width=True, hide_index=True)
+    else:
+        _scorer = LiveScorer()
+        _metrics = _scorer.compute_agent_metrics()
+        if _metrics:
+            st.info("Aucun tearsheet CSV disponible — génération live depuis les logs.")
+            _rows = [m.to_dict() for m in sorted(_metrics.values(),
+                                                   key=lambda x: x.sharpe, reverse=True)]
+            st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True)
+        else:
+            st.markdown(
+                "<div style='color:#555; padding:24px; text-align:center; background:#1a1d27; "
+                "border-radius:10px;'>Aucun round-trip enregistré. Exécutez des ordres d'abord.</div>",
+                unsafe_allow_html=True,
+            )
+except Exception as _e:
+    st.markdown(f"<div style='color:#555; padding:20px;'>Erreur tearsheet : {_e}</div>",
+                unsafe_allow_html=True)
 
 
 # ====== FOOTER ======

@@ -43,6 +43,7 @@ from src.execution.logger import log_order_plan, log_execution, log_decisions
 from src.notify.telegram import drain_updates, send_message, wait_for_approval
 from src.risk.manager import RiskConfig, RiskManager, DrawdownCircuitBreaker
 from src.risk.allocator import AllocatorConfig, DynamicAllocator
+from src.risk.correlation import CorrelationGuard
 
 
 def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
@@ -271,6 +272,19 @@ def main() -> None:
                 print(f"   ✂️  {r.plan.symbol} ({r.plan.action}): {r.reason}")
 
         plans = risk_report.approved
+
+        # ====== CORRELATION GUARD ======
+        corr_guard = CorrelationGuard(threshold=0.7, lookback_days=60)
+        plans, corr_blocks = corr_guard.filter_plans(plans, snap, all_data)
+        if corr_blocks:
+            for cb in corr_blocks:
+                msg = (
+                    f"⚠️  Corrélation: {cb['symbol']} bloqué "
+                    f"(r={cb['max_corr']:.2f} avec {cb['correlated_with']})"
+                )
+                print(msg)
+                if not ci_mode:
+                    send_message(msg)
 
         log_order_plan(plans, plan_id=plan_id)
 

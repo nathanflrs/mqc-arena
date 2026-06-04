@@ -59,6 +59,48 @@ def _sharpe_from_roundtrips(trips: List[RoundTrip], risk_free: float = 0.04) -> 
     return float(excess.mean() / std * np.sqrt(trades_per_year))
 
 
+def _max_drawdown_from_trips(trips: List[RoundTrip]) -> float:
+    """
+    Max drawdown on a synthetic cumulative-equity curve built from
+    sequential round-trip returns sorted by exit date.
+    """
+    if not trips:
+        return 0.0
+    sorted_trips = sorted(trips, key=lambda t: t.exit_date)
+    equity = np.cumprod([1.0 + t.return_pct for t in sorted_trips])
+    peak = np.maximum.accumulate(equity)
+    dd = (equity - peak) / peak
+    return float(dd.min())
+
+
+# ─── AgentMetrics ─────────────────────────────────────────────────────────────
+
+@dataclass
+class AgentMetrics:
+    agent: str
+    n_trades: int             # completed round-trips
+    win_rate: float           # fraction of profitable round-trips
+    avg_return_pct: float     # mean per-trade return
+    total_pnl_pct: float      # simple sum of round-trip returns
+    max_drawdown: float       # max drawdown on cumulative equity from round-trips
+    sharpe: float             # annualised live Sharpe
+    avg_holding_days: float
+
+    def to_dict(self) -> dict:
+        return {
+            "agent":            self.agent,
+            "n_trades":         self.n_trades,
+            "win_rate":         round(self.win_rate, 4),
+            "avg_return_pct":   round(self.avg_return_pct, 4),
+            "total_pnl_pct":    round(self.total_pnl_pct, 4),
+            "max_drawdown":     round(self.max_drawdown, 4),
+            "sharpe":           round(self.sharpe, 4),
+            "avg_holding_days": round(self.avg_holding_days, 1),
+        }
+
+
+# ─── LiveScorer ───────────────────────────────────────────────────────────────
+
 class LiveScorer:
     """
     Reconstruit les round-trips par agent depuis les logs de décisions
@@ -95,8 +137,6 @@ class LiveScorer:
             if pid and sym and is_winner and agent:
                 winner_map[(pid, sym)] = agent
 
-        # Reconstruction des round-trips par symbole
-        # Pour chaque symbole, on suit les BUY ouverts {symbol: (agent, entry_price, entry_date)}
         open_positions: Dict[str, Tuple[str, float, pd.Timestamp]] = {}
         roundtrips: List[RoundTrip] = []
 
@@ -135,7 +175,6 @@ class LiveScorer:
         try:
             df = pd.read_csv(path)
             if "is_winner" not in df.columns:
-                # Fichier pré-migration : pas de colonne is_winner → on ne peut pas scorer
                 logger.info("decisions.csv sans colonne is_winner — live scoring désactivé pour l'instant")
                 return None
             return df
@@ -161,37 +200,109 @@ class LiveScorer:
         except (TypeError, ValueError):
             return None
 
+    # ── Existing public API ───────────────────────────────────────────────────
+
     def compute_live_sharpes(self) -> Dict[str, Dict[str, float]]:
-        """
-        Retourne {agent_name: {symbol: sharpe_live}}.
-        Agents avec moins de min_trades round-trips sont absents du dict.
-        """
+        """Retourne {agent_name: {symbol: sharpe_live}}."""
         self._load()
         result: Dict[str, Dict[str, float]] = {}
-
-        # Regroupe par (agent, symbol)
         groups: Dict[Tuple[str, str], List[RoundTrip]] = {}
         for t in self._roundtrips:
             groups.setdefault((t.agent, t.symbol), []).append(t)
-
         for (agent, sym), trips in groups.items():
             if len(trips) < self.cfg.min_trades:
                 continue
-            sharpe = _sharpe_from_roundtrips(trips)
-            result.setdefault(agent, {})[sym] = round(sharpe, 4)
-
+            result.setdefault(agent, {})[sym] = round(_sharpe_from_roundtrips(trips), 4)
         return result
 
     def get_n_trades(self, agent: str, symbol: str) -> int:
-        """Nombre de round-trips complétés pour un agent/symbole donné."""
         self._load()
         return sum(1 for t in self._roundtrips if t.agent == agent and t.symbol == symbol)
 
     def get_roundtrips(self, agent: str | None = None, symbol: str | None = None) -> List[RoundTrip]:
-        """Accès direct aux round-trips (pour debug/dashboard)."""
         self._load()
         return [
             t for t in self._roundtrips
             if (agent is None or t.agent == agent)
             and (symbol is None or t.symbol == symbol)
         ]
+
+    # ── New: per-agent aggregate metrics ─────────────────────────────────────
+
+    def compute_agent_metrics(self) -> Dict[str, AgentMetrics]:
+        """
+        Returns {agent_name: AgentMetrics} for every agent with ≥1 round-trip,
+        aggregated across all symbols.
+        """
+        self._load()
+        groups: Dict[str, List[RoundTrip]] = {}
+        for t in self._roundtrips:
+            groups.setdefault(t.agent, []).append(t)
+
+        result: Dict[str, AgentMetrics] = {}
+        for agent, trips in groups.items():
+            n = len(trips)
+            returns = np.array([t.return_pct for t in trips])
+            result[agent] = AgentMetrics(
+                agent=agent,
+                n_trades=n,
+                win_rate=float(np.mean(returns > 0)) if n > 0 else 0.0,
+                avg_return_pct=float(np.mean(returns)) if n > 0 else 0.0,
+                total_pnl_pct=float(np.sum(returns)),
+                max_drawdown=_max_drawdown_from_trips(trips),
+                sharpe=_sharpe_from_roundtrips(trips),
+                avg_holding_days=float(np.mean([t.holding_days for t in trips])) if n > 0 else 0.0,
+            )
+        return result
+
+    def generate_tearsheet(self, path: str | None = None) -> str:
+        """
+        Generate a weekly tearsheet CSV.
+        Default: logs/tearsheet_YYYY-WW.csv. Returns the path written.
+        """
+        from datetime import datetime
+
+        if path is None:
+            week = datetime.now().strftime("%Y-W%V")
+            path = f"logs/tearsheet_{week}.csv"
+
+        metrics = self.compute_agent_metrics()
+        if not metrics:
+            logger.info("No round-trips yet — tearsheet not generated.")
+            return path
+
+        rows = [m.to_dict() for m in metrics.values()]
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(rows).sort_values("sharpe", ascending=False).to_csv(path, index=False)
+        logger.info("Tearsheet written → %s", path)
+        return path
+
+    def send_weekly_tearsheet(self) -> None:
+        """
+        Generate tearsheet and send formatted Telegram summary.
+        Called every Monday by src/notify/weekly_tearsheet.py.
+        """
+        from datetime import datetime
+        from src.notify.telegram import send_message
+
+        path = self.generate_tearsheet()
+        metrics = self.compute_agent_metrics()
+
+        if not metrics:
+            send_message("📊 Tearsheet hebdo : aucun round-trip enregistré pour l'instant.")
+            return
+
+        now = datetime.now()
+        lines = [f"📊 TEARSHEET — Semaine {now.strftime('%V')} ({now.year})\n"]
+
+        for m in sorted(metrics.values(), key=lambda x: x.sharpe, reverse=True):
+            sign = "+" if m.total_pnl_pct >= 0 else ""
+            lines.append(
+                f"\n🤖 {m.agent}\n"
+                f"   Trades: {m.n_trades} | Win: {m.win_rate:.0%} | Sharpe: {m.sharpe:.2f}\n"
+                f"   PnL total: {sign}{m.total_pnl_pct:.1%} | Max DD: {m.max_drawdown:.1%}\n"
+                f"   Avg/trade: {m.avg_return_pct:+.2%} | Hold moy: {m.avg_holding_days:.0f}j"
+            )
+
+        lines.append(f"\n📁 {path}")
+        send_message("\n".join(lines)[:4096])
