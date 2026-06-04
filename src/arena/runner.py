@@ -41,7 +41,7 @@ from src.data.regime import detect_regime
 from src.execution.planner import plan_from_signal
 from src.execution.logger import log_order_plan, log_execution, log_decisions
 from src.notify.telegram import drain_updates, send_message, wait_for_approval
-from src.risk.manager import RiskConfig, RiskManager
+from src.risk.manager import RiskConfig, RiskManager, DrawdownCircuitBreaker
 from src.risk.allocator import AllocatorConfig, DynamicAllocator
 
 
@@ -158,6 +158,18 @@ def main() -> None:
             print("⚠️  IBKR offline — using paper snapshot (NetLiq=100 000, no positions)")
         print(f"Positions: {snap.positions if snap.positions else '{}'}")
 
+        # ====== CIRCUIT BREAKER ======
+        cb = DrawdownCircuitBreaker()
+        cb.evaluate(snap.net_liquidation, ci_mode=ci_mode)
+        if cb.is_triggered:
+            msg = (
+                f"🚨 Circuit breaker actif — drawdown={cb.drawdown:.1%} depuis pic "
+                f"(${cb.peak_netliq:,.0f}). SELL-ONLY mode forcé."
+            )
+            print(msg)
+            if not ci_mode:
+                send_message(msg)
+
         arena = Arena([
             DummyHoldAgent(),
             BuffettAgent(),
@@ -249,7 +261,7 @@ def main() -> None:
             max_net_long_pct=RISK_MAX_NET_LONG_PCT,
             max_single_position_pct=RISK_MAX_SINGLE_POSITION_PCT,
             min_cash_pct=RISK_MIN_CASH_PCT,
-            sell_only_mode=RISK_SELL_ONLY_MODE,
+            sell_only_mode=RISK_SELL_ONLY_MODE or cb.is_triggered,
         )
         risk_report = RiskManager(risk_cfg).check(plans, snap)
 

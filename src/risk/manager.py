@@ -1,7 +1,10 @@
 # src/risk/manager.py
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import List
 
 from src.broker.portfolio import PortfolioSnapshot
@@ -129,3 +132,99 @@ class RiskManager:
             post_trade_long_pct=post_trade_long_pct,
             sell_only_triggered=self.cfg.sell_only_mode,
         )
+
+
+class DrawdownCircuitBreaker:
+    """
+    Monitors portfolio drawdown from the NetLiq peak.
+    Triggers SELL-ONLY mode automatically when drawdown > THRESHOLD (8%).
+    Reset is manual only — never automatic.
+    State persists in logs/circuit_breaker.json between runs.
+    """
+
+    THRESHOLD: float = 0.08
+    _STATE_PATH: Path = Path("logs/circuit_breaker.json")
+
+    def __init__(self) -> None:
+        self._state = self._load()
+
+    def _load(self) -> dict:
+        if self._STATE_PATH.exists():
+            try:
+                return json.loads(self._STATE_PATH.read_text())
+            except (json.JSONDecodeError, OSError):
+                pass
+        return {
+            "triggered": False,
+            "peak_netliq": None,
+            "current_netliq": None,
+            "drawdown": 0.0,
+            "triggered_at": None,
+            "drawdown_at_trigger": None,
+        }
+
+    def _save(self) -> None:
+        self._STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        self._STATE_PATH.write_text(json.dumps(self._state, indent=2))
+
+    @property
+    def is_triggered(self) -> bool:
+        return bool(self._state["triggered"])
+
+    @property
+    def drawdown(self) -> float:
+        return float(self._state.get("drawdown") or 0.0)
+
+    @property
+    def peak_netliq(self) -> float | None:
+        v = self._state.get("peak_netliq")
+        return float(v) if v is not None else None
+
+    def evaluate(self, netliq: float, *, ci_mode: bool = False) -> bool:
+        """
+        Record the current NetLiq, update peak, compute drawdown.
+        Sends a Telegram alert and activates SELL-ONLY on first breach.
+        Returns True if the circuit breaker is active.
+        """
+        s = self._state
+
+        if s["peak_netliq"] is None or netliq > float(s["peak_netliq"]):
+            s["peak_netliq"] = netliq
+
+        s["current_netliq"] = netliq
+        peak = float(s["peak_netliq"])
+        dd = (peak - netliq) / peak if peak > 0 else 0.0
+        s["drawdown"] = dd
+
+        newly_triggered = dd > self.THRESHOLD and not s["triggered"]
+        if newly_triggered:
+            s["triggered"] = True
+            s["triggered_at"] = datetime.now(timezone.utc).isoformat()
+            s["drawdown_at_trigger"] = dd
+
+        self._save()
+
+        if newly_triggered and not ci_mode:
+            try:
+                from src.notify.telegram import send_message
+                send_message(
+                    f"🚨 CIRCUIT BREAKER ACTIVÉ — Milan Capital\n"
+                    f"Drawdown depuis pic : {dd:.1%}\n"
+                    f"Peak NetLiq : ${peak:,.0f}\n"
+                    f"Current NetLiq : ${netliq:,.0f}\n"
+                    f"Seuil : {self.THRESHOLD:.0%}\n\n"
+                    f"⛔ SELL-ONLY MODE actif automatiquement.\n"
+                    f"Reset manuel requis."
+                )
+            except Exception:
+                pass
+
+        return bool(s["triggered"])
+
+    def reset(self) -> None:
+        """Manual reset only. Never called automatically."""
+        self._state["triggered"] = False
+        self._state["triggered_at"] = None
+        self._state["drawdown_at_trigger"] = None
+        self._save()
+        print("✅ Circuit breaker reset. SELL-ONLY mode deactivated.")

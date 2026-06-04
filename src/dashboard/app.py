@@ -8,15 +8,21 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
+from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 
 from src.agents.buffett import BuffettAgent
 from src.agents.citadel import CitadelAgent
 from src.agents.mean_reversion import MeanReversionAgent
 from src.agents.macro import MacroAgent
 from src.agents.trend_following import TrendFollowingAgent
+from src.agents.dividend_arbitrage import DividendArbitrageAgent
+from src.agents.pairs_trading import PairsTradingAgent
+from src.agents.volatility import VolatilityAgent
 from src.agents.dummy import DummyHoldAgent
 from src.arena.arena import Arena
 from src.arena.selector import select_best
@@ -28,25 +34,76 @@ st.set_page_config(
     page_title="Milan Capital",
     page_icon="💼",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
-# ====== HEADER ======
-col1, col2 = st.columns([3, 1])
-with col1:
-    st.markdown("# 💼 Milan Capital")
-    st.markdown("*AI-Powered Multi-Agent Hedge Fund*")
-with col2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("🔄 Refresh", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
+# ====== GLOBAL CSS ======
+st.markdown("""
+<style>
+[data-testid="stAppViewContainer"] { background-color: #0e1117; }
+[data-testid="stSidebar"] { background-color: #12151f; border-right: 1px solid #2a2d3a; }
+[data-testid="stHeader"] { background-color: #0e1117; border-bottom: 1px solid #1a1d27; }
+[data-testid="metric-container"] {
+    background: #1a1d27;
+    border: 1px solid #2a2d3a;
+    border-radius: 10px;
+    padding: 12px 16px;
+}
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
 
-st.divider()
+/* ── Pipeline native alerts ── */
+div[data-testid="stAlert"] {
+    border-radius: 10px !important;
+    padding: 10px 12px !important;
+}
+/* pipeline ticker label */
+.pl-ticker {
+    color: #00ff88;
+    font-family: monospace;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 1.4px;
+    margin-bottom: 10px;
+}
+
+/* ── Order cards ── */
+.o-card {
+    border-radius: 10px; padding: 12px 16px; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 14px;
+}
+.o-icon  { font-size: 20px; font-weight: 900; min-width: 22px; text-align: center; }
+.o-main  { flex: 1; }
+.o-side  { font-weight: 700; font-size: 13px; }
+.o-rsn   { font-size: 11px; color: #999; margin-top: 2px; }
+.o-meta  { text-align: right; }
+.o-qty   { font-size: 12px; font-weight: 600; color: #e0e0e0; }
+.o-price { font-size: 10px; color: #777; margin-top: 2px; }
+
+/* ── Sidebar ── */
+.sb-card {
+    background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 10px;
+    padding: 11px 13px; margin-bottom: 8px;
+}
+.sb-label { color: #555; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 3px; }
+.sb-val   { color: #fff; font-size: 18px; font-weight: 700; }
+.sb-delta { font-size: 11px; margin-top: 2px; }
+.alloc-bg   { background: #252936; border-radius: 4px; height: 5px; margin-top: 5px; }
+.alloc-fill { border-radius: 4px; height: 5px; }
+
+/* ── Section headers ── */
+.sec-header {
+    display: flex; align-items: center; gap: 10px; margin: 28px 0 14px 0;
+}
+.sec-dot   { font-size: 17px; }
+.sec-title { color: #fff; font-size: 17px; font-weight: 700; }
+.sec-sub   { color: #555; font-size: 12px; margin-left: 4px; }
+</style>
+""", unsafe_allow_html=True)
 
 
 # ====== DATA LOADING ======
-@st.cache_data(ttl=300)
+@st.cache_resource(ttl=300)
 def load_data():
     regime_data = detect_regime("SPY")
     arena = Arena([
@@ -56,6 +113,9 @@ def load_data():
         MeanReversionAgent(),
         MacroAgent(),
         TrendFollowingAgent(),
+        DividendArbitrageAgent(),
+        PairsTradingAgent(),
+        VolatilityAgent(),
     ])
     results = {}
     for sym in WATCHLIST:
@@ -66,112 +126,367 @@ def load_data():
     return regime_data, results
 
 
-with st.spinner("Chargement des données..."):
+# ====== SIDEBAR ======
+with st.sidebar:
+    st.markdown("""
+    <div style="padding:4px 0 16px; border-bottom:1px solid #2a2d3a; margin-bottom:16px;">
+        <div style="color:#00ff88; font-size:18px; font-weight:800; letter-spacing:1px;">💼 MILAN CAPITAL</div>
+        <div style="color:#444; font-size:11px; margin-top:2px;">AI Multi-Agent Hedge Fund</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if st.button("🔄  Refresh", use_container_width=True, type="primary"):
+        st.cache_resource.clear()
+        st.rerun()
+
+    st.markdown(
+        f"<div style='color:#444; font-size:10px; text-align:center; margin:6px 0 18px;'>"
+        f"Updated {datetime.now().strftime('%H:%M:%S')}</div>",
+        unsafe_allow_html=True,
+    )
+
+    # Portfolio metrics from order_plan
+    try:
+        _df_plan = pd.read_csv(os.path.join(ROOT, "logs/order_plan.csv"))
+        _n_pos  = _df_plan["symbol"].nunique() if not _df_plan.empty else 0
+        _n_buy  = len(_df_plan[_df_plan["side"] == "BUY"])  if not _df_plan.empty else 0
+        _n_sell = len(_df_plan[_df_plan["side"] == "SELL"]) if not _df_plan.empty else 0
+        _notional = _df_plan["est_notional"].abs().sum() if not _df_plan.empty else 0.0
+    except (FileNotFoundError, KeyError):
+        _n_pos, _n_buy, _n_sell, _notional = 0, 0, 0, 0.0
+
+    st.markdown(
+        f"""<div style="color:#888; font-size:11px; letter-spacing:1px; text-transform:uppercase; margin-bottom:10px;">Portfolio</div>
+<div class="sb-card">
+    <div class="sb-label">Net Liquidation</div>
+    <div class="sb-val">${_notional:,.0f}</div>
+    <div class="sb-delta" style="color:#555;">paper trading</div>
+</div>
+<div class="sb-card">
+    <div class="sb-label">Open Positions</div>
+    <div class="sb-val">{_n_pos}</div>
+    <div class="sb-delta">
+        <span style="color:#00ff88;">▲ {_n_buy} long</span>
+        &nbsp;
+        <span style="color:#ff4444;">▼ {_n_sell} short</span>
+    </div>
+</div>""",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        "<div style='color:#888; font-size:11px; letter-spacing:1px; text-transform:uppercase; margin:18px 0 10px;'>Allocation</div>",
+        unsafe_allow_html=True,
+    )
+    try:
+        if not _df_plan.empty and _notional > 0:
+            _alloc = (
+                _df_plan.groupby("symbol")["est_notional"]
+                .sum().abs()
+                .sort_values(ascending=False)
+                .head(8)
+            )
+            for _sym, _val in _alloc.items():
+                _pct = _val / _notional
+                _side = _df_plan[_df_plan["symbol"] == _sym]["side"].iloc[0]
+                _bar_color = "#00ff88" if _side == "BUY" else "#ff4444"
+                st.markdown(f"""
+<div style="margin-bottom:9px;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="color:#ccc; font-size:12px; font-weight:600;">{_sym}</span>
+        <span style="color:#666; font-size:11px;">{_pct:.0%}</span>
+    </div>
+    <div class="alloc-bg">
+        <div class="alloc-fill" style="background:{_bar_color}; width:{_pct*100:.1f}%;"></div>
+    </div>
+</div>""", unsafe_allow_html=True)
+        else:
+            st.markdown("<div style='color:#444; font-size:12px; padding:4px 0;'>Aucune position</div>", unsafe_allow_html=True)
+    except Exception:
+        st.markdown("<div style='color:#444; font-size:12px;'>—</div>", unsafe_allow_html=True)
+
+    # ── Circuit Breaker / Drawdown ──
+    st.markdown(
+        "<div style='border-top:1px solid #2a2d3a; margin:18px 0 12px;'></div>"
+        "<div style='color:#888; font-size:11px; letter-spacing:1px; text-transform:uppercase; margin-bottom:10px;'>Circuit Breaker</div>",
+        unsafe_allow_html=True,
+    )
+    try:
+        import json as _json
+        _cb = _json.loads(open(os.path.join(ROOT, "logs/circuit_breaker.json")).read())
+        _dd        = float(_cb.get("drawdown") or 0.0)
+        _peak      = float(_cb.get("peak_netliq") or 0.0)
+        _current   = float(_cb.get("current_netliq") or 0.0)
+        _triggered = bool(_cb.get("triggered"))
+        _dd_color  = "#ff4444" if _triggered else ("#ffaa00" if _dd > 0.05 else "#00ff88")
+        _status_label  = "⛔ SELL-ONLY" if _triggered else "✅ OK"
+        _status_color  = "#ff4444" if _triggered else "#00ff88"
+        st.markdown(f"""
+<div class="sb-card" style="border-color:{_dd_color}55;">
+    <div class="sb-label">Drawdown depuis pic</div>
+    <div class="sb-val" style="color:{_dd_color};">{_dd:.1%}</div>
+    <div class="sb-delta" style="color:{_status_color}; font-weight:700;">{_status_label}</div>
+</div>
+<div style="display:flex; justify-content:space-between; padding:2px 2px 8px;">
+    <span style="color:#555; font-size:10px;">Peak&nbsp;${_peak:,.0f}</span>
+    <span style="color:#555; font-size:10px;">Current&nbsp;${_current:,.0f}</span>
+</div>""", unsafe_allow_html=True)
+        if _triggered:
+            _at = _cb.get("triggered_at", "")[:16].replace("T", " ")
+            st.markdown(
+                f"<div style='background:#1a0000; border:1px solid #ff444455; border-radius:8px; "
+                f"padding:8px 10px; font-size:10px; color:#ff6666;'>"
+                f"Déclenché le {_at} UTC<br>Reset manuel requis.</div>",
+                unsafe_allow_html=True,
+            )
+    except FileNotFoundError:
+        st.markdown(
+            "<div style='color:#444; font-size:11px; padding:4px 0;'>Aucune donnée (runner non exécuté)</div>",
+            unsafe_allow_html=True,
+        )
+    except Exception:
+        pass
+
+    st.markdown(
+        "<div style='border-top:1px solid #2a2d3a; margin:20px 0 12px;'></div>"
+        "<div style='color:#444; font-size:10px; text-align:center;'>Paper Trading Only</div>",
+        unsafe_allow_html=True,
+    )
+
+
+# ====== MAIN — LOAD DATA ======
+with st.spinner("Chargement des données de marché..."):
     regime_data, results = load_data()
 
 regime = regime_data["regime"]
 
 
-# ====== REGIME ======
-regime_emoji = {"bull": "🟢", "bear": "🔴", "choppy": "🟡"}
-r1, r2, r3, r4, r5 = st.columns(5)
-with r1:
-    st.metric("RÉGIME", f"{regime_emoji.get(regime,'')} {regime.upper()}")
-with r2:
-    st.metric("SPY", f"${regime_data['price']}")
-with r3:
-    st.metric("SMA50", f"${regime_data['sma50']}")
-with r4:
-    st.metric("SMA200", f"${regime_data['sma200']}")
-with r5:
-    st.metric("VOLATILITÉ", regime_data['vol_regime'].upper())
+# ====== REGIME BANNER ======
+_R_COLORS = {
+    "bull":   ("#00ff88", "#091e13", "#00ff8833"),
+    "bear":   ("#ff4444", "#1e0909", "#ff444433"),
+    "choppy": ("#ffaa00", "#1e1600", "#ffaa0033"),
+}
+r_fg, r_bg, r_border = _R_COLORS.get(regime, ("#888", "#1a1d27", "#88888833"))
+r_emoji = {"bull": "🟢", "bear": "🔴", "choppy": "🟡"}.get(regime, "⚪")
 
-st.divider()
+st.markdown(f"""
+<div style="background:{r_bg}; border:1px solid {r_border}; border-radius:12px; padding:16px 24px; margin-bottom:22px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px;">
+    <div>
+        <div style="color:{r_fg}; font-size:20px; font-weight:800; letter-spacing:1px;">{r_emoji}&nbsp; {regime.upper()} MARKET</div>
+        <div style="color:#555; font-size:11px; margin-top:3px;">Regime détecté • SPY SMA crossover + vol filter</div>
+    </div>
+    <div style="display:flex; gap:28px;">
+        <div>
+            <div style="color:#555; font-size:10px; text-transform:uppercase; letter-spacing:.8px;">SPY</div>
+            <div style="color:#fff; font-weight:700; font-size:15px;">${regime_data['price']}</div>
+        </div>
+        <div>
+            <div style="color:#555; font-size:10px; text-transform:uppercase; letter-spacing:.8px;">SMA 50</div>
+            <div style="color:#fff; font-weight:700; font-size:15px;">${regime_data['sma50']}</div>
+        </div>
+        <div>
+            <div style="color:#555; font-size:10px; text-transform:uppercase; letter-spacing:.8px;">SMA 200</div>
+            <div style="color:#fff; font-weight:700; font-size:15px;">${regime_data['sma200']}</div>
+        </div>
+        <div>
+            <div style="color:#555; font-size:10px; text-transform:uppercase; letter-spacing:.8px;">Volatilité</div>
+            <div style="color:{r_fg}; font-weight:700; font-size:15px;">{regime_data['vol_regime'].upper()}</div>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 
-# ====== HELPERS ======
-def render_agent_card(col, sig, is_winner):
-    name = sig.agent_name.replace("Agent", "")
-    label = "⭐ WINNER\n" if is_winner else ""
-    text = f"{label}**{name}**\n\n{sig.action} — conf: {sig.confidence:.0%}"
-    with col:
-        if sig.action == "BUY":
-            st.success(text)
-        elif sig.action == "SELL":
-            st.error(text)
+# ====== PIPELINE HELPERS (Plotly JARVIS) ======
+_SHORT_NAMES = {
+    "BuffettAgent":           "Buffett",
+    "CitadelAgent":           "Citadel",
+    "MeanReversionAgent":     "MeanRev",
+    "MacroAgent":             "Macro",
+    "TrendFollowingAgent":    "Trend",
+    "DividendArbitrageAgent": "DivArb",
+    "PairsTradingAgent":      "Pairs",
+    "VolatilityAgent":        "Vol",
+    "DummyHoldAgent":         "Dummy",
+}
+
+_A_BORDER = {"BUY": "#00ff88", "SELL": "#ff4444", "HOLD": "#3a3d4a"}
+_A_FILL   = {"BUY": "#001a0d", "SELL": "#1a0000", "HOLD": "#1a1d27"}
+_A_TEXT   = {"BUY": "#00ff88", "SELL": "#ff4444", "HOLD": "#888888"}
+
+
+def _build_pipeline_figure(sym: str, signals: list, winner) -> go.Figure:
+    nodes = [{"top": "MARKET", "mid": sym, "bot": "LIVE", "action": "DATA", "win": False, "kind": "src"}]
+    for sig in signals:
+        is_win = winner is not None and sig.agent_name == winner.agent_name
+        nodes.append({
+            "top":    _SHORT_NAMES.get(sig.agent_name, sig.agent_name.replace("Agent", "")),
+            "mid":    sig.action,
+            "bot":    f"{sig.confidence:.0%}",
+            "action": sig.action,
+            "win":    is_win,
+            "kind":   "agent",
+        })
+    cio_action = winner.action if (winner and winner.agent_name != "DummyHoldAgent") else "HOLD"
+    nodes.append({"top": "CIO", "mid": cio_action, "bot": "FINAL", "action": cio_action, "win": False, "kind": "cio"})
+
+    N = len(nodes)
+    nw, nh, y_c = 0.38, 0.27, 0.5
+
+    # layer='below' is critical — without it shapes are drawn ABOVE scatter traces
+    shapes, annotations = [], []
+    for i, nd in enumerate(nodes):
+        if nd["kind"] == "src":
+            border, fill, lw = "#2a6aaa", "#0d1a2e", 1.5
+        elif nd["win"]:
+            border, fill, lw = "#00ff88", "#003322", 3.0
         else:
-            st.info(text)
+            border = _A_BORDER.get(nd["action"], "#3a3d4a")
+            fill   = _A_FILL.get(nd["action"], "#1a1d27")
+            lw     = 1.5
+
+        shapes.append(dict(
+            type="rect", layer="below",
+            x0=i - nw, y0=y_c - nh, x1=i + nw, y1=y_c + nh,
+            line=dict(color=border, width=lw),
+            fillcolor=fill,
+        ))
+        if nd["win"]:
+            annotations.append(dict(
+                x=i, y=y_c + nh + 0.10,
+                text="★ WINNER",
+                showarrow=False,
+                font=dict(color="#00ff88", size=8, family="monospace"),
+                xanchor="center",
+            ))
+
+    fig = go.Figure()
+
+    # Connector lines (drawn before text so text stays on top)
+    lx, ly = [], []
+    for i in range(N - 1):
+        lx += [i + nw + 0.01, i + 1 - nw - 0.01, None]
+        ly += [y_c, y_c, None]
+    fig.add_trace(go.Scatter(x=lx, y=ly, mode="lines",
+        line=dict(color="rgba(0,255,136,0.6)", width=1.5),
+        showlegend=False, hoverinfo="skip"))
+
+    fig.add_trace(go.Scatter(
+        x=[i + 1 - nw for i in range(N - 1)],
+        y=[y_c] * (N - 1),
+        mode="markers",
+        marker=dict(symbol="triangle-right", size=6, color="rgba(0,255,136,0.6)"),
+        showlegend=False, hoverinfo="skip"))
+
+    # One text trace per node — single HTML string, centered in the rectangle
+    for i, nd in enumerate(nodes):
+        mid_col = (
+            "#2a9aff" if nd["kind"] == "src"
+            else "#00ff88" if nd["win"]
+            else _A_TEXT.get(nd["action"], "#cccccc")
+        )
+        label = (
+            f"<span style='color:#777777;font-size:9px'>{nd['top']}</span><br>"
+            f"<b><span style='color:{mid_col};font-size:12px'>{nd['mid']}</span></b><br>"
+            f"<span style='color:#555555;font-size:8px'>{nd['bot']}</span>"
+        )
+        fig.add_trace(go.Scatter(
+            x=[i], y=[y_c],
+            mode="text",
+            text=[label],
+            textposition="middle center",
+            showlegend=False,
+            hoverinfo="skip",
+        ))
+
+    fig.update_layout(
+        shapes=shapes, annotations=annotations,
+        paper_bgcolor="#0e1117", plot_bgcolor="#0e1117",
+        margin=dict(l=8, r=8, t=22, b=8),
+        height=180,
+        xaxis=dict(range=[-0.6, N - 0.4], showgrid=False, zeroline=False,
+                   showticklabels=False, visible=False),
+        yaxis=dict(range=[0.05, 1.0], showgrid=False, zeroline=False,
+                   showticklabels=False, visible=False),
+        showlegend=False, hovermode=False,
+    )
+    return fig
 
 
-def render_cio_card(col, winner):
-    with col:
-        if winner and winner.agent_name != "DummyHoldAgent":
-            wname = winner.agent_name.replace("Agent", "")
-            text = f"🏆 **CIO DECISION**\n\n**{winner.action}** — {wname}"
-            if winner.action == "BUY":
-                st.success(text)
-            elif winner.action == "SELL":
-                st.error(text)
-            else:
-                st.info(text)
-        else:
-            st.info("🏆 **CIO DECISION**\n\n⛔ NO TRADE")
-
-
-# ====== PIPELINE ======
-st.markdown("### 🔄 Pipeline des Agents")
+# ====== PIPELINE SECTION ======
+st.markdown("""
+<div class="sec-header">
+    <div class="sec-dot" style="color:#00ff88;">⬡</div>
+    <div class="sec-title">Agent Pipeline</div>
+    <div class="sec-sub">• live signals</div>
+</div>
+""", unsafe_allow_html=True)
 
 for sym in WATCHLIST:
-    data = results[sym]
+    data    = results[sym]
     signals = [s for s in data["signals"] if s.agent_name != "DummyHoldAgent"]
-    winner = data["winner"]
-
-    st.markdown(f"#### 📊 {sym}")
-    cols = st.columns(len(signals) + 2)
-
-    with cols[0]:
-        st.info(f"📈 **{sym}**\n\nMARKET DATA")
-
-    for i, sig in enumerate(signals):
-        is_winner = winner is not None and sig.agent_name == winner.agent_name
-        render_agent_card(cols[i + 1], sig, is_winner)
-
-    render_cio_card(cols[-1], winner)
-    st.markdown("---")
+    winner  = data["winner"]
+    st.markdown(f"<p class='pl-ticker'>◈ &nbsp;{sym}</p>", unsafe_allow_html=True)
+    st.plotly_chart(_build_pipeline_figure(sym, signals, winner), use_container_width=True)
+    st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
 
 
 # ====== ORDER PLAN ======
-st.markdown("### 📋 Order Plan")
+st.markdown("""
+<div class="sec-header">
+    <div class="sec-dot" style="color:#ffaa00;">◎</div>
+    <div class="sec-title">Order Plan</div>
+</div>
+""", unsafe_allow_html=True)
 
 try:
-    df_plan = pd.read_csv("logs/order_plan.csv")
+    df_plan = pd.read_csv(os.path.join(ROOT, "logs/order_plan.csv"))
     if not df_plan.empty:
         for _, row in df_plan.tail(10).iterrows():
-            side = row["side"]
-            symbol = row["symbol"]
-            delta = row["delta_qty"]
-            price = row["last_price"]
+            side     = row["side"]
+            symbol   = row["symbol"]
+            delta    = row["delta_qty"]
+            price    = row["last_price"]
             notional = row["est_notional"]
-            reason = str(row["reason"])[:60]
-            text = f"**{side}** {symbol} | delta: {delta:+.0f} shares | @ ${price:.2f} | est. ${notional:.0f} | _{reason}_"
+            reason   = str(row["reason"])[:65]
             if side == "BUY":
-                st.success(text)
+                icon, fg, bg = "▲", "#00ff88", "#091e13"
             elif side == "SELL":
-                st.error(text)
+                icon, fg, bg = "▼", "#ff4444", "#1e0909"
             else:
-                st.info(text)
+                icon, fg, bg = "●", "#888",    "#1a1d27"
+            st.markdown(f"""
+<div class="o-card" style="background:{bg}; border:1px solid {fg}33;">
+    <div class="o-icon" style="color:{fg};">{icon}</div>
+    <div class="o-main">
+        <div class="o-side" style="color:{fg};">{side}&nbsp;
+            <span style="color:#e0e0e0;">{symbol}</span>
+        </div>
+        <div class="o-rsn">{reason}</div>
+    </div>
+    <div class="o-meta">
+        <div class="o-qty">{delta:+.0f} shares</div>
+        <div class="o-price">@ ${price:.2f}&nbsp;•&nbsp;est. ${notional:.0f}</div>
+    </div>
+</div>""", unsafe_allow_html=True)
     else:
-        st.info("Aucun order plan disponible.")
+        st.markdown("<div style='color:#555; padding:20px; text-align:center; background:#1a1d27; border-radius:10px;'>Aucun order plan disponible.</div>", unsafe_allow_html=True)
 except FileNotFoundError:
-    st.info("Lancez d'abord le runner pour générer un order plan.")
+    st.markdown("<div style='color:#555; padding:20px; text-align:center; background:#1a1d27; border-radius:10px;'>Lancez d'abord le runner pour générer un order plan.</div>", unsafe_allow_html=True)
 
 
 # ====== EQUITY CURVE ======
-st.divider()
-st.markdown("### 📈 Equity Curve (Paper)")
+st.markdown("""
+<div class="sec-header">
+    <div class="sec-dot" style="color:#00ff88;">↗</div>
+    <div class="sec-title">Equity Curve</div>
+    <div class="sec-sub">• paper trading</div>
+</div>
+""", unsafe_allow_html=True)
 
 try:
-    df_exec = pd.read_csv("logs/executions.csv")
+    df_exec = pd.read_csv(os.path.join(ROOT, "logs/executions.csv"))
     if not df_exec.empty and "timestamp" in df_exec.columns:
         df_exec["timestamp"] = pd.to_datetime(df_exec["timestamp"])
         df_exec = df_exec.sort_values("timestamp")
@@ -179,94 +494,100 @@ try:
         fig.add_trace(go.Scatter(
             x=df_exec["timestamp"],
             y=df_exec["est_notional"].cumsum(),
-            mode="lines+markers",
-            line=dict(color="#00ff88", width=2),
+            mode="lines",
+            line=dict(color="#00ff88", width=2.5),
             fill="tozeroy",
-            fillcolor="rgba(0,255,136,0.05)",
+            fillcolor="rgba(0,255,136,0.06)",
             name="Notional cumulé",
         ))
         fig.update_layout(
             paper_bgcolor="#0e1117",
             plot_bgcolor="#1a1d27",
-            font=dict(color="#fff"),
-            xaxis=dict(gridcolor="#333"),
-            yaxis=dict(gridcolor="#333"),
-            margin=dict(l=0, r=0, t=0, b=0),
-            height=300,
+            font=dict(color="#aaa"),
+            xaxis=dict(gridcolor="#2a2d3a", linecolor="#2a2d3a", zerolinecolor="#2a2d3a"),
+            yaxis=dict(gridcolor="#2a2d3a", linecolor="#2a2d3a", zerolinecolor="#2a2d3a", tickprefix="$"),
+            margin=dict(l=0, r=0, t=10, b=0),
+            height=280,
+            showlegend=False,
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("Pas encore d'exécutions. Approuvez un order plan pour voir l'equity curve.")
+        st.markdown("<div style='color:#555; padding:24px; text-align:center; background:#1a1d27; border-radius:10px;'>Approuvez un order plan pour voir l'equity curve.</div>", unsafe_allow_html=True)
 except FileNotFoundError:
-    st.info("Pas encore d'exécutions.")
+    st.markdown("<div style='color:#555; padding:24px; text-align:center; background:#1a1d27; border-radius:10px;'>Pas encore d'exécutions.</div>", unsafe_allow_html=True)
 
 
 # ====== BACKTEST RESULTS ======
-st.divider()
-st.markdown("### 🧪 Résultats Backtest (3 ans)")
+st.markdown("""
+<div class="sec-header">
+    <div class="sec-dot" style="color:#aa88ff;">⬟</div>
+    <div class="sec-title">Backtest Results</div>
+    <div class="sec-sub">• 3 ans</div>
+</div>
+""", unsafe_allow_html=True)
 
 try:
-    df_bt = pd.read_csv("logs/backtest_results.csv")
+    df_bt = pd.read_csv(os.path.join(ROOT, "logs/backtest_results.csv"))
     if not df_bt.empty:
-
-        # Métriques clés en haut
         best = df_bt.sort_values("sharpe_ratio", ascending=False).iloc[0]
         b1, b2, b3, b4 = st.columns(4)
         with b1:
-            st.metric("🏆 Meilleur Agent", best["agent"].replace("Agent", ""))
+            st.metric("🏆 Best Agent",   best["agent"].replace("Agent", ""))
         with b2:
-            st.metric("📈 Meilleur Return", f"{best['total_return']:+.1%}")
+            st.metric("📈 Best Return",  f"{best['total_return']:+.1%}")
         with b3:
-            st.metric("⚡ Meilleur Sharpe", f"{best['sharpe_ratio']:.2f}")
+            st.metric("⚡ Best Sharpe",  f"{best['sharpe_ratio']:.2f}")
         with b4:
-            st.metric("📉 Son Drawdown", f"{best['max_drawdown']:.1%}")
+            st.metric("📉 Max Drawdown", f"{best['max_drawdown']:.1%}")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Tableau complet
-        df_display = df_bt.copy()
-        df_display = df_display.sort_values("sharpe_ratio", ascending=False)
-        df_display["total_return"] = df_display["total_return"].map("{:+.1%}".format)
+        df_display = df_bt.copy().sort_values("sharpe_ratio", ascending=False)
+        df_display["total_return"]      = df_display["total_return"].map("{:+.1%}".format)
         df_display["annualized_return"] = df_display["annualized_return"].map("{:+.1%}".format)
-        df_display["sharpe_ratio"] = df_display["sharpe_ratio"].map("{:.2f}".format)
-        df_display["max_drawdown"] = df_display["max_drawdown"].map("{:.1%}".format)
-        df_display["win_rate"] = df_display["win_rate"].map("{:.0%}".format)
-        df_display.columns = ["Agent", "Symbole", "Return Total", "Return Annualisé", "Sharpe", "Max Drawdown", "Win Rate", "Nb Trades"]
+        df_display["sharpe_ratio"]      = df_display["sharpe_ratio"].map("{:.2f}".format)
+        df_display["max_drawdown"]      = df_display["max_drawdown"].map("{:.1%}".format)
+        df_display["win_rate"]          = df_display["win_rate"].map("{:.0%}".format)
+        df_display.columns = ["Agent", "Symbole", "Return Total", "Return Ann.", "Sharpe", "Max DD", "Win Rate", "Trades"]
         st.dataframe(df_display, use_container_width=True, hide_index=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Graphique barres — Sharpe par agent/symbole
         fig2 = go.Figure()
-        for sym in df_bt["symbol"].unique():
-            sub = df_bt[df_bt["symbol"] == sym]
+        for sym_bt in df_bt["symbol"].unique():
+            sub = df_bt[df_bt["symbol"] == sym_bt]
             fig2.add_trace(go.Bar(
-                name=sym,
-                x=sub["agent"].str.replace("Agent", ""),
+                name=sym_bt,
+                x=sub["agent"].str.replace("Agent", "", regex=False),
                 y=sub["sharpe_ratio"],
             ))
-
         fig2.update_layout(
             barmode="group",
             paper_bgcolor="#0e1117",
             plot_bgcolor="#1a1d27",
-            font=dict(color="#fff"),
-            xaxis=dict(gridcolor="#333"),
-            yaxis=dict(gridcolor="#333", title="Sharpe Ratio"),
-            legend=dict(bgcolor="#1a1d27"),
-            margin=dict(l=0, r=0, t=30, b=0),
-            height=350,
-            title=dict(text="Sharpe Ratio par Agent et Symbole", font=dict(color="#fff")),
+            font=dict(color="#aaa"),
+            xaxis=dict(gridcolor="#2a2d3a", linecolor="#2a2d3a"),
+            yaxis=dict(gridcolor="#2a2d3a", linecolor="#2a2d3a", title="Sharpe Ratio"),
+            legend=dict(bgcolor="#1a1d27", bordercolor="#2a2d3a"),
+            margin=dict(l=0, r=0, t=40, b=0),
+            height=360,
+            title=dict(text="Sharpe Ratio par Agent & Symbole", font=dict(color="#e0e0e0", size=14)),
         )
-        fig2.add_hline(y=0, line_dash="dash", line_color="#ff4444", annotation_text="Seuil 0")
+        fig2.add_hline(
+            y=0, line_dash="dash", line_color="#ff4444", opacity=0.5,
+            annotation_text="Seuil 0", annotation_font_color="#ff4444",
+        )
         st.plotly_chart(fig2, use_container_width=True)
 
     else:
-        st.info("Lancez d'abord le backtest.")
+        st.markdown("<div style='color:#555; padding:24px; text-align:center; background:#1a1d27; border-radius:10px;'>Lancez d'abord le backtest.</div>", unsafe_allow_html=True)
 except FileNotFoundError:
-    st.info("Lancez d'abord : python -m src.backtest.run_backtest")
+    st.markdown("<div style='color:#555; padding:24px; text-align:center; background:#1a1d27; border-radius:10px;'>Lancez d'abord : python -m src.backtest.run_backtest</div>", unsafe_allow_html=True)
 
 
 # ====== FOOTER ======
-st.divider()
-st.caption("Milan Capital — AI Multi-Agent Hedge Fund — Paper Trading Only")
+st.markdown("""
+<div style="border-top:1px solid #2a2d3a; margin-top:36px; padding-top:14px; text-align:center; color:#444; font-size:11px;">
+    Milan Capital &nbsp;•&nbsp; AI Multi-Agent Hedge Fund &nbsp;•&nbsp; Paper Trading Only
+</div>
+""", unsafe_allow_html=True)

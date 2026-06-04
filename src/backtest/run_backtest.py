@@ -15,7 +15,11 @@ from src.data.market_data import download_ohlcv
 from src.data.regime import detect_regime
 
 # ====== CONFIG ======
-SYMBOLS = ["AAPL", "MSFT", "SPY"]
+SYMBOLS = [
+    "AAPL", "SPY", "QQQ", "NVDA", "MSFT",
+    "GOOGL", "META", "JPM", "GS", "GLD",
+    "TLT", "BRK-B", "JNJ", "TSLA", "AMD",
+]
 INITIAL_CAPITAL = 100_000
 
 AGENTS = [

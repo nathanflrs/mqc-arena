@@ -1,0 +1,43 @@
+{
+  "weights": {
+    "BuffettAgent": {
+      "AAPL": 0.02,
+      "SPY": 0.11476432383769533
+    },
+    "CitadelAgent": {
+      "AAPL": 0.1,
+      "SPY": 0.14119349237991127
+    },
+    "MeanReversionAgent": {
+      "AAPL": 0.02,
+      "SPY": 0.02
+    },
+    "TrendFollowingAgent": {
+      "AAPL": 0.02,
+      "SPY": 0.04404218378239342
+    }
+  },
+  "best_agent": {
+    "AAPL": "CitadelAgent",
+    "SPY": "CitadelAgent"
+  },
+  "sharpes": {
+    "BuffettAgent": {
+      "AAPL": -0.0446,
+      "SPY": 1.1898
+    },
+    "CitadelAgent": {
+      "AAPL": 0.0333,
+      "SPY": 1.4638
+    },
+    "MeanReversionAgent": {
+      "AAPL": -1.0387,
+      "SPY": -0.8935
+    },
+    "TrendFollowingAgent": {
+      "AAPL": -1.2259,
+      "SPY": 0.4566
+    }
+  },
+  "computed_at": "2026-06-04T06:05:32.938354+00:00"
+}
