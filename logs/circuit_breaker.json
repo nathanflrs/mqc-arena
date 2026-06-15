@@ -1,0 +1,8 @@
+{
+  "triggered": true,
+  "peak_netliq": 1022515.08,
+  "current_netliq": 1017617.41,
+  "drawdown": 0.0047898266693533025,
+  "triggered_at": "2026-06-15T20:45:38.449212+00:00",
+  "drawdown_at_trigger": 0.9022019313397315
+}

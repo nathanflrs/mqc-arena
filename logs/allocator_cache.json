@@ -2,42 +2,150 @@
   "weights": {
     "BuffettAgent": {
       "AAPL": 0.02,
-      "SPY": 0.11476432383769533
+      "SPY": 0.02,
+      "QQQ": 0.07819052336140005,
+      "NVDA": 0.02,
+      "MSFT": 0.02,
+      "GOOGL": 0.09982425307557119,
+      "META": 0.02,
+      "JPM": 0.02,
+      "GS": 0.0790200615443334,
+      "GLD": 0.02,
+      "TSLA": 0.02,
+      "AMD": 0.12911344617127038,
+      "AMZN": 0.02,
+      "LLY": 0.06357188535550258
     },
     "CitadelAgent": {
-      "AAPL": 0.1,
-      "SPY": 0.14119349237991127
+      "AAPL": 0.02,
+      "SPY": 0.1846911294394883,
+      "QQQ": 0.026076086700158027,
+      "NVDA": 0.12662797372281395,
+      "MSFT": 0.02,
+      "GOOGL": 0.17451669595782077,
+      "META": 0.0235881841876629,
+      "JPM": 0.02,
+      "GS": 0.11555306409675342,
+      "GLD": 0.07344588059439022,
+      "TSLA": 0.02,
+      "AMD": 0.1789819417353552,
+      "AMZN": 0.02,
+      "LLY": 0.1338148944828789
     },
     "MeanReversionAgent": {
-      "AAPL": 0.02,
-      "SPY": 0.02
+      "AAPL": 0.1,
+      "SPY": 0.02,
+      "QQQ": 0.17220217457958917,
+      "NVDA": 0.15599846929013328,
+      "MSFT": 0.02,
+      "GOOGL": 0.02,
+      "META": 0.1764118158123371,
+      "JPM": 0.1,
+      "GS": 0.02,
+      "GLD": 0.02,
+      "TSLA": 0.1,
+      "AMD": 0.02,
+      "AMZN": 0.02,
+      "LLY": 0.02
     },
     "TrendFollowingAgent": {
       "AAPL": 0.02,
-      "SPY": 0.04404218378239342
+      "SPY": 0.10596700892105704,
+      "QQQ": 0.12353121535885281,
+      "NVDA": 0.02,
+      "MSFT": 0.02,
+      "GOOGL": 0.11352274946299552,
+      "META": 0.02,
+      "JPM": 0.02,
+      "GS": 0.10542687435891321,
+      "GLD": 0.1265541194056098,
+      "TSLA": 0.02,
+      "AMD": 0.0909733845089033,
+      "AMZN": 0.02,
+      "LLY": 0.10261322016161852
     }
   },
   "best_agent": {
-    "AAPL": "CitadelAgent",
-    "SPY": "CitadelAgent"
+    "AAPL": "MeanReversionAgent",
+    "SPY": "CitadelAgent",
+    "QQQ": "MeanReversionAgent",
+    "NVDA": "MeanReversionAgent",
+    "MSFT": "CitadelAgent",
+    "GOOGL": "CitadelAgent",
+    "META": "MeanReversionAgent",
+    "JPM": "MeanReversionAgent",
+    "GS": "CitadelAgent",
+    "GLD": "TrendFollowingAgent",
+    "TSLA": "MeanReversionAgent",
+    "AMD": "CitadelAgent",
+    "AMZN": "MeanReversionAgent",
+    "LLY": "CitadelAgent"
   },
   "sharpes": {
     "BuffettAgent": {
-      "AAPL": -0.0446,
-      "SPY": 1.1898
+      "AAPL": -1.3802,
+      "SPY": -0.0191,
+      "QQQ": 0.8288,
+      "NVDA": -0.2254,
+      "MSFT": -3.8422,
+      "GOOGL": 1.0224,
+      "META": -1.346,
+      "JPM": -0.3608,
+      "GS": 1.1042,
+      "GLD": -0.198,
+      "TSLA": -1.4284,
+      "AMD": 2.565,
+      "AMZN": -1.1389,
+      "LLY": 0.729
     },
     "CitadelAgent": {
-      "AAPL": 0.0333,
-      "SPY": 1.4638
+      "AAPL": -0.1837,
+      "SPY": 0.7315,
+      "QQQ": 0.2764,
+      "NVDA": 0.6618,
+      "MSFT": 0.0,
+      "GOOGL": 1.7874,
+      "META": 0.1629,
+      "JPM": -0.3355,
+      "GS": 1.6147,
+      "GLD": 0.8353,
+      "TSLA": -1.2772,
+      "AMD": 3.5557,
+      "AMZN": -1.1267,
+      "LLY": 1.5345
     },
     "MeanReversionAgent": {
-      "AAPL": -1.0387,
-      "SPY": -0.8935
+      "AAPL": 0.6475,
+      "SPY": 0.037,
+      "QQQ": 1.8253,
+      "NVDA": 0.8153,
+      "MSFT": -1.3498,
+      "GOOGL": 0.1243,
+      "META": 1.2183,
+      "JPM": 1.6335,
+      "GS": -0.7842,
+      "GLD": -0.3368,
+      "TSLA": 0.5214,
+      "AMD": 0.0185,
+      "AMZN": -0.3192,
+      "LLY": -0.4252
     },
     "TrendFollowingAgent": {
-      "AAPL": -1.2259,
-      "SPY": 0.4566
+      "AAPL": -1.2761,
+      "SPY": 0.4197,
+      "QQQ": 1.3094,
+      "NVDA": 0.0908,
+      "MSFT": 0.0,
+      "GOOGL": 1.1627,
+      "META": 0.0,
+      "JPM": 0.0,
+      "GS": 1.4732,
+      "GLD": 1.4393,
+      "TSLA": -1.858,
+      "AMD": 1.8073,
+      "AMZN": -3.1307,
+      "LLY": 1.1767
     }
   },
-  "computed_at": "2026-06-04T06:05:32.938354+00:00"
+  "computed_at": "2026-06-15T20:45:51.521443+00:00"
 }

@@ -33,11 +33,30 @@ class BacktestResult:
     n_trades: int
 
 
+def _compute_regime_series(close: pd.Series) -> pd.Series:
+    """
+    Per-day regime label from SMA50/SMA200 — used by WalkForwardEngine
+    so agents receive regime context during historical backtest.
+    - bull  : close > SMA200 AND SMA50 > SMA200
+    - bear  : close < SMA200 AND SMA50 < SMA200
+    - choppy: else (incl. insufficient history for SMA200)
+    """
+    sma50 = close.rolling(50).mean()
+    sma200 = close.rolling(200).mean()
+    regime = pd.Series("choppy", index=close.index, dtype=object)
+    valid = sma200.notna()
+    regime[valid & (close > sma200) & (sma50 > sma200)] = "bull"
+    regime[valid & (close < sma200) & (sma50 < sma200)] = "bear"
+    return regime
+
+
 def _sharpe(returns: pd.Series, risk_free: float = 0.04) -> float:
     excess = returns - risk_free / 252
-    if excess.std() == 0:
+    std = excess.std()
+    if std == 0 or np.isnan(std):
         return 0.0
-    return float(excess.mean() / excess.std() * np.sqrt(252))
+    result = float(excess.mean() / std * np.sqrt(252))
+    return 0.0 if (np.isnan(result) or abs(result) > 100) else result
 
 
 def _max_drawdown(equity: pd.Series) -> float:
@@ -77,7 +96,8 @@ class BacktestEngine:
         target_weight: float = 0.95,   # investi 95% du capital
         commission: float = 0.001,
         min_history: int = 210,
-        cooldown_days: int = 5,        # minimum 5 jours entre trades
+        cooldown_days: int = 20,       # minimum 20 jours entre trades (réduit l'over-trading)
+        long_bias_bull_threshold: float = 0.90,  # min confidence to exit in bull regime
     ):
         self.agent = agent
         self.initial_capital = initial_capital
@@ -85,6 +105,7 @@ class BacktestEngine:
         self.commission = commission
         self.min_history = min_history
         self.cooldown_days = cooldown_days
+        self.long_bias_bull_threshold = long_bias_bull_threshold
 
     def run(
         self,
@@ -152,22 +173,24 @@ class BacktestEngine:
                             reason=sig.reason,
                         ))
 
-            # SELL
+            # SELL — long-bias: in bull regime hold through weak-conviction exits
             elif sig.action == "SELL" and position > 0 and days_since_trade >= self.cooldown_days:
-                proceeds = position * px * (1 - self.commission)
-                capital += proceeds
-                last_trade_idx = i
-                trades.append(Trade(
-                    date=str(date),
-                    symbol=symbol,
-                    action="SELL",
-                    qty=position,
-                    price=px,
-                    notional=position * px,
-                    agent=sig.agent_name,
-                    reason=sig.reason,
-                ))
-                position = 0
+                bull_dampen = regime == "bull" and sig.confidence < self.long_bias_bull_threshold
+                if not bull_dampen:
+                    proceeds = position * px * (1 - self.commission)
+                    capital += proceeds
+                    last_trade_idx = i
+                    trades.append(Trade(
+                        date=str(date),
+                        symbol=symbol,
+                        action="SELL",
+                        qty=position,
+                        price=px,
+                        notional=position * px,
+                        agent=sig.agent_name,
+                        reason=sig.reason,
+                    ))
+                    position = 0
 
             equity_values.append(capital + position * px)
 
@@ -251,6 +274,7 @@ class WalkForwardResult:
                 "alpha":             round(w.alpha, 4),
                 "avg_oos_sharpe":    round(self.avg_oos_sharpe, 4),
                 "avg_is_sharpe":     round(self.avg_is_sharpe, 4),
+                "avg_alpha":         round(self.avg_alpha, 4),
                 "lookahead_warning": self.lookahead_warning,
             })
         return rows
@@ -286,7 +310,7 @@ class WalkForwardEngine:
         target_weight: float = 0.95,
         commission: float = 0.001,
         min_history: int = 210,
-        cooldown_days: int = 5,
+        cooldown_days: int = 20,
     ):
         self.agent = agent
         self.initial_capital = initial_capital
@@ -327,7 +351,9 @@ class WalkForwardEngine:
                 min_history=self.min_history,
                 cooldown_days=self.cooldown_days,
             )
-            result = inner.run(symbol, full_slice)
+            close_slice = pd.to_numeric(full_slice["Close"], errors="coerce").dropna()
+            regime_series = _compute_regime_series(close_slice)
+            result = inner.run(symbol, full_slice, regime_series=regime_series)
             equity = result.equity_curve
 
             # ── IS metrics (equity from min_history to TRAIN_BDAYS) ──────────

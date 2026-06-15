@@ -1,0 +1,63 @@
+name: Manual Trigger
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'Commande à exécuter'
+        required: true
+        default: 'run'
+        type: choice
+        options:
+          - run
+          - shadow
+          - backtest
+          - walkforward
+
+jobs:
+  execute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run command
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          EXECUTION_ENABLED: "false"
+          CI: "true"
+        run: |
+          case "${{ inputs.command }}" in
+            run)         python -m src.arena.runner ;;
+            shadow)      python -m src.backtest.shadow_mode ;;
+            backtest)    python -m src.backtest.portfolio_backtest ;;
+            walkforward) python -m src.backtest.run_walkforward ;;
+          esac
+
+      - name: Commit updated logs
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add logs/
+          git diff --staged --quiet || (
+            git commit -m "chore: logs ${{ inputs.command }} $(date +%Y-%m-%d)" &&
+            git pull --rebase &&
+            git push
+          )

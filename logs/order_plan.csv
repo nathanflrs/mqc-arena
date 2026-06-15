@@ -1,4 +1,2 @@
 plan_id,timestamp,symbol,side,delta_qty,target_qty,last_price,est_notional,target_weight,reason
-78ba1154,2026-06-04T06:20:32+00:00,AAPL,SELL,-61.0,329.0,310.260009765625,18925.860595703125,0.1,Citadel v2: trend + momentum + volume
-78ba1154,2026-06-04T06:20:32+00:00,SPY,BUY,191.0,191.0,754.239990234375,144059.83813476562,0.14119349237991127,Citadel v2: trend + momentum + volume
-78ba1154,2026-06-04T06:20:32+00:00,QQQ,BUY,137.0,137.0,744.2100219726562,101956.7730102539,0.1,Buffett screen passed (stable + trend + near-high)
+0064ffb6,2026-06-15T20:47:24+00:00,AAPL,SELL,-322.0,68.0,296.4200134277344,95447.24432373047,0.02,Buffett screen passed (stable + trend + near-high)

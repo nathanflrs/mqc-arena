@@ -34,6 +34,7 @@ from src.agents.trend_following import TrendFollowingAgent
 from src.agents.dividend_arbitrage import DividendArbitrageAgent
 from src.agents.pairs_trading import PairsTradingAgent
 from src.agents.volatility import VolatilityAgent
+from src.agents.earnings_sentiment import EarningsSentimentAgent
 from src.broker.ibkr import connect_ibkr
 from src.broker.portfolio import fetch_account_snapshot
 from src.data.market_data import download_ohlcv, get_last_close_1d
@@ -44,6 +45,7 @@ from src.notify.telegram import drain_updates, send_message, wait_for_approval
 from src.risk.manager import RiskConfig, RiskManager, DrawdownCircuitBreaker
 from src.risk.allocator import AllocatorConfig, DynamicAllocator
 from src.risk.correlation import CorrelationGuard
+from src.risk.live_scorer import LiveScorer
 
 
 def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
@@ -181,6 +183,7 @@ def main() -> None:
             DividendArbitrageAgent(),
             PairsTradingAgent(),
             VolatilityAgent(),
+            EarningsSentimentAgent(),
         ])
 
         regime_data = detect_regime("SPY")
@@ -202,6 +205,11 @@ def main() -> None:
 
         alloc_agents = [BuffettAgent(), CitadelAgent(), MeanReversionAgent(), TrendFollowingAgent()]
         alloc_result = DynamicAllocator(AllocatorConfig()).compute(all_data, alloc_agents)
+
+        # ====== KELLY WEIGHTS (depuis live round-trips) ======
+        kelly_weights: dict[str, float] = LiveScorer().compute_kelly_weights(min_trades=10)
+        if kelly_weights:
+            print(f"\n📐 Kelly demi-fraction disponible : {kelly_weights}")
 
         print("\n" + alloc_result.telegram_summary())
 
@@ -230,10 +238,18 @@ def main() -> None:
             if winner is None:
                 continue
 
-            # Ajuste le target_weight du winner selon le Sharpe rolling de l'agent
+            # Ajuste le target_weight : DynamicAllocator en priorité, puis Kelly si dispo
             dynamic_weight = alloc_result.weights.get(winner.agent_name, {}).get(sym)
             if dynamic_weight is not None:
                 winner = dataclasses.replace(winner, target_weight=dynamic_weight)
+
+            # Kelly override : prend le min(dynamic_weight, kelly) — toujours conservateur
+            kelly_w = kelly_weights.get(winner.agent_name)
+            if kelly_w is not None and kelly_w > 0:
+                new_w = min(winner.target_weight, kelly_w)
+                if new_w != winner.target_weight:
+                    print(f"   📐 Kelly {winner.agent_name}: {winner.target_weight:.2f} → {new_w:.2f}")
+                    winner = dataclasses.replace(winner, target_weight=new_w)
 
             last_px = get_last_close_1d(df)
             current_qty = snap.positions.get(sym, 0.0)
@@ -277,10 +293,10 @@ def main() -> None:
         corr_guard = CorrelationGuard(threshold=0.7, lookback_days=60)
         plans, corr_blocks = corr_guard.filter_plans(plans, snap, all_data)
         if corr_blocks:
-            for cb in corr_blocks:
+            for block in corr_blocks:
                 msg = (
-                    f"⚠️  Corrélation: {cb['symbol']} bloqué "
-                    f"(r={cb['max_corr']:.2f} avec {cb['correlated_with']})"
+                    f"⚠️  Corrélation: {block['symbol']} bloqué "
+                    f"(r={block['max_corr']:.2f} avec {block['correlated_with']})"
                 )
                 print(msg)
                 if not ci_mode:

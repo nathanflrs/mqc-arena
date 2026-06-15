@@ -133,11 +133,13 @@ class TrendFollowingAgent(BaseAgent):
                 sell_reasons.append(f"prix < SMA50 + mom50={mom50:.2%}")
 
             if sell_reasons:
+                # Long-bias: single-trigger SELL in bull is likely a temporary dip
+                sell_conf = self.cfg.sell_confidence if (regime != "bull" or len(sell_reasons) >= 2) else 0.62
                 return AgentSignal(
                     agent_name=self.name,
                     symbol=state.symbol,
                     action="SELL",
-                    confidence=self.cfg.sell_confidence,
+                    confidence=sell_conf,
                     target_weight=0.0,
                     reason="TrendFollow EXIT: " + " | ".join(sell_reasons),
                     meta=meta,

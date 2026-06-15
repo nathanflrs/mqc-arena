@@ -10,27 +10,26 @@ load_dotenv()
 WATCHLIST = [
     "AAPL", "SPY", "QQQ", "NVDA", "MSFT",
     "GOOGL", "META", "JPM", "GS", "GLD",
-    "BRK-B", "JNJ", "TSLA", "AMD",
+    "TSLA", "AMD", "AMZN", "LLY",
 ]
 
 # ====== AGENT PRIORITY PAR SYMBOLE ======
 # Backtest 3 ans — meilleur Sharpe par symbole (run_backtest.py)
 AGENT_PRIORITY = {
-    "AAPL":  "MeanReversionAgent",   # Sharpe=0.81, Return=+38%
-    "SPY":   "BuffettAgent",          # Sharpe=0.71, Return=+32%
-    "QQQ":   "BuffettAgent",          # Sharpe=0.79, Return=+38%
-    "NVDA":  "MeanReversionAgent",   # Sharpe=1.28, Return=+98%
-    "MSFT":  "MeanReversionAgent",   # Sharpe=0.22, Return=+14%
-    "GOOGL": "TrendFollowingAgent",  # Sharpe=1.36, Return=+98%
-    "META":  "MeanReversionAgent",   # Sharpe=0.61, Return=+35%
-    "JPM":   "MeanReversionAgent",   # Sharpe=1.09, Return=+33%
-    "GS":    "BuffettAgent",          # Sharpe=1.62, Return=+141%
-    "GLD":   "BuffettAgent",          # Sharpe=1.20, Return=+73%
-    "TLT":   "CitadelAgent",          # Sharpe=-0.64 (meilleur disponible — tous négatifs)
-    "BRK-B": "MeanReversionAgent",   # Sharpe=0.38, Return=+13%
-    "JNJ":   "TrendFollowingAgent",  # Sharpe=1.56, Return=+45%
-    "TSLA":  "TrendFollowingAgent",  # Sharpe=0.49, Return=+37%
-    "AMD":   "CitadelAgent",          # Sharpe=1.31, Return=+163%
+    "AAPL": "BuffettAgent",
+    "SPY": "MeanReversionAgent",
+    "QQQ": "CitadelAgent",
+    "NVDA": "BuffettAgent",
+    "MSFT": "MeanReversionAgent",
+    "GOOGL": "CitadelAgent",
+    "META": "CitadelAgent",
+    "JPM": "MeanReversionAgent",
+    "GS": "MeanReversionAgent",
+    "GLD": "BuffettAgent",
+    "TSLA": "MeanReversionAgent",
+    "AMD": "MeanReversionAgent",
+    "AMZN": "TrendFollowingAgent",
+    "LLY": "CitadelAgent",
 }
 
 # ====== EXECUTION ======

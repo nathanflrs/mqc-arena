@@ -91,11 +91,13 @@ class BuffettAgent(BaseAgent):
                 sell_reasons.append(f"drawdown60={drawdown60:.2%} > {self.cfg.sell_drawdown_max:.0%}")
 
             if sell_reasons:
+                # Long-bias: single-trigger SELL in bull is likely a temporary dip
+                sell_conf = 0.85 if (regime != "bull" or len(sell_reasons) >= 2) else 0.62
                 return AgentSignal(
                     agent_name=self.name,
                     symbol=state.symbol,
                     action="SELL",
-                    confidence=0.85,
+                    confidence=sell_conf,
                     target_weight=0.0,
                     reason="Buffett EXIT: " + " | ".join(sell_reasons),
                     meta={

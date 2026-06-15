@@ -1,0 +1,7 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "uvicorn src.dashboard.server:app --host 0.0.0.0 --port $PORT --log-level warning"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
