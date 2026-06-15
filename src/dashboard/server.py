@@ -101,40 +101,27 @@ def manifest():
     return JSONResponse(content={
         "name": "Milan Capital",
         "short_name": "MilCap",
-        "description": "Multi-Agent Quantitative Fund",
+        "description": "Multi-Agent Quantitative Fund — by Nathan Floiras",
         "start_url": "/",
         "display": "standalone",
         "background_color": "#05080f",
         "theme_color": "#DEAA3D",
         "orientation": "portrait-primary",
         "icons": [
-            {"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
+            {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
         ]
     })
 
 
-@app.get("/icon.svg")
-def icon():
-    svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Background -->
-  <rect width="512" height="512" rx="88" fill="#05080f"/>
-  <!-- Gold border -->
-  <rect x="3" y="3" width="506" height="506" rx="86"
-        fill="none" stroke="#DEAA3D" stroke-width="6" opacity="0.35"/>
-  <!-- Geometric M — double peak -->
-  <polyline
-    points="72,404 72,124 256,288 440,124 440,404"
-    fill="none"
-    stroke="#DEAA3D"
-    stroke-width="30"
-    stroke-linejoin="round"
-    stroke-linecap="round"/>
-  <!-- Baseline -->
-  <line x1="72" y1="404" x2="440" y2="404"
-        stroke="#DEAA3D" stroke-width="8" opacity="0.25"
-        stroke-linecap="round"/>
-</svg>"""
-    return Response(content=svg, media_type="image/svg+xml")
+ICONS = pathlib.Path(__file__).parent / "icons"
+
+@app.get("/icon-{size}.png")
+def icon_png(size: int):
+    path = ICONS / f"icon-{size}.png"
+    if not path.exists():
+        return Response(status_code=404)
+    return Response(content=path.read_bytes(), media_type="image/png")
 
 
 @app.get("/sw.js")

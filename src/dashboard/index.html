@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="MilCap">
 <link rel="manifest" href="/manifest.json">
-<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -50,6 +50,61 @@ html,body{
   line-height:1.5;
   min-height:100vh;
   overflow-x:hidden;
+}
+
+/* ── Splash screen ── */
+#splash{
+  position:fixed;inset:0;z-index:1000;
+  background:var(--bg);
+  display:flex;align-items:center;justify-content:center;
+  animation:splash-out .5s ease-in-out 2.6s forwards;
+}
+@keyframes splash-out{
+  to{opacity:0;pointer-events:none;visibility:hidden}
+}
+
+.splash-inner{
+  display:flex;flex-direction:column;align-items:center;
+  gap:0;
+  animation:splash-in .8s ease-out forwards;
+}
+@keyframes splash-in{
+  from{opacity:0;transform:translateY(12px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+.splash-line{
+  width:1px;height:60px;
+  background:linear-gradient(to bottom, transparent, var(--gold), transparent);
+  margin:20px 0;
+}
+
+.splash-logo{
+  font-size:11px;font-weight:800;letter-spacing:.4em;
+  color:var(--t3);text-transform:uppercase;margin-bottom:20px;
+}
+
+.splash-title{
+  font-size:clamp(28px,6vw,52px);
+  font-weight:800;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--t1);
+  text-align:center;
+}
+
+.splash-by{
+  margin-top:10px;
+  font-size:12px;font-weight:400;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--t3);
+  text-align:center;
+}
+.splash-by span{
+  color:var(--gold);font-weight:600;
+}
+
+.splash-sub{
+  font-size:9px;font-weight:500;letter-spacing:.25em;
+  text-transform:uppercase;color:var(--t4);
+  text-align:center;margin-top:4px;
 }
 
 /* ── Scrollbar ── */
@@ -346,11 +401,23 @@ tbody tr:hover td{background:rgba(255,255,255,.015)}
 </head>
 <body>
 
+<!-- ──────────── SPLASH ──────────── -->
+<div id="splash">
+  <div class="splash-inner">
+    <div class="splash-line"></div>
+    <div class="splash-logo">MC</div>
+    <div class="splash-title">MILAN CAPITAL</div>
+    <div class="splash-by">by <span>Nathan Floiras</span></div>
+    <div class="splash-line"></div>
+    <div class="splash-sub">Multi-Agent Quantitative Fund</div>
+  </div>
+</div>
+
 <!-- ──────────── TOPBAR ──────────── -->
-<header class="topbar">
+<header class="topbar" id="topbar" style="opacity:0">
   <div class="brand">
     <span class="brand-name">Milan Capital</span>
-    <span class="brand-sub">Multi-Agent Quantitative Fund</span>
+    <span class="brand-sub">by Nathan Floiras</span>
   </div>
   <div class="topbar-right">
     <div class="status-pill" id="status-pill">
@@ -476,6 +543,20 @@ tbody tr:hover td{background:rgba(255,255,255,.015)}
 </main>
 
 <script>
+// ── Splash → Dashboard transition ────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  const topbar = document.getElementById('topbar');
+  const main   = document.querySelector('.main');
+  main.style.opacity = '0';
+
+  setTimeout(() => {
+    topbar.style.transition = 'opacity .6s ease';
+    topbar.style.opacity    = '1';
+    main.style.transition   = 'opacity .8s ease .2s';
+    main.style.opacity      = '1';
+  }, 2400);
+});
+
 // ── Service Worker ────────────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
