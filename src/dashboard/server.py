@@ -177,7 +177,8 @@ async def login(request: Request):
     resp = JSONResponse({"ok": True, "username": username})
     resp.set_cookie(
         SESSION_COOKIE, token,
-        max_age=auth_mod.SESSION_MAX_AGE,
+        # Pas de max_age : cookie de session pur — survit à la mise en arrière-plan
+        # (process iOS suspendu) mais disparaît si l'app est fermée (swipe-up).
         httponly=True, samesite="lax", secure=IS_CLOUD, path="/",
     )
     return resp
