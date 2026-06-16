@@ -16,6 +16,8 @@ feedparser>=6.0
 # Dashboard
 fastapi>=0.110.0
 uvicorn[standard]>=0.29.0
+bcrypt>=4.0
+itsdangerous>=2.1
 
 # AI / LLM
 anthropic>=0.40.0

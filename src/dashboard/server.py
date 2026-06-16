@@ -23,9 +23,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 import pandas as pd
 import requests as _requests
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, Response
 import uvicorn
+
+from src.dashboard import auth as auth_mod
 
 # ── Config ────────────────────────────────────────────────────────────────────
 ROOT = pathlib.Path(__file__).parent.parent.parent
@@ -43,6 +45,21 @@ PORT = int(os.getenv("PORT", "8000"))
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _df_json(df: pd.DataFrame) -> JSONResponse:
     return JSONResponse(content=json.loads(df.to_json(orient="records")))
+
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+SESSION_COOKIE = "milan_session"
+
+
+def _current_user(request: Request) -> str | None:
+    return auth_mod.verify_session_token(request.cookies.get(SESSION_COOKIE))
+
+
+def require_auth(request: Request) -> str:
+    user = _current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Non authentifié")
+    return user
 
 
 # ── Job registry (local mode only) ───────────────────────────────────────────
@@ -146,6 +163,39 @@ self.addEventListener('fetch', e => {
     return Response(content=js, media_type="application/javascript")
 
 
+# ── Auth routes ───────────────────────────────────────────────────────────────
+@app.post("/api/login")
+async def login(request: Request):
+    body = await request.json()
+    username = str(body.get("username", "")).strip()
+    password = str(body.get("password", ""))
+
+    if not auth_mod.verify_login(username, password):
+        return JSONResponse({"error": "Identifiant ou mot de passe incorrect."}, status_code=401)
+
+    token = auth_mod.create_session_token(username)
+    resp = JSONResponse({"ok": True, "username": username})
+    resp.set_cookie(
+        SESSION_COOKIE, token,
+        max_age=auth_mod.SESSION_MAX_AGE,
+        httponly=True, samesite="lax", secure=IS_CLOUD, path="/",
+    )
+    return resp
+
+
+@app.post("/api/logout")
+def logout():
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(SESSION_COOKIE, path="/")
+    return resp
+
+
+@app.get("/api/session")
+def session_info(request: Request):
+    user = _current_user(request)
+    return {"authenticated": bool(user), "username": user}
+
+
 # ── Mode ──────────────────────────────────────────────────────────────────────
 @app.get("/api/mode")
 def get_mode():
@@ -158,7 +208,7 @@ def get_mode():
 
 # ── Local: run subprocess ─────────────────────────────────────────────────────
 @app.post("/api/run/{command}")
-async def run_local(command: str):
+async def run_local(command: str, user: str = Depends(require_auth)):
     job_id = str(uuid.uuid4())[:8]
     queue: asyncio.Queue = asyncio.Queue()
     JOBS[job_id] = {"command": command, "status": "running"}
@@ -168,7 +218,7 @@ async def run_local(command: str):
 
 
 @app.get("/api/stream/{job_id}")
-async def stream_logs(job_id: str):
+async def stream_logs(job_id: str, user: str = Depends(require_auth)):
     async def generator():
         queue = LOG_QUEUES.get(job_id)
         if not queue:
@@ -194,7 +244,7 @@ async def stream_logs(job_id: str):
 
 # ── Cloud: trigger GitHub Actions ─────────────────────────────────────────────
 @app.post("/api/trigger/{command}")
-def trigger_github(command: str):
+def trigger_github(command: str, user: str = Depends(require_auth)):
     if not IS_CLOUD:
         return JSONResponse({"error": "GitHub env vars non configurés"}, status_code=400)
 
@@ -220,7 +270,7 @@ def trigger_github(command: str):
 
 # ── Data routes ───────────────────────────────────────────────────────────────
 @app.get("/api/status")
-def get_status():
+def get_status(user: str = Depends(require_auth)):
     cb: dict = {}
     cb_path = LOGS / "circuit_breaker.json"
     if cb_path.exists():
@@ -230,7 +280,7 @@ def get_status():
 
 
 @app.get("/api/signals")
-def get_signals():
+def get_signals(user: str = Depends(require_auth)):
     path = LOGS / "decisions.csv"
     if not path.exists():
         return JSONResponse(content=[])
@@ -245,7 +295,7 @@ def get_signals():
 
 
 @app.get("/api/performance")
-def get_performance():
+def get_performance(user: str = Depends(require_auth)):
     path = LOGS / "portfolio_by_symbol.csv"
     if not path.exists():
         return JSONResponse(content=[])
@@ -256,7 +306,7 @@ def get_performance():
 
 
 @app.get("/api/equity")
-def get_equity():
+def get_equity(user: str = Depends(require_auth)):
     path = LOGS / "portfolio_equity.csv"
     if not path.exists():
         return JSONResponse(content=[])
@@ -269,7 +319,7 @@ def get_equity():
 
 
 @app.get("/api/agents")
-def get_agents():
+def get_agents(user: str = Depends(require_auth)):
     path = LOGS / "walkforward_summary.csv"
     if not path.exists():
         return JSONResponse(content=[])

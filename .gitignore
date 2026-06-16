@@ -16,6 +16,9 @@ build/
 # Logs sensibles
 logs/shadow_signals.csv
 
+# Comptes dashboard (mots de passe hashés)
+src/dashboard/users.json
+
 # OS
 .DS_Store
 Thumbs.db

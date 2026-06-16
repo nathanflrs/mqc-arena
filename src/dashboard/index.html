@@ -107,6 +107,57 @@ html,body{
   text-align:center;margin-top:4px;
 }
 
+/* ── Login screen ── */
+#login-screen{
+  position:fixed;inset:0;z-index:900;
+  background:var(--bg);
+  display:none;align-items:center;justify-content:center;
+  opacity:0;transition:opacity .5s ease;
+}
+#login-screen.visible{display:flex;opacity:1}
+
+.login-card{
+  width:min(340px,86vw);
+  display:flex;flex-direction:column;align-items:center;
+  gap:0;
+  animation:splash-in .6s ease-out forwards;
+}
+.login-logo{
+  font-size:10px;font-weight:800;letter-spacing:.35em;
+  color:var(--t3);text-transform:uppercase;margin-bottom:18px;
+}
+.login-title{
+  font-size:13px;font-weight:700;letter-spacing:.06em;
+  color:var(--t1);margin-bottom:28px;text-align:center;
+}
+.login-field{width:100%;margin-bottom:12px}
+.login-field input{
+  width:100%;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:12px 14px;
+  font-family:inherit;font-size:13px;color:var(--t1);
+  outline:none;transition:border-color .15s;
+}
+.login-field input::placeholder{color:var(--t3)}
+.login-field input:focus{border-color:var(--border-g)}
+
+.login-submit{
+  width:100%;margin-top:8px;
+  padding:12px;border-radius:8px;border:1px solid var(--gold);
+  background:var(--gold);color:#05080f;
+  font-family:inherit;font-size:13px;font-weight:700;
+  letter-spacing:.04em;cursor:pointer;transition:filter .15s;
+}
+.login-submit:hover{filter:brightness(1.08)}
+.login-submit:disabled{opacity:.5;cursor:not-allowed}
+
+.login-error{
+  margin-top:14px;font-size:11.5px;color:var(--red);
+  text-align:center;min-height:14px;
+}
+
 /* ── Scrollbar ── */
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -413,6 +464,22 @@ tbody tr:hover td{background:rgba(255,255,255,.015)}
   </div>
 </div>
 
+<!-- ──────────── LOGIN ──────────── -->
+<div id="login-screen">
+  <form class="login-card" id="login-form" autocomplete="on">
+    <div class="login-logo">MILAN CAPITAL</div>
+    <div class="login-title">Connexion requise</div>
+    <div class="login-field">
+      <input type="text" id="login-username" name="username" placeholder="Identifiant" autocomplete="username" required>
+    </div>
+    <div class="login-field">
+      <input type="password" id="login-password" name="password" placeholder="Mot de passe" autocomplete="current-password" required>
+    </div>
+    <button type="submit" class="login-submit" id="login-submit">Se connecter</button>
+    <div class="login-error" id="login-error"></div>
+  </form>
+</div>
+
 <!-- ──────────── TOPBAR ──────────── -->
 <header class="topbar" id="topbar" style="opacity:0">
   <div class="brand">
@@ -543,18 +610,71 @@ tbody tr:hover td{background:rgba(255,255,255,.015)}
 </main>
 
 <script>
-// ── Splash → Dashboard transition ────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', () => {
-  const topbar = document.getElementById('topbar');
-  const main   = document.querySelector('.main');
-  main.style.opacity = '0';
+// ── Splash → Login/Dashboard transition ──────────────────────────────────────
+const topbar = document.getElementById('topbar');
+const main   = document.querySelector('.main');
+main.style.opacity = '0';
 
-  setTimeout(() => {
-    topbar.style.transition = 'opacity .6s ease';
-    topbar.style.opacity    = '1';
-    main.style.transition   = 'opacity .8s ease .2s';
-    main.style.opacity      = '1';
-  }, 2400);
+function revealDashboard() {
+  document.getElementById('login-screen').classList.remove('visible');
+  topbar.style.transition = 'opacity .6s ease';
+  topbar.style.opacity    = '1';
+  main.style.transition   = 'opacity .8s ease .2s';
+  main.style.opacity      = '1';
+  loadStatus(); loadSignals(); loadPerformance(); loadEquity();
+  setInterval(loadStatus, 5000);
+}
+
+function showLogin() {
+  document.getElementById('login-screen').classList.add('visible');
+  document.getElementById('login-username').focus();
+}
+
+async function checkSessionAndReveal() {
+  try {
+    const s = await fetch('/api/session').then(r => r.json());
+    if (s.authenticated) revealDashboard();
+    else showLogin();
+  } catch (_) {
+    showLogin();
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  setTimeout(checkSessionAndReveal, 2400);
+
+  const form    = document.getElementById('login-form');
+  const errEl   = document.getElementById('login-error');
+  const submit  = document.getElementById('login-submit');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errEl.textContent = '';
+    submit.disabled = true;
+    submit.textContent = 'Connexion…';
+
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('login-username').value,
+          password: document.getElementById('login-password').value,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        revealDashboard();
+      } else {
+        errEl.textContent = data.error || 'Connexion impossible.';
+      }
+    } catch (err) {
+      errEl.textContent = 'Erreur réseau.';
+    } finally {
+      submit.disabled = false;
+      submit.textContent = 'Se connecter';
+    }
+  });
 });
 
 // ── Service Worker ────────────────────────────────────────────────────────────
@@ -628,8 +748,6 @@ async function loadStatus() {
     txt.textContent = busy ? 'Exécution…' : 'Système actif';
   } catch(_) {}
 }
-setInterval(loadStatus, 5000);
-loadStatus();
 
 // ── Signals ───────────────────────────────────────────────────────────────────
 async function loadSignals() {
@@ -678,7 +796,6 @@ async function loadSignals() {
     }).join('');
   } catch(_) {}
 }
-loadSignals();
 
 // ── Performance ───────────────────────────────────────────────────────────────
 async function loadPerformance() {
@@ -707,7 +824,6 @@ async function loadPerformance() {
     }).join('');
   } catch(_) {}
 }
-loadPerformance();
 
 // ── Equity Chart ──────────────────────────────────────────────────────────────
 let chart = null;
@@ -804,7 +920,6 @@ async function loadEquity() {
     });
   } catch(e) { console.warn('Equity chart:', e); }
 }
-loadEquity();
 
 // ── Console ───────────────────────────────────────────────────────────────────
 const consoleEl = document.getElementById('console');
