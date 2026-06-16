@@ -492,6 +492,7 @@ tbody tr:hover td{background:rgba(255,255,255,.015)}
       <span id="status-text">Système actif</span>
     </div>
     <div class="clock" id="clock"></div>
+    <button class="console-clear" id="btn-logout" onclick="logout()" title="Se déconnecter">⏻</button>
   </div>
 </header>
 
@@ -628,6 +629,15 @@ function revealDashboard() {
 function showLogin() {
   document.getElementById('login-screen').classList.add('visible');
   document.getElementById('login-username').focus();
+}
+
+async function logout() {
+  try { await fetch('/api/logout', { method: 'POST' }); } catch (_) {}
+  topbar.style.opacity = '0';
+  main.style.opacity   = '0';
+  document.getElementById('login-username').value = '';
+  document.getElementById('login-password').value = '';
+  showLogin();
 }
 
 async function checkSessionAndReveal() {
