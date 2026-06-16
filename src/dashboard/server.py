@@ -11,6 +11,8 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import base64
+import io
 import json
 import os
 import pathlib
@@ -45,6 +47,34 @@ PORT = int(os.getenv("PORT", "8000"))
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _df_json(df: pd.DataFrame) -> JSONResponse:
     return JSONResponse(content=json.loads(df.to_json(orient="records")))
+
+
+def _github_file(rel_path: str) -> str | None:
+    """Lit un fichier depuis le repo GitHub (contenu commité par les Actions)."""
+    url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/contents/{rel_path}"
+    resp = _requests.get(
+        url,
+        headers={
+            "Authorization": f"Bearer {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github.v3+json",
+        },
+        params={"ref": GITHUB_REF},
+        timeout=10,
+    )
+    if resp.status_code != 200:
+        return None
+    data = resp.json()
+    if data.get("encoding") != "base64":
+        return None
+    return base64.b64decode(data["content"]).decode("utf-8")
+
+
+def _read_text(rel_path: str) -> str | None:
+    """rel_path relatif à la racine du repo, ex: 'logs/decisions.csv'."""
+    if IS_CLOUD:
+        return _github_file(rel_path)
+    path = ROOT / rel_path
+    return path.read_text(encoding="utf-8") if path.exists() else None
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -273,20 +303,20 @@ def trigger_github(command: str, user: str = Depends(require_auth)):
 @app.get("/api/status")
 def get_status(user: str = Depends(require_auth)):
     cb: dict = {}
-    cb_path = LOGS / "circuit_breaker.json"
-    if cb_path.exists():
-        cb = json.loads(cb_path.read_text())
+    raw = _read_text("logs/circuit_breaker.json")
+    if raw:
+        cb = json.loads(raw)
     running = [jid for jid, j in JOBS.items() if j.get("status") == "running"]
     return {"circuit_breaker": cb, "running_jobs": running, "cloud": IS_CLOUD}
 
 
 @app.get("/api/signals")
 def get_signals(user: str = Depends(require_auth)):
-    path = LOGS / "decisions.csv"
-    if not path.exists():
+    raw = _read_text("logs/decisions.csv")
+    if not raw:
         return JSONResponse(content=[])
     try:
-        df = pd.read_csv(path)
+        df = pd.read_csv(io.StringIO(raw))
         cols = [c for c in ["ts","symbol","regime","winner_agent","action","confidence","reason"]
                 if c in df.columns]
         df = df[cols].drop_duplicates(subset=["symbol"], keep="last").sort_values("symbol")
@@ -297,22 +327,22 @@ def get_signals(user: str = Depends(require_auth)):
 
 @app.get("/api/performance")
 def get_performance(user: str = Depends(require_auth)):
-    path = LOGS / "portfolio_by_symbol.csv"
-    if not path.exists():
+    raw = _read_text("logs/portfolio_by_symbol.csv")
+    if not raw:
         return JSONResponse(content=[])
     try:
-        return _df_json(pd.read_csv(path).sort_values("ret", ascending=False))
+        return _df_json(pd.read_csv(io.StringIO(raw)).sort_values("ret", ascending=False))
     except Exception:
         return JSONResponse(content=[])
 
 
 @app.get("/api/equity")
 def get_equity(user: str = Depends(require_auth)):
-    path = LOGS / "portfolio_equity.csv"
-    if not path.exists():
+    raw = _read_text("logs/portfolio_equity.csv")
+    if not raw:
         return JSONResponse(content=[])
     try:
-        df = pd.read_csv(path)
+        df = pd.read_csv(io.StringIO(raw))
         step = max(1, len(df) // 120)
         return _df_json(df.iloc[::step])
     except Exception:
@@ -321,11 +351,11 @@ def get_equity(user: str = Depends(require_auth)):
 
 @app.get("/api/agents")
 def get_agents(user: str = Depends(require_auth)):
-    path = LOGS / "walkforward_summary.csv"
-    if not path.exists():
+    raw = _read_text("logs/walkforward_summary.csv")
+    if not raw:
         return JSONResponse(content=[])
     try:
-        df = (pd.read_csv(path)
+        df = (pd.read_csv(io.StringIO(raw))
               .sort_values("avg_oos_sharpe", ascending=False)
               .drop_duplicates(subset=["symbol"], keep="first"))
         return _df_json(df)
