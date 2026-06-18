@@ -13,6 +13,43 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class PortfolioPerformance:
+    portfolio_return: float   # cumulative return from all round-trips (indexed to 1.0)
+    spy_return: float         # SPY buy-and-hold for the same period
+    alpha: float              # portfolio_return − spy_return
+    first_trade_date: str | None
+    last_trade_date: str | None
+    n_trades: int
+    equity_curve: list        # [{date, portfolio, spy?}] indexed to 100
+
+    def to_dict(self) -> dict:
+        return {
+            "portfolio_return": self.portfolio_return,
+            "spy_return":       self.spy_return,
+            "alpha":            self.alpha,
+            "first_trade_date": self.first_trade_date,
+            "last_trade_date":  self.last_trade_date,
+            "n_trades":         self.n_trades,
+        }
+
+
+@dataclass
+class DriftAlert:
+    agent: str
+    oos_sharpe: float    # from walk-forward avg_oos_sharpe
+    live_sharpe: float   # current live Sharpe
+    drift: float         # oos_sharpe − live_sharpe (positive = deterioration)
+
+    def to_dict(self) -> dict:
+        return {
+            "agent":       self.agent,
+            "oos_sharpe":  self.oos_sharpe,
+            "live_sharpe": self.live_sharpe,
+            "drift":       self.drift,
+        }
+
+
+@dataclass
 class LiveScorerConfig:
     decisions_path: str = "logs/decisions.csv"
     executions_path: str = "logs/executions.csv"
@@ -314,6 +351,106 @@ class LiveScorer:
             for agent, trips in groups.items()
             if len(trips) >= min_trades
         }
+
+    def compute_portfolio_performance(self) -> PortfolioPerformance | None:
+        """
+        Builds a cumulative equity curve from all round-trips (indexed to 100)
+        and compares with SPY buy-and-hold for the same period.
+        Returns None if there are no round-trips yet.
+        """
+        self._load()
+        if not self._roundtrips:
+            return None
+
+        sorted_trips = sorted(self._roundtrips, key=lambda t: t.exit_date)
+        first_date = sorted_trips[0].entry_date
+        last_date  = sorted_trips[-1].exit_date
+
+        equity = 100.0
+        equity_curve: list = []
+        for t in sorted_trips:
+            equity *= (1.0 + t.return_pct)
+            equity_curve.append({
+                "date":      t.exit_date.strftime("%Y-%m-%d"),
+                "portfolio": round(equity, 2),
+            })
+
+        portfolio_return = (equity - 100.0) / 100.0
+
+        spy_return = 0.0
+        try:
+            from src.data.market_data import download_ohlcv
+            spy_df    = download_ohlcv("SPY")
+            spy_close = pd.to_numeric(spy_df["Close"], errors="coerce").dropna()
+            spy_close.index = pd.to_datetime(spy_close.index, utc=True)
+
+            spy_range = spy_close[
+                (spy_close.index >= first_date) & (spy_close.index <= last_date)
+            ]
+            if len(spy_range) >= 2:
+                spy_start  = float(spy_range.iloc[0])
+                spy_return = float(spy_range.iloc[-1] / spy_start - 1.0)
+                spy_map    = {
+                    str(ts.date()): round(100.0 * float(px) / spy_start, 2)
+                    for ts, px in spy_range.items()
+                }
+                for pt in equity_curve:
+                    if pt["date"] in spy_map:
+                        pt["spy"] = spy_map[pt["date"]]
+        except Exception as e:
+            logger.warning("SPY benchmark fetch failed: %s", e)
+
+        return PortfolioPerformance(
+            portfolio_return=round(portfolio_return, 4),
+            spy_return=round(spy_return, 4),
+            alpha=round(portfolio_return - spy_return, 4),
+            first_trade_date=first_date.strftime("%Y-%m-%d"),
+            last_trade_date=last_date.strftime("%Y-%m-%d"),
+            n_trades=len(sorted_trips),
+            equity_curve=equity_curve,
+        )
+
+    def compute_drift_alerts(
+        self,
+        drift_threshold: float = 0.5,
+        wf_path: str = "logs/walkforward_results.csv",
+    ) -> list:
+        """
+        Compares live Sharpe per agent with the walk-forward avg_oos_sharpe.
+        Returns DriftAlert list for agents where oos_sharpe − live_sharpe > threshold.
+        """
+        wf_file = Path(wf_path)
+        if not wf_file.exists():
+            return []
+        try:
+            wf_df = pd.read_csv(wf_file)
+        except Exception as e:
+            logger.warning("Cannot read walkforward_results.csv: %s", e)
+            return []
+
+        # Mean avg_oos_sharpe per agent across all symbols
+        wf_by_agent: dict[str, float] = {}
+        for agent in wf_df["agent"].dropna().unique():
+            rows = wf_df[wf_df["agent"] == agent]
+            wf_by_agent[str(agent)] = float(rows["avg_oos_sharpe"].mean())
+
+        live_metrics = self.compute_agent_metrics()
+
+        alerts: list = []
+        for agent, oos_sharpe in wf_by_agent.items():
+            if agent not in live_metrics:
+                continue
+            live_sharpe = live_metrics[agent].sharpe
+            drift = oos_sharpe - live_sharpe
+            if drift > drift_threshold:
+                alerts.append(DriftAlert(
+                    agent=agent,
+                    oos_sharpe=round(oos_sharpe, 4),
+                    live_sharpe=round(live_sharpe, 4),
+                    drift=round(drift, 4),
+                ))
+
+        return sorted(alerts, key=lambda a: a.drift, reverse=True)
 
     def generate_tearsheet(self, path: str | None = None) -> str:
         """

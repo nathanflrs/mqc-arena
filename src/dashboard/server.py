@@ -327,13 +327,65 @@ def get_signals(user: str = Depends(require_auth)):
 
 @app.get("/api/performance")
 def get_performance(user: str = Depends(require_auth)):
+    # Try legacy portfolio_by_symbol.csv first (backtest output)
     raw = _read_text("logs/portfolio_by_symbol.csv")
-    if not raw:
-        return JSONResponse(content=[])
+    if raw:
+        try:
+            return _df_json(pd.read_csv(io.StringIO(raw)).sort_values("ret", ascending=False))
+        except Exception:
+            pass
+    # Fall back to live agent metrics
     try:
-        return _df_json(pd.read_csv(io.StringIO(raw)).sort_values("ret", ascending=False))
+        from src.risk.live_scorer import LiveScorer
+        metrics = LiveScorer().compute_agent_metrics()
+        if not metrics:
+            return JSONResponse(content=[])
+        rows = [
+            {
+                "sym":    "ALL",
+                "agent":  m.agent,
+                "ret":    round(m.total_pnl_pct, 4),
+                "sharpe": round(m.sharpe, 4),
+                "trades": m.n_trades,
+            }
+            for m in sorted(metrics.values(), key=lambda x: x.sharpe, reverse=True)
+        ]
+        return JSONResponse(content=rows)
     except Exception:
         return JSONResponse(content=[])
+
+
+@app.get("/api/portfolio-summary")
+def get_portfolio_summary(user: str = Depends(require_auth)):
+    try:
+        from src.risk.live_scorer import LiveScorer
+        perf = LiveScorer().compute_portfolio_performance()
+        if perf is None:
+            return JSONResponse(content={"available": False})
+        return JSONResponse(content={"available": True, **perf.to_dict(),
+                                     "equity_curve": perf.equity_curve})
+    except Exception as e:
+        return JSONResponse(content={"available": False, "error": str(e)})
+
+
+@app.get("/api/drift-alerts")
+def get_drift_alerts(user: str = Depends(require_auth)):
+    try:
+        from src.risk.live_scorer import LiveScorer
+        alerts = LiveScorer().compute_drift_alerts()
+        return JSONResponse(content=[a.to_dict() for a in alerts])
+    except Exception:
+        return JSONResponse(content=[])
+
+
+@app.post("/api/reset-circuit-breaker")
+def reset_circuit_breaker(user: str = Depends(require_auth)):
+    try:
+        from src.risk.manager import DrawdownCircuitBreaker
+        DrawdownCircuitBreaker().reset()
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/equity")

@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Milan Capital</title>
 <meta name="theme-color" content="#DEAA3D">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -19,435 +19,253 @@
 
 /* ── Tokens ── */
 :root{
-  --bg:       #05080f;
-  --surface:  #0a0f1e;
-  --surface2: #0f1628;
-  --border:   rgba(255,255,255,0.05);
-  --border-g: rgba(222,170,61,0.18);
-  --gold:     #dEAA3D;
-  --gold-d:   rgba(222,170,61,0.08);
-  --gold-d2:  rgba(222,170,61,0.15);
-  --green:    #22c55e;
-  --green-d:  rgba(34,197,94,0.08);
-  --red:      #ef4444;
-  --red-d:    rgba(239,68,68,0.08);
-  --blue:     #60a5fa;
-  --blue-d:   rgba(96,165,250,0.08);
-  --purple:   #a78bfa;
-  --purple-d: rgba(167,139,250,0.08);
-  --t1: #f0f4ff;
-  --t2: #8892a4;
-  --t3: #3d4a5c;
-  --t4: #232e3e;
-  --mono: 'SF Mono','Fira Code','Consolas',monospace;
+  --bg:#05080f; --surface:#0a0f1e; --surface2:#0f1628;
+  --border:rgba(255,255,255,0.05); --border-g:rgba(222,170,61,0.18);
+  --gold:#DEAA3D; --gold-d:rgba(222,170,61,0.08); --gold-d2:rgba(222,170,61,0.15);
+  --green:#22c55e; --green-d:rgba(34,197,94,0.08);
+  --red:#ef4444;   --red-d:rgba(239,68,68,0.08);
+  --blue:#60a5fa;  --purple:#a78bfa;
+  --t1:#f0f4ff; --t2:#8892a4; --t3:#3d4a5c; --t4:#232e3e;
+  --mono:'SF Mono','Fira Code','Consolas',monospace;
+  --tab-h:56px;
+  --safe-b:env(safe-area-inset-bottom,0px);
 }
 
 html,body{
-  background:var(--bg);
-  color:var(--t1);
-  font-family:'Inter',sans-serif;
-  font-size:13px;
-  line-height:1.5;
-  min-height:100vh;
-  overflow-x:hidden;
+  background:var(--bg); color:var(--t1);
+  font-family:'Inter',sans-serif; font-size:13px; line-height:1.5;
+  height:100%; overflow:hidden;
 }
 
-/* ── Splash screen ── */
+/* ── App shell ── */
+.app{display:flex;flex-direction:column;height:100%;height:-webkit-fill-available}
+
+/* ── Splash ── */
 #splash{
-  position:fixed;inset:0;z-index:1000;
-  background:var(--bg);
+  position:fixed;inset:0;z-index:1000;background:var(--bg);
   display:flex;align-items:center;justify-content:center;
   animation:splash-out .5s ease-in-out 2.6s forwards;
 }
-@keyframes splash-out{
-  to{opacity:0;pointer-events:none;visibility:hidden}
-}
+@keyframes splash-out{to{opacity:0;pointer-events:none;visibility:hidden}}
+.splash-inner{display:flex;flex-direction:column;align-items:center;animation:splash-in .8s ease-out forwards}
+@keyframes splash-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.splash-line{width:1px;height:60px;background:linear-gradient(to bottom,transparent,var(--gold),transparent);margin:20px 0}
+.splash-logo{font-size:11px;font-weight:800;letter-spacing:.4em;color:var(--t3);text-transform:uppercase;margin-bottom:20px}
+.splash-title{font-size:clamp(28px,6vw,52px);font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:var(--t1);text-align:center}
+.splash-by{margin-top:10px;font-size:12px;font-weight:400;letter-spacing:.18em;text-transform:uppercase;color:var(--t3);text-align:center}
+.splash-by span{color:var(--gold);font-weight:600}
+.splash-sub{font-size:9px;font-weight:500;letter-spacing:.25em;text-transform:uppercase;color:var(--t4);text-align:center;margin-top:4px}
 
-.splash-inner{
-  display:flex;flex-direction:column;align-items:center;
-  gap:0;
-  animation:splash-in .8s ease-out forwards;
-}
-@keyframes splash-in{
-  from{opacity:0;transform:translateY(12px)}
-  to{opacity:1;transform:translateY(0)}
-}
-
-.splash-line{
-  width:1px;height:60px;
-  background:linear-gradient(to bottom, transparent, var(--gold), transparent);
-  margin:20px 0;
-}
-
-.splash-logo{
-  font-size:11px;font-weight:800;letter-spacing:.4em;
-  color:var(--t3);text-transform:uppercase;margin-bottom:20px;
-}
-
-.splash-title{
-  font-size:clamp(28px,6vw,52px);
-  font-weight:800;letter-spacing:.22em;
-  text-transform:uppercase;color:var(--t1);
-  text-align:center;
-}
-
-.splash-by{
-  margin-top:10px;
-  font-size:12px;font-weight:400;letter-spacing:.18em;
-  text-transform:uppercase;color:var(--t3);
-  text-align:center;
-}
-.splash-by span{
-  color:var(--gold);font-weight:600;
-}
-
-.splash-sub{
-  font-size:9px;font-weight:500;letter-spacing:.25em;
-  text-transform:uppercase;color:var(--t4);
-  text-align:center;margin-top:4px;
-}
-
-/* ── Login screen ── */
+/* ── Login ── */
 #login-screen{
-  position:fixed;inset:0;z-index:900;
-  background:var(--bg);
+  position:fixed;inset:0;z-index:900;background:var(--bg);
   display:none;align-items:center;justify-content:center;
   opacity:0;transition:opacity .5s ease;
 }
 #login-screen.visible{display:flex;opacity:1}
-
-.login-card{
-  width:min(340px,86vw);
-  display:flex;flex-direction:column;align-items:center;
-  gap:0;
-  animation:splash-in .6s ease-out forwards;
-}
-.login-logo{
-  font-size:10px;font-weight:800;letter-spacing:.35em;
-  color:var(--t3);text-transform:uppercase;margin-bottom:18px;
-}
-.login-title{
-  font-size:13px;font-weight:700;letter-spacing:.06em;
-  color:var(--t1);margin-bottom:28px;text-align:center;
-}
+.login-card{width:min(340px,86vw);display:flex;flex-direction:column;align-items:center;animation:splash-in .6s ease-out forwards}
+.login-logo{font-size:10px;font-weight:800;letter-spacing:.35em;color:var(--t3);text-transform:uppercase;margin-bottom:18px}
+.login-title{font-size:13px;font-weight:700;letter-spacing:.06em;color:var(--t1);margin-bottom:28px;text-align:center}
 .login-field{width:100%;margin-bottom:12px}
 .login-field input{
-  width:100%;
-  background:var(--surface);
-  border:1px solid var(--border);
-  border-radius:8px;
-  padding:12px 14px;
-  font-family:inherit;font-size:13px;color:var(--t1);
+  width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:12px 14px;font-family:inherit;font-size:13px;color:var(--t1);
   outline:none;transition:border-color .15s;
 }
 .login-field input::placeholder{color:var(--t3)}
 .login-field input:focus{border-color:var(--border-g)}
-
 .login-submit{
-  width:100%;margin-top:8px;
-  padding:12px;border-radius:8px;border:1px solid var(--gold);
-  background:var(--gold);color:#05080f;
-  font-family:inherit;font-size:13px;font-weight:700;
-  letter-spacing:.04em;cursor:pointer;transition:filter .15s;
+  width:100%;margin-top:8px;padding:12px;border-radius:8px;
+  border:1px solid var(--gold);background:var(--gold);color:#05080f;
+  font-family:inherit;font-size:13px;font-weight:700;letter-spacing:.04em;
+  cursor:pointer;transition:filter .15s;
 }
 .login-submit:hover{filter:brightness(1.08)}
 .login-submit:disabled{opacity:.5;cursor:not-allowed}
+.login-error{margin-top:14px;font-size:11.5px;color:var(--red);text-align:center;min-height:14px}
 
-.login-error{
-  margin-top:14px;font-size:11.5px;color:var(--red);
-  text-align:center;min-height:14px;
+/* ── Topbar ── */
+.topbar{
+  flex-shrink:0;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 20px;padding-top:max(12px,env(safe-area-inset-top,12px));
+  background:rgba(5,8,15,0.95);backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
 }
+.brand-name{font-size:14px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--gold)}
+.brand-sub{font-size:9px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin-top:1px}
+.topbar-right{display:flex;align-items:center;gap:14px}
+.status-pill{
+  display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;
+  font-size:10px;font-weight:600;background:var(--green-d);
+  border:1px solid rgba(34,197,94,.2);color:var(--green);transition:all .3s;
+}
+.status-pill.busy{background:var(--gold-d);border-color:var(--border-g);color:var(--gold)}
+.dot{width:5px;height:5px;border-radius:50%;background:currentColor;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.clock{font-size:11px;font-weight:500;color:var(--t2);font-variant-numeric:tabular-nums}
+.btn-logout{
+  background:none;border:1px solid var(--border);border-radius:6px;
+  color:var(--t3);font-size:13px;padding:4px 8px;cursor:pointer;transition:all .15s;
+}
+.btn-logout:hover{border-color:var(--t3);color:var(--t2)}
+
+/* ── Tab content area ── */
+.page-content{flex:1;overflow:hidden;position:relative}
+
+.tab-panel{
+  position:absolute;inset:0;overflow-y:auto;
+  padding:16px 16px 0;
+  display:none;
+  -webkit-overflow-scrolling:touch;
+  scroll-behavior:smooth;
+}
+.tab-panel.active{display:block}
+
+/* ── Tab bar ── */
+.tab-bar{
+  flex-shrink:0;
+  display:flex;
+  border-top:1px solid var(--border);
+  background:rgba(5,8,15,0.97);
+  backdrop-filter:blur(20px);
+  padding-bottom:var(--safe-b);
+  height:calc(var(--tab-h) + var(--safe-b));
+}
+.tab-btn{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:2px;background:none;border:none;color:var(--t3);
+  font-family:inherit;font-size:9px;font-weight:600;
+  letter-spacing:.06em;text-transform:uppercase;
+  cursor:pointer;transition:color .15s;padding:6px 4px;
+}
+.tab-btn.active{color:var(--gold)}
+.tab-btn .tab-icon{font-size:17px;line-height:1}
 
 /* ── Scrollbar ── */
-::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar{width:3px;height:3px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--t4);border-radius:2px}
 
-/* ────────────────────────────────────────────────────
-   TOPBAR
-──────────────────────────────────────────────────── */
-.topbar{
-  position:sticky;top:0;z-index:100;
-  display:flex;align-items:center;justify-content:space-between;
-  padding:14px 32px;
-  background:rgba(5,8,15,0.92);
-  backdrop-filter:blur(20px);
-  border-bottom:1px solid var(--border);
-}
-
-.brand{display:flex;flex-direction:column;gap:2px}
-.brand-name{
-  font-size:15px;font-weight:800;letter-spacing:.18em;
-  text-transform:uppercase;color:var(--gold);
-}
-.brand-sub{
-  font-size:9px;font-weight:500;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--t3);
-}
-
-.topbar-right{display:flex;align-items:center;gap:20px}
-
-.status-pill{
-  display:flex;align-items:center;gap:7px;
-  padding:5px 12px;border-radius:20px;
-  font-size:11px;font-weight:600;
-  background:var(--green-d);
-  border:1px solid rgba(34,197,94,0.2);
-  color:var(--green);
-  transition:all .3s;
-}
-.status-pill.busy{
-  background:var(--gold-d);
-  border-color:var(--border-g);
-  color:var(--gold);
-}
-
-.dot{
-  width:6px;height:6px;border-radius:50%;
-  background:currentColor;
-  animation:blink 2s infinite;
-}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
-
-.clock{
-  font-size:12px;font-weight:500;
-  color:var(--t2);
-  font-variant-numeric:tabular-nums;
-  letter-spacing:.02em;
-}
-
-/* ────────────────────────────────────────────────────
-   MAIN
-──────────────────────────────────────────────────── */
-.main{
-  max-width:1440px;margin:0 auto;
-  padding:24px 32px 48px;
-}
-
-/* ── Section label ── */
-.section-label{
-  display:flex;align-items:center;gap:8px;
-  margin-bottom:14px;
-}
-.section-label::before{
-  content:'';display:block;
-  width:3px;height:14px;border-radius:2px;
-  background:var(--gold);
-}
-.section-label span{
-  font-size:10px;font-weight:700;
-  letter-spacing:.12em;text-transform:uppercase;
-  color:var(--t3);
-}
-
-/* ────────────────────────────────────────────────────
-   ACTION BAR
-──────────────────────────────────────────────────── */
-.action-bar{
-  display:flex;gap:10px;
-  margin-bottom:24px;
-  flex-wrap:wrap;
-}
-
-.btn{
-  display:inline-flex;align-items:center;gap:7px;
-  padding:9px 18px;
-  border-radius:8px;border:1px solid;
-  font-family:inherit;font-size:12px;font-weight:600;
-  cursor:pointer;transition:all .18s;white-space:nowrap;
-  outline:none;
-}
-.btn:hover{transform:translateY(-1px);filter:brightness(1.1)}
-.btn:active{transform:translateY(0)}
-.btn:disabled{opacity:.35;cursor:not-allowed;transform:none;filter:none}
-
-.btn-primary{
-  background:var(--gold);border-color:var(--gold);
-  color:#05080f;
-}
-.btn-ghost{
-  background:transparent;border-color:var(--border);
-  color:var(--t2);
-}
-.btn-ghost:hover{border-color:var(--t3);background:var(--surface2)}
-
-.btn-pulse{
-  animation:gpulse 1.6s ease-in-out infinite;
-}
-@keyframes gpulse{
-  0%,100%{box-shadow:0 0 0 0 rgba(222,170,61,.5)}
-  50%{box-shadow:0 0 0 7px rgba(222,170,61,0)}
-}
-
-.btn-icon{font-size:13px}
-
-/* ────────────────────────────────────────────────────
-   KPI CARDS
-──────────────────────────────────────────────────── */
-.kpi-grid{
-  display:grid;
-  grid-template-columns:repeat(4,1fr);
-  gap:14px;
-  margin-bottom:20px;
-}
-
-.card{
-  background:var(--surface);
-  border:1px solid var(--border);
-  border-radius:12px;
-  padding:18px 20px;
-}
+/* ── Cards ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:12px}
 .card-gold{border-color:var(--border-g)}
 
-.kpi-label{
-  font-size:9px;font-weight:700;
-  text-transform:uppercase;letter-spacing:.1em;
-  color:var(--t3);margin-bottom:10px;
-}
-.kpi-value{
-  font-size:24px;font-weight:800;
-  font-variant-numeric:tabular-nums;
-  color:var(--t1);line-height:1;
-}
-.kpi-sub{
-  font-size:10px;color:var(--t3);
-  margin-top:6px;
-}
-.kpi-badge{
-  display:inline-flex;align-items:center;gap:4px;
-  margin-top:8px;padding:3px 8px;
-  border-radius:4px;font-size:10px;font-weight:600;
-}
+/* ── KPI grid ── */
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.kpi-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);margin-bottom:8px}
+.kpi-value{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--t1);line-height:1}
+.kpi-sub{font-size:10px;color:var(--t3);margin-top:5px}
+.kpi-badge{display:inline-flex;align-items:center;gap:4px;margin-top:7px;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:600}
 .kpi-badge.ok{background:var(--green-d);color:var(--green)}
 .kpi-badge.warn{background:rgba(239,68,68,.1);color:var(--red)}
 
-.pos{color:var(--green)}
-.neg{color:var(--red)}
+/* ── Perf KPI row ── */
+.perf-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px}
+.perf-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 12px;text-align:center}
 
-/* ────────────────────────────────────────────────────
-   CHART
-──────────────────────────────────────────────────── */
-.chart-card{
-  margin-bottom:20px;
-  padding:20px 24px;
+/* ── Regime banner ── */
+.regime-banner{
+  border-radius:10px;padding:14px 16px;margin-bottom:12px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
 }
-.chart-wrap{height:210px;position:relative}
+.regime-label{font-size:16px;font-weight:800;letter-spacing:.08em}
+.regime-meta{display:flex;gap:16px;flex-wrap:wrap}
+.regime-kv{text-align:right}
+.regime-kv .rk{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--t3)}
+.regime-kv .rv{font-size:13px;font-weight:700}
 
-/* ────────────────────────────────────────────────────
-   DATA GRID
-──────────────────────────────────────────────────── */
-.data-grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:14px;
-  margin-bottom:20px;
+/* ── Section label ── */
+.sec-label{
+  display:flex;align-items:center;gap:8px;margin-bottom:10px;
 }
+.sec-label::before{content:'';display:block;width:3px;height:12px;border-radius:2px;background:var(--gold)}
+.sec-label span{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t3)}
 
 /* ── Table ── */
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
 table{width:100%;border-collapse:collapse}
-th{
-  font-size:9px;font-weight:700;
-  text-transform:uppercase;letter-spacing:.1em;
-  color:var(--t3);padding:0 8px 10px;
-  text-align:left;border-bottom:1px solid var(--border);
-}
-td{
-  padding:9px 8px;
-  font-size:12px;color:var(--t2);
-  border-bottom:1px solid rgba(255,255,255,.03);
-}
+th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);padding:0 7px 9px;text-align:left;border-bottom:1px solid var(--border)}
+td{padding:8px 7px;font-size:12px;color:var(--t2);border-bottom:1px solid rgba(255,255,255,.03)}
 tr:last-child td{border-bottom:none}
 tbody tr:hover td{background:rgba(255,255,255,.015)}
-
 .sym{font-weight:700;color:var(--t1);font-size:13px}
 .agent-name{font-size:11px;color:var(--t3)}
 
-.pill{
-  display:inline-flex;align-items:center;
-  padding:2px 7px;border-radius:4px;
-  font-size:10px;font-weight:700;border:1px solid;
-}
-.pill-buy {background:var(--green-d);color:var(--green);border-color:rgba(34,197,94,.2)}
-.pill-sell{background:var(--red-d);  color:var(--red);  border-color:rgba(239,68,68,.2)}
-.pill-hold{background:var(--surface2);color:var(--t3);  border-color:var(--border)}
+/* ── Pills ── */
+.pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;border:1px solid}
+.pill-buy{background:var(--green-d);color:var(--green);border-color:rgba(34,197,94,.2)}
+.pill-sell{background:var(--red-d);color:var(--red);border-color:rgba(239,68,68,.2)}
+.pill-hold{background:var(--surface2);color:var(--t3);border-color:var(--border)}
+.pill-bull{color:var(--green)} .pill-bear{color:var(--red)} .pill-choppy{color:var(--t3)}
 
-.pill-bull{color:var(--green)}
-.pill-bear{color:var(--red)}
-.pill-choppy{color:var(--t3)}
-
-.conf-wrap{display:flex;align-items:center;gap:6px}
-.conf-track{
-  flex:1;max-width:52px;height:2px;
-  background:var(--t4);border-radius:2px;overflow:hidden;
-}
+/* ── Confidence bar ── */
+.conf-wrap{display:flex;align-items:center;gap:5px}
+.conf-track{flex:1;max-width:44px;height:2px;background:var(--t4);border-radius:2px;overflow:hidden}
 .conf-fill{height:100%;border-radius:2px;background:var(--gold)}
 
-/* ────────────────────────────────────────────────────
-   CONSOLE
-──────────────────────────────────────────────────── */
-.console-wrap{
-  background:#030508;
-  border:1px solid var(--border-g);
-  border-radius:12px;overflow:hidden;
+/* ── Drift alert ── */
+.drift-card{
+  background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);
+  border-radius:10px;padding:12px 14px;margin-bottom:10px;
 }
-.console-bar{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:10px 18px;
-  background:rgba(0,0,0,.4);
-  border-bottom:1px solid rgba(255,255,255,.04);
+.drift-agent{font-weight:700;color:var(--red);font-size:13px;margin-bottom:6px}
+.drift-row{display:flex;gap:16px;flex-wrap:wrap}
+.drift-kv .dk{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--t3)}
+.drift-kv .dv{font-size:13px;font-weight:700}
+
+/* ── Buttons ── */
+.btn{
+  display:flex;align-items:center;gap:7px;padding:12px 18px;border-radius:10px;
+  border:1px solid;font-family:inherit;font-size:13px;font-weight:600;
+  cursor:pointer;transition:all .18s;white-space:nowrap;outline:none;width:100%;margin-bottom:10px;
 }
+.btn:hover{filter:brightness(1.08)}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.35;cursor:not-allowed;filter:none;transform:none}
+.btn-primary{background:var(--gold);border-color:var(--gold);color:#05080f}
+.btn-ghost{background:transparent;border-color:var(--border);color:var(--t2)}
+.btn-ghost:hover{border-color:var(--t3);background:var(--surface2)}
+.btn-danger{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.3);color:var(--red)}
+.btn-pulse{animation:gpulse 1.6s ease-in-out infinite}
+@keyframes gpulse{0%,100%{box-shadow:0 0 0 0 rgba(222,170,61,.5)}50%{box-shadow:0 0 0 7px rgba(222,170,61,0)}}
+
+/* ── Console ── */
+.console-wrap{background:#030508;border:1px solid var(--border-g);border-radius:12px;overflow:hidden;margin-bottom:12px}
+.console-bar{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:rgba(0,0,0,.4);border-bottom:1px solid rgba(255,255,255,.04)}
 .console-dots{display:flex;gap:5px}
 .cd{width:9px;height:9px;border-radius:50%}
 .cd-r{background:#ff5f57}.cd-y{background:#febc2e}.cd-g{background:#28c840}
-
-.console-title{
-  font-size:10px;letter-spacing:.08em;
-  color:var(--t3);font-weight:500;
-}
-.console-clear{
-  padding:3px 10px;font-size:10px;font-weight:600;
-  background:transparent;border:1px solid var(--border);
-  color:var(--t3);border-radius:5px;cursor:pointer;
-  font-family:inherit;transition:all .15s;
-}
-.console-clear:hover{border-color:var(--t3);color:var(--t2)}
-
-.console-body{
-  padding:14px 18px;height:240px;overflow-y:auto;
-  font-family:var(--mono);font-size:11.5px;
-  line-height:1.75;color:var(--t2);
-  scroll-behavior:smooth;
-}
-
+.console-title{font-size:10px;letter-spacing:.08em;color:var(--t3);font-weight:500}
+.console-clear-btn{padding:3px 10px;font-size:10px;font-weight:600;background:transparent;border:1px solid var(--border);color:var(--t3);border-radius:5px;cursor:pointer;font-family:inherit;transition:all .15s}
+.console-clear-btn:hover{border-color:var(--t3);color:var(--t2)}
+.console-body{padding:12px 16px;height:220px;overflow-y:auto;font-family:var(--mono);font-size:11px;line-height:1.75;color:var(--t2);scroll-behavior:smooth}
 .log{display:block}
-.log-ok  {color:#4ade80}
-.log-err {color:#f87171}
-.log-inf {color:#93c5fd}
-.log-warn{color:var(--gold)}
-.log-dim {color:var(--t3)}
-.log-sep {color:var(--t4);letter-spacing:.05em}
+.log-ok{color:#4ade80}.log-err{color:#f87171}.log-inf{color:#93c5fd}
+.log-warn{color:var(--gold)}.log-dim{color:var(--t3)}.log-sep{color:var(--t4);letter-spacing:.05em}
 
-/* ────────────────────────────────────────────────────
-   EMPTY STATE
-──────────────────────────────────────────────────── */
-.empty{
-  text-align:center;padding:24px;
-  color:var(--t3);font-size:12px;
+/* ── Chart ── */
+.chart-wrap{height:200px;position:relative;margin-bottom:12px}
+.chart-card{padding:16px 18px;margin-bottom:12px}
+
+/* ── Empty ── */
+.empty{text-align:center;padding:24px;color:var(--t3);font-size:12px}
+
+/* ── CB card ── */
+.cb-card{border-radius:10px;padding:14px 16px;margin-bottom:12px;border:1px solid}
+
+/* ── Mode badge ── */
+.mode-badge{
+  display:inline-flex;align-items:center;gap:6px;padding:5px 10px;
+  border-radius:20px;font-size:10px;font-weight:600;letter-spacing:.06em;
+  color:var(--t3);border:1px solid var(--border);margin-bottom:14px;
 }
 
-/* ────────────────────────────────────────────────────
-   RESPONSIVE
-──────────────────────────────────────────────────── */
-@media(max-width:900px){
-  .kpi-grid{grid-template-columns:1fr 1fr}
-  .data-grid{grid-template-columns:1fr}
-  .main{padding:16px}
-}
-@media(max-width:600px){
-  .topbar{padding:12px 16px}
-  .kpi-grid{grid-template-columns:1fr}
-  .action-bar{flex-direction:column}
-}
+/* ── pos/neg colours ── */
+.pos{color:var(--green)}.neg{color:var(--red)}
+
+/* ── spacer at bottom of each panel ── */
+.panel-end{height:16px}
 </style>
 </head>
 <body>
@@ -480,161 +298,242 @@ tbody tr:hover td{background:rgba(255,255,255,.015)}
   </form>
 </div>
 
-<!-- ──────────── TOPBAR ──────────── -->
-<header class="topbar" id="topbar" style="opacity:0">
-  <div class="brand">
-    <span class="brand-name">Milan Capital</span>
-    <span class="brand-sub">by Nathan Floiras</span>
-  </div>
-  <div class="topbar-right">
-    <div class="status-pill" id="status-pill">
-      <div class="dot"></div>
-      <span id="status-text">Système actif</span>
-    </div>
-    <div class="clock" id="clock"></div>
-    <button class="console-clear" id="btn-logout" onclick="logout()" title="Se déconnecter">⏻</button>
-  </div>
-</header>
+<!-- ──────────── APP SHELL ──────────── -->
+<div class="app" id="app" style="opacity:0">
 
-<!-- ──────────── MAIN ──────────── -->
-<main class="main">
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div>
+      <div class="brand-name">Milan Capital</div>
+      <div class="brand-sub">by Nathan Floiras</div>
+    </div>
+    <div class="topbar-right">
+      <div class="status-pill" id="status-pill"><div class="dot"></div><span id="status-text">Actif</span></div>
+      <div class="clock" id="clock"></div>
+      <button class="btn-logout" onclick="logout()" title="Déconnexion">⏻</button>
+    </div>
+  </header>
 
-  <!-- ACTION BAR -->
-  <div class="action-bar">
-    <button class="btn btn-primary" id="btn-run" onclick="runCmd('run')">
-      <span class="btn-icon">▶</span> Lancer le Fund
-    </button>
-    <button class="btn btn-ghost" id="btn-shadow" onclick="runCmd('shadow')">
-      <span class="btn-icon">◎</span> Shadow Mode
-    </button>
-    <button class="btn btn-ghost" id="btn-backtest" onclick="runCmd('backtest')">
-      <span class="btn-icon">↗</span> Backtest 5 ans
-    </button>
-    <button class="btn btn-ghost" id="btn-walkforward" onclick="runCmd('walkforward')">
-      <span class="btn-icon">⟳</span> Walk-Forward
-    </button>
-    <div id="mode-badge" style="
-      margin-left:auto;display:flex;align-items:center;gap:6px;
-      padding:5px 12px;border-radius:20px;font-size:10px;font-weight:600;
-      letter-spacing:.06em;color:var(--t3);border:1px solid var(--border);
-    ">
-      <span id="mode-icon">💻</span>
-      <span id="mode-label">Local</span>
-    </div>
-  </div>
+  <!-- TAB CONTENT -->
+  <div class="page-content">
 
-  <!-- KPI CARDS -->
-  <div class="kpi-grid">
-    <div class="card card-gold">
-      <div class="kpi-label">Net Liquidation</div>
-      <div class="kpi-value" id="kpi-netliq">—</div>
-      <div class="kpi-sub">valeur estimée paper trading</div>
-    </div>
-    <div class="card">
-      <div class="kpi-label">Drawdown actuel</div>
-      <div class="kpi-value" id="kpi-dd">—</div>
-      <div class="kpi-badge ok" id="kpi-cb-badge">Circuit Breaker OK</div>
-    </div>
-    <div class="card">
-      <div class="kpi-label">Signaux actifs</div>
-      <div class="kpi-value" id="kpi-signals">—</div>
-      <div class="kpi-sub" id="kpi-buy-sell">symboles couverts</div>
-    </div>
-    <div class="card">
-      <div class="kpi-label">Dernier run</div>
-      <div class="kpi-value" style="font-size:16px" id="kpi-lastrun">—</div>
-      <div class="kpi-sub" id="kpi-lastrun-date">—</div>
-    </div>
-  </div>
-
-  <!-- EQUITY CHART -->
-  <div class="card chart-card">
-    <div class="section-label" style="margin-bottom:16px">
-      <span>Equity Curve — Portfolio vs SPY (5 ans)</span>
-    </div>
-    <div class="chart-wrap">
-      <canvas id="equityChart"></canvas>
-    </div>
-  </div>
-
-  <!-- DATA GRID -->
-  <div class="data-grid">
-    <!-- Signals -->
-    <div class="card">
-      <div class="section-label"><span>Derniers signaux</span></div>
-      <table>
-        <thead>
-          <tr>
-            <th>Sym</th><th>Régime</th><th>Signal</th><th>Agent</th><th>Conf.</th>
-          </tr>
-        </thead>
-        <tbody id="signals-body">
-          <tr><td colspan="5" class="empty">Chargement…</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Performance -->
-    <div class="card">
-      <div class="section-label"><span>Performance par symbole — 5 ans</span></div>
-      <table>
-        <thead>
-          <tr>
-            <th>Sym</th><th>Agent</th><th>Rendement</th><th>Sharpe</th><th>Trades</th>
-          </tr>
-        </thead>
-        <tbody id="perf-body">
-          <tr><td colspan="5" class="empty">Chargement…</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- CONSOLE -->
-  <div class="console-wrap">
-    <div class="console-bar">
-      <div style="display:flex;align-items:center;gap:12px">
-        <div class="console-dots">
-          <div class="cd cd-r"></div>
-          <div class="cd cd-y"></div>
-          <div class="cd cd-g"></div>
-        </div>
-        <span class="console-title">Terminal — Milan Capital</span>
+    <!-- ── TAB 0: OVERVIEW ── -->
+    <div class="tab-panel active" id="panel-overview">
+      <!-- Regime banner -->
+      <div class="regime-banner" id="regime-banner" style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2)">
+        <div class="regime-label" id="regime-label" style="color:var(--green)">— MARKET</div>
+        <div class="regime-meta" id="regime-meta"></div>
       </div>
-      <button class="console-clear" onclick="clearConsole()">Effacer</button>
-    </div>
-    <div class="console-body" id="console">
-      <span class="log log-inf">Milan Capital Dashboard prêt. Cliquez sur un bouton pour démarrer.</span>
-    </div>
-  </div>
 
-</main>
+      <!-- KPI grid -->
+      <div class="kpi-grid">
+        <div class="card card-gold">
+          <div class="kpi-label">Net Liquidation</div>
+          <div class="kpi-value" id="kpi-netliq">—</div>
+          <div class="kpi-sub">paper trading</div>
+        </div>
+        <div class="card">
+          <div class="kpi-label">Drawdown</div>
+          <div class="kpi-value" id="kpi-dd">—</div>
+          <div class="kpi-badge ok" id="kpi-cb-badge">CB OK</div>
+        </div>
+        <div class="card">
+          <div class="kpi-label">Signaux actifs</div>
+          <div class="kpi-value" id="kpi-signals">—</div>
+          <div class="kpi-sub" id="kpi-bs">—</div>
+        </div>
+        <div class="card">
+          <div class="kpi-label">Dernier run</div>
+          <div class="kpi-value" style="font-size:15px" id="kpi-lastrun">—</div>
+          <div class="kpi-sub" id="kpi-lastrun-date">—</div>
+        </div>
+      </div>
+
+      <!-- Circuit breaker detail -->
+      <div class="cb-card" id="cb-detail" style="border-color:rgba(34,197,94,.25);background:rgba(34,197,94,.04)">
+        <div class="kpi-label">Circuit Breaker</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+          <span id="cb-status-text" style="font-weight:700;color:var(--green);font-size:13px">✅ Inactif</span>
+          <span id="cb-peak-current" style="font-size:10px;color:var(--t3)"></span>
+        </div>
+      </div>
+
+      <div class="panel-end"></div>
+    </div>
+
+    <!-- ── TAB 1: PERFORMANCE ── -->
+    <div class="tab-panel" id="panel-performance">
+      <!-- Portfolio vs SPY KPIs -->
+      <div class="perf-row" id="perf-kpi-row">
+        <div class="perf-card">
+          <div class="kpi-label">Portefeuille</div>
+          <div class="kpi-value" id="perf-portfolio" style="font-size:18px">—</div>
+        </div>
+        <div class="perf-card">
+          <div class="kpi-label">SPY B&amp;H</div>
+          <div class="kpi-value" id="perf-spy" style="font-size:18px">—</div>
+        </div>
+        <div class="perf-card card-gold">
+          <div class="kpi-label">Alpha</div>
+          <div class="kpi-value" id="perf-alpha" style="font-size:18px">—</div>
+        </div>
+      </div>
+
+      <!-- Equity chart -->
+      <div class="card chart-card">
+        <div class="sec-label" style="margin-bottom:14px"><span>Equity (round-trips) vs SPY</span></div>
+        <div class="chart-wrap"><canvas id="perfChart"></canvas></div>
+      </div>
+
+      <!-- Agent metrics -->
+      <div class="card">
+        <div class="sec-label"><span>Métriques live par agent</span></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Agent</th><th>PnL</th><th>Sharpe</th><th>Trades</th></tr></thead>
+            <tbody id="perf-agents-body">
+              <tr><td colspan="4" class="empty">Chargement…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel-end"></div>
+    </div>
+
+    <!-- ── TAB 2: AGENTS ── -->
+    <div class="tab-panel" id="panel-agents">
+      <!-- Drift alerts -->
+      <div id="drift-section"></div>
+
+      <!-- Live signals -->
+      <div class="card">
+        <div class="sec-label"><span>Signaux live par symbole</span></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr><th>Sym</th><th>Régime</th><th>Signal</th><th>Agent</th><th>Conf.</th></tr>
+            </thead>
+            <tbody id="signals-body">
+              <tr><td colspan="5" class="empty">Chargement…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel-end"></div>
+    </div>
+
+    <!-- ── TAB 3: CONTROLS ── -->
+    <div class="tab-panel" id="panel-controls">
+      <div class="mode-badge" id="mode-badge">
+        <span id="mode-icon">💻</span><span id="mode-label">Local</span>
+      </div>
+
+      <button class="btn btn-primary btn-pulse" id="btn-run" onclick="runCmd('run')">
+        <span>▶</span> Lancer le Fund
+      </button>
+      <button class="btn btn-ghost" id="btn-shadow" onclick="runCmd('shadow')">
+        <span>◎</span> Shadow Mode
+      </button>
+      <button class="btn btn-ghost" id="btn-backtest" onclick="runCmd('backtest')">
+        <span>↗</span> Backtest 5 ans
+      </button>
+      <button class="btn btn-ghost" id="btn-walkforward" onclick="runCmd('walkforward')">
+        <span>⟳</span> Walk-Forward
+      </button>
+      <button class="btn btn-danger" id="btn-reset-cb" onclick="resetCircuitBreaker()" style="display:none">
+        <span>⚡</span> Reset Circuit Breaker
+      </button>
+
+      <!-- Console -->
+      <div class="console-wrap">
+        <div class="console-bar">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="console-dots">
+              <div class="cd cd-r"></div><div class="cd cd-y"></div><div class="cd cd-g"></div>
+            </div>
+            <span class="console-title">Terminal — Milan Capital</span>
+          </div>
+          <button class="console-clear-btn" onclick="clearConsole()">Effacer</button>
+        </div>
+        <div class="console-body" id="console">
+          <span class="log log-inf">Dashboard prêt. Cliquez sur un bouton pour démarrer.</span>
+        </div>
+      </div>
+
+      <div class="panel-end"></div>
+    </div>
+  </div><!-- .page-content -->
+
+  <!-- TAB BAR -->
+  <nav class="tab-bar">
+    <button class="tab-btn active" id="tab-btn-0" onclick="switchTab(0)">
+      <span class="tab-icon">📊</span><span>Overview</span>
+    </button>
+    <button class="tab-btn" id="tab-btn-1" onclick="switchTab(1)">
+      <span class="tab-icon">📈</span><span>Perf.</span>
+    </button>
+    <button class="tab-btn" id="tab-btn-2" onclick="switchTab(2)">
+      <span class="tab-icon">🤖</span><span>Agents</span>
+    </button>
+    <button class="tab-btn" id="tab-btn-3" onclick="switchTab(3)">
+      <span class="tab-icon">⚙️</span><span>Controls</span>
+    </button>
+  </nav>
+
+</div><!-- .app -->
 
 <script>
-// ── Splash → Login/Dashboard transition ──────────────────────────────────────
-const topbar = document.getElementById('topbar');
-const main   = document.querySelector('.main');
-main.style.opacity = '0';
+// ── Service Worker ────────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+const PANELS   = ['panel-overview','panel-performance','panel-agents','panel-controls'];
+const TAB_BTNS = ['tab-btn-0','tab-btn-1','tab-btn-2','tab-btn-3'];
+let currentTab = 0;
+// track which tabs have been loaded
+const tabLoaded = [false, false, false, false];
+
+function switchTab(i) {
+  PANELS.forEach((id, j) => {
+    document.getElementById(id).classList.toggle('active', j === i);
+    document.getElementById(TAB_BTNS[j]).classList.toggle('active', j === i);
+  });
+  currentTab = i;
+  if (!tabLoaded[i]) {
+    tabLoaded[i] = true;
+    if (i === 0) { loadStatus(); loadSignals(); }
+    if (i === 1) { loadPortfolioSummary(); loadPerformance(); }
+    if (i === 2) { loadSignals(); loadDriftAlerts(); }
+    // Controls: no initial load needed
+  }
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+const appEl = document.getElementById('app');
 
 function revealDashboard() {
   document.getElementById('login-screen').classList.remove('visible');
-  topbar.style.transition = 'opacity .6s ease';
-  topbar.style.opacity    = '1';
-  main.style.transition   = 'opacity .8s ease .2s';
-  main.style.opacity      = '1';
-  loadStatus(); loadSignals(); loadPerformance(); loadEquity();
+  appEl.style.transition = 'opacity .7s ease';
+  appEl.style.opacity    = '1';
+  detectMode();
+  tabLoaded[0] = true;
+  loadStatus();
+  loadSignals();
   setInterval(loadStatus, 5000);
 }
 
 function showLogin() {
+  appEl.style.opacity = '0';
   document.getElementById('login-screen').classList.add('visible');
   document.getElementById('login-username').focus();
 }
 
 async function logout() {
   try { await fetch('/api/logout', { method: 'POST' }); } catch (_) {}
-  topbar.style.opacity = '0';
-  main.style.opacity   = '0';
   document.getElementById('login-username').value = '';
   document.getElementById('login-password').value = '';
   showLogin();
@@ -643,406 +542,399 @@ async function logout() {
 async function checkSessionAndReveal() {
   try {
     const s = await fetch('/api/session').then(r => r.json());
-    if (s.authenticated) revealDashboard();
-    else showLogin();
-  } catch (_) {
-    showLogin();
-  }
+    if (s.authenticated) revealDashboard(); else showLogin();
+  } catch (_) { showLogin(); }
 }
 
 window.addEventListener('DOMContentLoaded', () => {
   setTimeout(checkSessionAndReveal, 2400);
-
-  const form    = document.getElementById('login-form');
-  const errEl   = document.getElementById('login-error');
-  const submit  = document.getElementById('login-submit');
-
+  const form   = document.getElementById('login-form');
+  const errEl  = document.getElementById('login-error');
+  const submit = document.getElementById('login-submit');
   form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    errEl.textContent = '';
-    submit.disabled = true;
+    e.preventDefault(); errEl.textContent = ''; submit.disabled = true;
     submit.textContent = 'Connexion…';
-
     try {
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res  = await fetch('/api/login', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({
           username: document.getElementById('login-username').value,
           password: document.getElementById('login-password').value,
         }),
       });
       const data = await res.json();
-      if (res.ok && data.ok) {
-        revealDashboard();
-      } else {
-        errEl.textContent = data.error || 'Connexion impossible.';
-      }
-    } catch (err) {
-      errEl.textContent = 'Erreur réseau.';
-    } finally {
-      submit.disabled = false;
-      submit.textContent = 'Se connecter';
-    }
+      if (res.ok && data.ok) revealDashboard();
+      else errEl.textContent = data.error || 'Connexion impossible.';
+    } catch (_) { errEl.textContent = 'Erreur réseau.'; }
+    finally { submit.disabled = false; submit.textContent = 'Se connecter'; }
   });
 });
 
-// ── Service Worker ────────────────────────────────────────────────────────────
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {});
+// ── Clock ─────────────────────────────────────────────────────────────────────
+const clockEl = document.getElementById('clock');
+function tick() {
+  const now  = new Date();
+  const date = now.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});
+  const time = now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  clockEl.textContent = `${date} ${time}`;
 }
+setInterval(tick, 1000); tick();
 
 // ── Mode detection ────────────────────────────────────────────────────────────
-let IS_CLOUD = false;
-let ACTIONS_URL = '';
-
+let IS_CLOUD = false, ACTIONS_URL = '';
 async function detectMode() {
   try {
     const m = await fetch('/api/mode').then(r => r.json());
     IS_CLOUD   = m.cloud;
     ACTIONS_URL = `https://github.com/${m.github_owner}/${m.github_repo}/actions`;
-    const badge = document.getElementById('mode-badge');
-    const icon  = document.getElementById('mode-icon');
-    const label = document.getElementById('mode-label');
     if (IS_CLOUD) {
+      const badge = document.getElementById('mode-badge');
       badge.style.color       = 'var(--gold)';
       badge.style.borderColor = 'var(--border-g)';
       badge.style.background  = 'var(--gold-d)';
-      icon.textContent  = '☁';
-      label.textContent = 'Cloud · GitHub Actions';
+      document.getElementById('mode-icon').textContent  = '☁';
+      document.getElementById('mode-label').textContent = 'Cloud · GitHub Actions';
     }
   } catch(_) {}
 }
-detectMode();
 
-// ── Clock ─────────────────────────────────────────────────────────────────────
-const clockEl = document.getElementById('clock');
-function tick() {
-  const now = new Date();
-  const date = now.toLocaleDateString('fr-FR', {day:'2-digit',month:'short',year:'numeric'});
-  const time = now.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  clockEl.textContent = `${date}  ${time}`;
-}
-setInterval(tick, 1000);
-tick();
-
-// ── Status ────────────────────────────────────────────────────────────────────
+// ── Overview: Status ──────────────────────────────────────────────────────────
 async function loadStatus() {
   try {
-    const res  = await fetch('/api/status');
-    const data = await res.json();
+    const data = await fetch('/api/status').then(r => r.json());
     const cb   = data.circuit_breaker || {};
-    const pill = document.getElementById('status-pill');
-    const txt  = document.getElementById('status-text');
 
-    if (cb.peak_netliq) {
-      document.getElementById('kpi-netliq').textContent =
-        '$' + Math.round(cb.peak_netliq).toLocaleString('en-US');
-    }
-    const dd = cb.drawdown || 0;
+    // NetLiq
+    if (cb.peak_netliq)
+      document.getElementById('kpi-netliq').textContent = '$' + Math.round(cb.peak_netliq).toLocaleString('en-US');
+
+    // Drawdown
+    const dd   = cb.drawdown || 0;
     const ddEl = document.getElementById('kpi-dd');
-    ddEl.textContent = (Math.abs(dd) * 100).toFixed(2) + '%';
-    ddEl.className   = 'kpi-value ' + (dd < -0.05 ? 'neg' : dd < 0 ? 'neg' : 'pos');
+    ddEl.textContent = (Math.abs(dd)*100).toFixed(2)+'%';
+    ddEl.className   = 'kpi-value '+(dd > 0.05 ? 'neg' : 'pos');
 
-    const cbBadge = document.getElementById('kpi-cb-badge');
+    // CB badge
+    const badge = document.getElementById('kpi-cb-badge');
+    badge.textContent = cb.triggered ? '⚠ CB OUVERT' : '✓ CB OK';
+    badge.className   = 'kpi-badge '+(cb.triggered ? 'warn' : 'ok');
+
+    // CB detail card
+    const cbCard = document.getElementById('cb-detail');
+    const cbText = document.getElementById('cb-status-text');
+    const cbMeta = document.getElementById('cb-peak-current');
     if (cb.triggered) {
-      cbBadge.textContent = '⚠ Circuit Breaker OUVERT';
-      cbBadge.className   = 'kpi-badge warn';
+      cbCard.style.borderColor = 'rgba(239,68,68,.3)';
+      cbCard.style.background  = 'rgba(239,68,68,.05)';
+      cbText.style.color = 'var(--red)';
+      cbText.textContent = '⛔ SELL-ONLY MODE';
+      document.getElementById('btn-reset-cb').style.display = 'flex';
     } else {
-      cbBadge.textContent = '✓ Circuit Breaker OK';
-      cbBadge.className   = 'kpi-badge ok';
+      cbCard.style.borderColor = 'rgba(34,197,94,.25)';
+      cbCard.style.background  = 'rgba(34,197,94,.04)';
+      cbText.style.color = 'var(--green)';
+      cbText.textContent = '✅ Inactif';
+      document.getElementById('btn-reset-cb').style.display = 'none';
     }
+    if (cb.peak_netliq && cb.current_netliq)
+      cbMeta.textContent = `Peak $${Math.round(cb.peak_netliq).toLocaleString()} → $${Math.round(cb.current_netliq).toLocaleString()}`;
 
-    const busy = (data.running_jobs || []).length > 0;
-    pill.className = busy ? 'status-pill busy' : 'status-pill';
-    txt.textContent = busy ? 'Exécution…' : 'Système actif';
+    // Status pill
+    const busy = (data.running_jobs||[]).length > 0;
+    document.getElementById('status-pill').className = 'status-pill'+(busy?' busy':'');
+    document.getElementById('status-text').textContent = busy ? 'Exécution…' : 'Actif';
   } catch(_) {}
 }
 
-// ── Signals ───────────────────────────────────────────────────────────────────
+// ── Overview + Agents: Signals ────────────────────────────────────────────────
+let _signalsCache = null;
 async function loadSignals() {
   try {
     const rows = await fetch('/api/signals').then(r => r.json());
-    const tbody = document.getElementById('signals-body');
+    _signalsCache = rows;
+    _renderSignals(rows);
+  } catch(_) {}
+}
 
-    if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty">Aucun signal disponible</td></tr>';
-      document.getElementById('kpi-signals').textContent = '0';
-      return;
-    }
-
-    document.getElementById('kpi-signals').textContent = rows.length;
+function _renderSignals(rows) {
+  // KPIs (Overview)
+  const kpiSig = document.getElementById('kpi-signals');
+  const kpiBS  = document.getElementById('kpi-bs');
+  if (kpiSig && kpiBS) {
+    kpiSig.textContent = rows.length || '0';
     const buys  = rows.filter(r => r.action === 'BUY').length;
     const sells = rows.filter(r => r.action === 'SELL').length;
-    document.getElementById('kpi-buy-sell').textContent =
-      `${buys} BUY  ·  ${sells} SELL  ·  ${rows.length - buys - sells} HOLD`;
-
+    kpiBS.textContent = `${buys} BUY · ${sells} SELL · ${rows.length - buys - sells} HOLD`;
     const first = rows[0];
     if (first?.ts) {
-      const parts = String(first.ts).split(' ');
-      document.getElementById('kpi-lastrun').textContent = parts[1]?.slice(0,5) || '—';
-      document.getElementById('kpi-lastrun-date').textContent = parts[0] || '—';
+      const p = String(first.ts).split(' ');
+      document.getElementById('kpi-lastrun').textContent = p[1]?.slice(0,5) || '—';
+      document.getElementById('kpi-lastrun-date').textContent = p[0] || '—';
     }
+    if (first?.regime) {
+      const R = first.regime;
+      const colors = {bull:['#22c55e','rgba(34,197,94,.06)','rgba(34,197,94,.2)','🟢'],
+                      bear:['#ef4444','rgba(239,68,68,.06)','rgba(239,68,68,.2)','🔴'],
+                      choppy:['#f59e0b','rgba(245,158,11,.06)','rgba(245,158,11,.2)','🟡']};
+      const [fg, bg, bd, em] = colors[R] || ['#8892a4','rgba(136,146,164,.06)','rgba(136,146,164,.2)','⚪'];
+      const banner = document.getElementById('regime-banner');
+      const label  = document.getElementById('regime-label');
+      banner.style.background = bg; banner.style.borderColor = bd;
+      label.style.color = fg; label.textContent = `${em} ${R.toUpperCase()} MARKET`;
+    }
+  }
 
-    tbody.innerHTML = rows.map(row => {
-      const act = row.action || 'HOLD';
-      const actCls = act === 'BUY' ? 'pill-buy' : act === 'SELL' ? 'pill-sell' : 'pill-hold';
-      const reg = row.regime || '';
-      const regCls = reg === 'bull' ? 'pill-bull' : reg === 'bear' ? 'pill-bear' : 'pill-choppy';
-      const conf = Number(row.confidence) || 0;
-      const agent = (row.winner_agent || '').replace('Agent','') || '—';
-      return `<tr>
-        <td class="sym">${row.symbol}</td>
-        <td><span class="${regCls}">${reg || '—'}</span></td>
-        <td><span class="pill ${actCls}">${act}</span></td>
-        <td class="agent-name">${agent}</td>
-        <td>
-          <div class="conf-wrap">
-            <div class="conf-track"><div class="conf-fill" style="width:${conf*100}%"></div></div>
-            <span style="font-size:10px;color:var(--t3)">${conf>0?conf.toFixed(2):'—'}</span>
-          </div>
-        </td>
-      </tr>`;
-    }).join('');
-  } catch(_) {}
+  // Table (Agents tab)
+  const tbody = document.getElementById('signals-body');
+  if (!tbody) return;
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">Aucun signal</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(row => {
+    const act    = row.action || 'HOLD';
+    const actCls = act === 'BUY' ? 'pill-buy' : act === 'SELL' ? 'pill-sell' : 'pill-hold';
+    const reg    = row.regime || '';
+    const regCls = reg === 'bull' ? 'pill-bull' : reg === 'bear' ? 'pill-bear' : 'pill-choppy';
+    const conf   = Number(row.confidence) || 0;
+    const agent  = (row.winner_agent || '').replace('Agent','') || '—';
+    return `<tr>
+      <td class="sym">${row.symbol}</td>
+      <td><span class="${regCls}">${reg||'—'}</span></td>
+      <td><span class="pill ${actCls}">${act}</span></td>
+      <td class="agent-name">${agent}</td>
+      <td><div class="conf-wrap">
+        <div class="conf-track"><div class="conf-fill" style="width:${conf*100}%"></div></div>
+        <span style="font-size:10px;color:var(--t3)">${conf>0?conf.toFixed(2):'—'}</span>
+      </div></td>
+    </tr>`;
+  }).join('');
 }
 
-// ── Performance ───────────────────────────────────────────────────────────────
-async function loadPerformance() {
+// ── Performance: Portfolio summary ────────────────────────────────────────────
+let perfChart = null;
+async function loadPortfolioSummary() {
   try {
-    const rows  = await fetch('/api/performance').then(r => r.json());
-    const tbody = document.getElementById('perf-body');
-
-    if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty">Lancez d\'abord le backtest</td></tr>';
+    const data = await fetch('/api/portfolio-summary').then(r => r.json());
+    if (!data.available) {
+      ['perf-portfolio','perf-spy','perf-alpha'].forEach(id => {
+        document.getElementById(id).textContent = 'n/a';
+      });
       return;
     }
+    const fmt = v => (v >= 0 ? '+' : '') + (v*100).toFixed(1) + '%';
+    const el  = (id, v) => {
+      const e = document.getElementById(id);
+      e.textContent = fmt(v);
+      e.className = 'kpi-value '+(v >= 0 ? 'pos' : 'neg');
+      e.style.fontSize = '18px';
+    };
+    el('perf-portfolio', data.portfolio_return);
+    el('perf-spy',       data.spy_return);
+    el('perf-alpha',     data.alpha);
 
-    tbody.innerHTML = rows.map(row => {
-      const ret    = Number(row.ret) || 0;
-      const cls    = ret >= 0 ? 'pos' : 'neg';
-      const sharpe = Number(row.sharpe) || 0;
-      const agent  = (row.agent || '').replace('Agent','');
-      const stars  = '★'.repeat(Math.min(5, Math.max(0, Math.floor(sharpe / 0.5)))) || '—';
-      return `<tr>
-        <td class="sym">${row.sym}</td>
-        <td class="agent-name">${agent}</td>
-        <td class="${cls}">${(ret*100).toFixed(1)}%</td>
-        <td style="color:var(--gold);font-size:11px">${stars}</td>
-        <td style="color:var(--t3)">${row.trades}</td>
-      </tr>`;
-    }).join('');
-  } catch(_) {}
-}
-
-// ── Equity Chart ──────────────────────────────────────────────────────────────
-let chart = null;
-
-async function loadEquity() {
-  try {
-    const data = await fetch('/api/equity').then(r => r.json());
-    if (!data.length) return;
-
-    const labels    = data.map(d => (d.date||'').slice(0,7));
-    const portfolio = data.map(d => Number(d.portfolio_equity)||0);
-    const spy       = data.map(d => d.spy_equity ? Number(d.spy_equity) : null);
-
-    const ctx = document.getElementById('equityChart').getContext('2d');
-    if (chart) chart.destroy();
-
+    // Chart
+    const curve = data.equity_curve || [];
+    if (!curve.length) return;
+    const labels  = curve.map(d => d.date);
+    const portEq  = curve.map(d => d.portfolio);
+    const spyEq   = curve.map(d => d.spy ?? null);
+    const ctx = document.getElementById('perfChart').getContext('2d');
+    if (perfChart) perfChart.destroy();
     Chart.defaults.color = '#3d4a5c';
-
-    chart = new Chart(ctx, {
+    perfChart = new Chart(ctx, {
       type: 'line',
       data: {
         labels,
         datasets: [
           {
             label: 'Milan Capital',
-            data: portfolio,
-            borderColor: '#dEAA3D',
-            backgroundColor: (ctx) => {
-              const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, 210);
-              g.addColorStop(0, 'rgba(222,170,61,0.12)');
-              g.addColorStop(1, 'rgba(222,170,61,0)');
+            data: portEq,
+            borderColor: '#DEAA3D',
+            backgroundColor: (c) => {
+              const g = c.chart.ctx.createLinearGradient(0,0,0,200);
+              g.addColorStop(0,'rgba(222,170,61,0.14)');
+              g.addColorStop(1,'rgba(222,170,61,0)');
               return g;
             },
-            borderWidth: 2,
-            pointRadius: 0,
-            fill: true,
-            tension: 0.35,
+            borderWidth: 2, pointRadius: 0, fill: true, tension: 0.35,
           },
           {
             label: 'SPY B&H',
-            data: spy,
+            data: spyEq,
             borderColor: '#3d4a5c',
             backgroundColor: 'transparent',
-            borderWidth: 1.5,
-            pointRadius: 0,
-            borderDash: [5, 5],
-            tension: 0.35,
-          }
-        ]
+            borderWidth: 1.5, pointRadius: 0, borderDash: [5,5], tension: 0.35,
+          },
+        ],
       },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
+        responsive: true, maintainAspectRatio: false,
         animation: { duration: 600, easing: 'easeOutQuart' },
         plugins: {
-          legend: {
-            labels: {
-              color: '#3d4a5c',
-              font: { family: 'Inter', size: 11, weight: '500' },
-              boxWidth: 18, boxHeight: 2,
-              padding: 20,
-            }
-          },
+          legend: { labels: { color:'#3d4a5c', font:{family:'Inter',size:10,weight:'500'}, boxWidth:16, boxHeight:2, padding:16 } },
           tooltip: {
-            backgroundColor: '#0a0f1e',
-            borderColor: 'rgba(222,170,61,0.2)',
-            borderWidth: 1,
-            titleColor: '#f0f4ff',
-            bodyColor: '#8892a4',
-            padding: 10,
-            callbacks: {
-              label: c => ` $${Math.round(c.raw).toLocaleString('en-US')}`
-            }
-          }
+            backgroundColor:'#0a0f1e', borderColor:'rgba(222,170,61,0.2)', borderWidth:1,
+            titleColor:'#f0f4ff', bodyColor:'#8892a4', padding:8,
+            callbacks: { label: c => ` ${c.raw != null ? c.raw.toFixed(1) : '—'}` },
+          },
         },
         scales: {
-          x: {
-            grid: { color: 'rgba(255,255,255,0.03)' },
-            ticks: { color: '#3d4a5c', font: { size: 10 }, maxTicksLimit: 8 },
-            border: { color: 'rgba(255,255,255,0.05)' },
-          },
-          y: {
-            grid: { color: 'rgba(255,255,255,0.03)' },
-            ticks: {
-              color: '#3d4a5c',
-              font: { size: 10 },
-              callback: v => '$' + Math.round(v).toLocaleString('en-US'),
-            },
-            border: { color: 'rgba(255,255,255,0.05)' },
-          }
+          x: { grid:{color:'rgba(255,255,255,0.03)'}, ticks:{color:'#3d4a5c',font:{size:9},maxTicksLimit:6}, border:{color:'rgba(255,255,255,0.05)'} },
+          y: { grid:{color:'rgba(255,255,255,0.03)'}, ticks:{color:'#3d4a5c',font:{size:9},callback:v=>v.toFixed(0)}, border:{color:'rgba(255,255,255,0.05)'} },
         },
-        interaction: { mode: 'index', intersect: false },
-      }
+        interaction: { mode:'index', intersect:false },
+      },
     });
-  } catch(e) { console.warn('Equity chart:', e); }
+  } catch(e) { console.warn('Portfolio summary:', e); }
+}
+
+// ── Performance: Agent metrics table ─────────────────────────────────────────
+async function loadPerformance() {
+  try {
+    const rows  = await fetch('/api/performance').then(r => r.json());
+    const tbody = document.getElementById('perf-agents-body');
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">Aucune métrique disponible</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(row => {
+      const ret   = Number(row.ret) || 0;
+      const cls   = ret >= 0 ? 'pos' : 'neg';
+      const agent = (row.agent || '').replace('Agent','');
+      return `<tr>
+        <td class="sym" style="font-size:12px">${agent}</td>
+        <td class="${cls}">${(ret*100).toFixed(1)}%</td>
+        <td style="color:var(--gold)">${Number(row.sharpe).toFixed(2)}</td>
+        <td style="color:var(--t3)">${row.trades}</td>
+      </tr>`;
+    }).join('');
+  } catch(_) {}
+}
+
+// ── Agents: Drift alerts ──────────────────────────────────────────────────────
+async function loadDriftAlerts() {
+  try {
+    const alerts = await fetch('/api/drift-alerts').then(r => r.json());
+    const sec    = document.getElementById('drift-section');
+    if (!alerts.length) {
+      sec.innerHTML = `<div class="card" style="margin-bottom:12px">
+        <div class="sec-label"><span>Dérive Sharpe</span></div>
+        <div class="empty" style="padding:14px">Aucune dérive détectée ✅</div>
+      </div>`;
+      return;
+    }
+    sec.innerHTML = `
+      <div class="sec-label" style="margin-bottom:8px"><span>⚠️ Dérive Sharpe détectée (OOS vs Live)</span></div>
+      ${alerts.map(a => `
+        <div class="drift-card">
+          <div class="drift-agent">${a.agent.replace('Agent','')}</div>
+          <div class="drift-row">
+            <div class="drift-kv"><div class="dk">OOS Sharpe</div><div class="dv">${a.oos_sharpe.toFixed(2)}</div></div>
+            <div class="drift-kv"><div class="dk">Live Sharpe</div><div class="dv" style="color:var(--red)">${a.live_sharpe.toFixed(2)}</div></div>
+            <div class="drift-kv"><div class="dk">Écart</div><div class="dv" style="color:var(--red)">−${a.drift.toFixed(2)}</div></div>
+          </div>
+        </div>`).join('')}`;
+  } catch(_) {}
+}
+
+// ── Controls: Reset circuit breaker ──────────────────────────────────────────
+async function resetCircuitBreaker() {
+  const btn = document.getElementById('btn-reset-cb');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/reset-circuit-breaker', { method: 'POST' });
+    if (res.ok) {
+      log('✅ Circuit breaker reset.', 'log-ok');
+      btn.style.display = 'none';
+      loadStatus();
+    } else {
+      log('❌ Reset échoué.', 'log-err');
+    }
+  } catch (e) {
+    log(`❌ ${e.message}`, 'log-err');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ── Console ───────────────────────────────────────────────────────────────────
 const consoleEl = document.getElementById('console');
-
 function log(text, cls='') {
   if (!text) return;
   const span = document.createElement('span');
-  const ts   = new Date().toLocaleTimeString('fr-FR',
-    {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-
-  // Auto-detect class from content
+  const ts   = new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   if (!cls) {
-    cls = text.includes('✅') || text.includes('✓') || text.includes('🎯') ? 'log-ok'
-        : text.includes('❌') || text.includes('Error') || text.includes('error') ? 'log-err'
-        : text.includes('🚀') || text.includes('📥') || text.includes('📊') ? 'log-inf'
-        : text.includes('🏆') || text.includes('★') || text.includes('⚠') ? 'log-warn'
-        : text.includes('═') || text.includes('─') || text.includes('==') ? 'log-sep'
-        : '';
+    cls = text.includes('✅')||text.includes('✓')||text.includes('🎯') ? 'log-ok'
+        : text.includes('❌')||text.includes('Error') ? 'log-err'
+        : text.includes('🚀')||text.includes('📊')||text.includes('📥') ? 'log-inf'
+        : text.includes('⚠')||text.includes('🏆')||text.includes('★') ? 'log-warn'
+        : text.includes('═')||text.includes('─')||text.includes('==') ? 'log-sep' : '';
   }
-
   span.className = `log ${cls}`;
   span.textContent = `[${ts}] ${text}`;
   consoleEl.appendChild(span);
   consoleEl.scrollTop = consoleEl.scrollHeight;
 }
-
 function clearConsole() {
-  consoleEl.innerHTML =
-    '<span class="log log-dim">Console effacée.</span>';
+  consoleEl.innerHTML = '<span class="log log-dim">Console effacée.</span>';
 }
 
 // ── Run command ───────────────────────────────────────────────────────────────
-const BTN_IDS = {
-  run: 'btn-run', shadow: 'btn-shadow',
-  backtest: 'btn-backtest', walkforward: 'btn-walkforward'
-};
-const CMD_LABELS = {
-  run: 'Lancer le Fund', shadow: 'Shadow Mode',
-  backtest: 'Backtest 5 ans', walkforward: 'Walk-Forward'
-};
-
+const BTN_IDS  = {run:'btn-run',shadow:'btn-shadow',backtest:'btn-backtest',walkforward:'btn-walkforward'};
+const CMD_LABELS = {run:'Lancer le Fund',shadow:'Shadow Mode',backtest:'Backtest 5 ans',walkforward:'Walk-Forward'};
 let activeSource = null;
 
 function setAllDisabled(state) {
-  Object.values(BTN_IDS).forEach(id => {
-    document.getElementById(id).disabled = state;
-  });
+  Object.values(BTN_IDS).forEach(id => { document.getElementById(id).disabled = state; });
 }
 
 async function runCmd(cmd) {
   if (activeSource) { activeSource.close(); activeSource = null; }
-
   const btnEl = document.getElementById(BTN_IDS[cmd]);
-  setAllDisabled(true);
-  btnEl.classList.add('btn-pulse');
-
+  setAllDisabled(true); btnEl.classList.add('btn-pulse');
   log(`▶  Démarrage : ${CMD_LABELS[cmd]}`, 'log-inf');
-  log('─'.repeat(52), 'log-sep');
+  log('─'.repeat(48), 'log-sep');
 
-  // ── Cloud mode: trigger GitHub Actions ──
   if (IS_CLOUD) {
     try {
       const res  = await fetch(`/api/trigger/${cmd}`, { method: 'POST' });
       const data = await res.json();
       if (data.status === 'triggered') {
         log('☁  Job envoyé à GitHub Actions.', 'log-ok');
-        log(`   Commande : ${cmd}`, 'log-dim');
-        log(`   Suivi    : ${ACTIONS_URL}`, 'log-inf');
-        log('─'.repeat(52), 'log-sep');
-        log('Les logs apparaîtront dans quelques minutes sur GitHub.', 'log-dim');
-        log('Le dashboard se mettra à jour automatiquement au prochain déploiement.', 'log-dim');
+        log(`   Suivi : ${ACTIONS_URL}`, 'log-inf');
       } else {
-        log(`❌  ${data.error || 'Erreur inconnue'}`, 'log-err');
+        log(`❌  ${data.error || 'Erreur'}`, 'log-err');
       }
-    } catch(err) {
-      log(`❌  ${err.message}`, 'log-err');
-    }
-    setAllDisabled(false);
-    btnEl.classList.remove('btn-pulse');
+    } catch(err) { log(`❌  ${err.message}`, 'log-err'); }
+    setAllDisabled(false); btnEl.classList.remove('btn-pulse');
     return;
   }
 
-  // ── Local mode: subprocess + SSE stream ──
   try {
-    const { job_id } = await fetch(`/api/run/${cmd}`, { method: 'POST' }).then(r => r.json());
-    log(`Job  ${job_id}`, 'log-dim');
-
+    const { job_id } = await fetch(`/api/run/${cmd}`, { method:'POST' }).then(r => r.json());
+    log(`Job ${job_id}`, 'log-dim');
     const es = new EventSource(`/api/stream/${job_id}`);
     activeSource = es;
-
     es.onmessage = ({ data }) => {
       if (data === '__DONE__') {
         es.close(); activeSource = null;
-        setAllDisabled(false);
-        btnEl.classList.remove('btn-pulse');
-        log('─'.repeat(52), 'log-sep');
+        setAllDisabled(false); btnEl.classList.remove('btn-pulse');
+        log('─'.repeat(48), 'log-sep');
         log('✅  Terminé.', 'log-ok');
-        loadStatus(); loadSignals(); loadPerformance(); loadEquity();
-      } else if (data.trim()) {
-        log(data);
-      }
+        // Refresh data on all previously-loaded tabs
+        if (tabLoaded[0]) { loadStatus(); loadSignals(); }
+        if (tabLoaded[1]) { loadPortfolioSummary(); loadPerformance(); }
+        if (tabLoaded[2]) { loadDriftAlerts(); }
+      } else if (data.trim()) { log(data); }
     };
-
     es.onerror = () => {
       es.close(); activeSource = null;
-      setAllDisabled(false);
-      btnEl.classList.remove('btn-pulse');
+      setAllDisabled(false); btnEl.classList.remove('btn-pulse');
       log('⚠  Connexion interrompue.', 'log-warn');
     };
-
   } catch(err) {
-    setAllDisabled(false);
-    btnEl.classList.remove('btn-pulse');
+    setAllDisabled(false); btnEl.classList.remove('btn-pulse');
     log(`❌  ${err.message}`, 'log-err');
   }
 }

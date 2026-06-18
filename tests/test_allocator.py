@@ -208,7 +208,8 @@ def test_best_agent_is_highest_sharpe(tmp_path):
 
     BacktestEngine_call_count = [0]
 
-    with patch("src.risk.allocator.BacktestEngine") as MockEngine:
+    with patch("src.risk.allocator.BacktestEngine") as MockEngine, \
+         patch.object(alloc, "_load_walkforward_oos_sharpes", return_value={}):
         results_iter = iter([
             MagicMock(equity_curve=eq_flat),   # AgentA / AAPL
             MagicMock(equity_curve=eq_up),     # AgentB / AAPL
