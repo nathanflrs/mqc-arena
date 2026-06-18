@@ -17,11 +17,11 @@ from src.config import (
     LIMIT_BUFFER_BPS,
     IBKR_PORT,
     IBKR_CLIENT_ID,
-    TELEGRAM_APPROVAL_TIMEOUT,
     RISK_MAX_NET_LONG_PCT,
     RISK_MAX_SINGLE_POSITION_PCT,
     RISK_MIN_CASH_PCT,
     RISK_SELL_ONLY_MODE,
+    STOP_LOSS_PCT,
 )
 from src.arena.arena import Arena
 from src.arena.selector import select_best
@@ -39,9 +39,9 @@ from src.broker.ibkr import connect_ibkr
 from src.broker.portfolio import fetch_account_snapshot
 from src.data.market_data import download_ohlcv, get_last_close_1d
 from src.data.regime import detect_regime
-from src.execution.planner import plan_from_signal
+from src.execution.planner import plan_from_signal, OrderPlan
 from src.execution.logger import log_order_plan, log_execution, log_decisions
-from src.notify.telegram import drain_updates, send_message, wait_for_approval
+from src.notify.telegram import send_message
 from src.risk.manager import RiskConfig, RiskManager, DrawdownCircuitBreaker
 from src.risk.allocator import AllocatorConfig, DynamicAllocator
 from src.risk.correlation import CorrelationGuard
@@ -96,32 +96,45 @@ def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
         return
 
     send_message(
-        "✅ APPROVED — sending PAPER orders (LIMIT)\n"
+        "🚀 AUTO-EXEC — sending PAPER orders (LIMIT)\n"
         f"plan_id={plan_id}\n"
         f"max_orders={MAX_ORDERS_PER_RUN} | max_notional/order={max_notional:.0f} | buffer={LIMIT_BUFFER_BPS}bps"
     )
 
-    ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     Path("logs").mkdir(parents=True, exist_ok=True)
+    placed: list[tuple] = []
 
-    exec_rows = []
+    # ── 1. Place all orders ──────────────────────────────────────────────────
     for p, side, qty, limit_price in candidates:
         contract = Stock(p.symbol, "SMART", "USD")
         order = LimitOrder(side, qty, round(limit_price, 2))
         trade = ib.placeOrder(contract, order)
-
-        status = trade.orderStatus.status
-        msg = f"📤 PAPER {p.symbol}: {side} {qty} @ LMT {order.lmtPrice} | status={status}"
+        msg = f"📤 PAPER {p.symbol}: {side} {qty} @ LMT {order.lmtPrice} | status={trade.orderStatus.status}"
         print(msg)
         send_message(msg)
+        placed.append((p, side, qty, float(order.lmtPrice), trade))
+
+    # ── 2. Wait for IBKR paper fills (fills almost instantly on paper) ───────
+    ib.sleep(10)
+
+    # ── 3. Log real fill prices instead of theoretical limit prices ──────────
+    ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    exec_rows = []
+    for p, side, qty, limit_price, trade in placed:
+        fill_px = trade.orderStatus.avgFillPrice
+        fill_qty = trade.orderStatus.filled
+        status = trade.orderStatus.status
+
+        actual_price = float(fill_px) if fill_px and float(fill_px) > 0 else limit_price
+        actual_qty = int(fill_qty) if fill_qty and int(fill_qty) > 0 else qty
 
         exec_rows.append({
             "plan_id": plan_id,
             "timestamp": ts,
             "symbol": p.symbol,
             "side": side,
-            "qty": qty,
-            "limit_price": float(order.lmtPrice),
+            "qty": actual_qty,
+            "limit_price": actual_price,
             "last_price": float(p.last_price),
             "est_notional": float(p.est_notional),
             "target_weight": float(p.target_weight),
@@ -130,7 +143,98 @@ def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
         })
 
     log_execution(exec_rows)
-    send_message("✅ Execution run complete. Logged to logs/executions.csv")
+
+
+def _load_entry_prices() -> dict[str, float]:
+    """Returns the last recorded BUY fill price per symbol from executions.csv."""
+    path = Path("logs/executions.csv")
+    if not path.exists():
+        return {}
+    try:
+        df = pd.read_csv(path)
+        buys = df[df["side"] == "BUY"].sort_values("timestamp")
+        return buys.groupby("symbol")["limit_price"].last().to_dict()
+    except Exception:
+        return {}
+
+
+def _send_post_execution_report(
+    plans_sent: list,
+    risk_report,
+    corr_blocks: list,
+    cb: DrawdownCircuitBreaker,
+    snap,
+    plan_id: str,
+    regime: str,
+) -> None:
+    lines = [
+        "📋 RAPPORT POST-EXÉCUTION — Milan Capital",
+        f"plan_id={plan_id} | {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+        "",
+    ]
+
+    # Ordres envoyés
+    if plans_sent:
+        lines.append(f"✅ Ordres envoyés ({len(plans_sent)}) :")
+        for p in plans_sent:
+            side = "BUY" if p.delta_qty > 0 else ("SELL" if p.delta_qty < 0 else "HOLD")
+            lines.append(
+                f"  📤 {p.symbol}: {side} {abs(int(round(p.delta_qty)))} @ ~{p.last_price:.2f}"
+                f" | ~${p.est_notional:.0f}"
+            )
+    else:
+        lines.append("✅ Aucun ordre envoyé (plan vide après filtrage)")
+    lines.append("")
+
+    # Bloqués par le risk manager
+    if risk_report.rejected:
+        lines.append(f"🛡 Bloqués par risk manager ({len(risk_report.rejected)}) :")
+        for r in risk_report.rejected:
+            lines.append(f"  ✂️  {r.plan.symbol} ({r.plan.action}) → {r.reason}")
+        lines.append("")
+
+    # Bloqués par corrélation
+    if corr_blocks:
+        lines.append(f"🔗 Bloqués par corrélation ({len(corr_blocks)}) :")
+        for b in corr_blocks:
+            lines.append(f"  ✂️  {b['symbol']} (r={b['max_corr']:.2f} ↔ {b['correlated_with']})")
+        lines.append("")
+
+    # Sharpe et drawdown
+    try:
+        scorer = LiveScorer()
+        metrics = scorer.compute_agent_metrics()
+        if metrics:
+            all_trips = scorer.get_roundtrips()
+            from src.risk.live_scorer import _sharpe_from_roundtrips
+            portfolio_sharpe = _sharpe_from_roundtrips(all_trips) if len(all_trips) >= 3 else None
+            best = max(metrics.values(), key=lambda m: m.sharpe)
+            if portfolio_sharpe is not None:
+                lines.append(f"📈 Sharpe portefeuille : {portfolio_sharpe:.2f} | Meilleur : {best.agent} ({best.sharpe:.2f})")
+            else:
+                lines.append(f"📈 Sharpe : n/a (<3 round-trips) | Meilleur agent : {best.agent} ({best.sharpe:.2f})")
+        else:
+            lines.append("📈 Sharpe : n/a (aucun round-trip enregistré)")
+    except Exception as e:
+        lines.append(f"📈 Sharpe : erreur ({e})")
+
+    cb_status = "🚨 ACTIF" if cb.is_triggered else "✅ inactif"
+    lines.append(f"📉 Drawdown depuis pic : {cb.drawdown:.1%} | Circuit breaker : {cb_status}")
+    lines.append("")
+
+    # Résumé 5 lignes max
+    n_sent = len(plans_sent)
+    n_risk = len(risk_report.rejected)
+    n_corr = len(corr_blocks)
+    lines.append("─── Résumé ───")
+    lines.append(f"Régime : {regime.upper()} | NetLiq : ${snap.net_liquidation:,.0f}")
+    lines.append(f"Ordres : {n_sent} envoyés | {n_risk} bloqués risk | {n_corr} bloqués corrél.")
+    lines.append(f"Drawdown : {cb.drawdown:.1%} | Circuit breaker : {cb_status}")
+
+    try:
+        send_message("\n".join(lines)[:4096])
+    except Exception as e:
+        print(f"⚠️  Post-execution Telegram report failed: {e}")
 
 
 def main() -> None:
@@ -163,7 +267,10 @@ def main() -> None:
 
         # ====== CIRCUIT BREAKER ======
         cb = DrawdownCircuitBreaker()
-        cb.evaluate(snap.net_liquidation, ci_mode=ci_mode)
+        # Only evaluate with real IBKR data — the offline fallback (100K) would
+        # produce a spurious 90%+ drawdown against a real peak and falsely trigger.
+        if ibkr_ok:
+            cb.evaluate(snap.net_liquidation, ci_mode=ci_mode)
         if cb.is_triggered:
             msg = (
                 f"🚨 Circuit breaker actif — drawdown={cb.drawdown:.1%} depuis pic "
@@ -262,6 +369,35 @@ def main() -> None:
             )
             plans.append(plan)
 
+        # ====== STOP-LOSS PAR POSITION ======
+        entry_prices = _load_entry_prices()
+        for sym, qty in snap.positions.items():
+            if qty <= 0 or sym not in all_data:
+                continue
+            entry_px = entry_prices.get(sym)
+            if entry_px is None:
+                continue
+            current_px = get_last_close_1d(all_data[sym])
+            pnl_pct = (current_px - entry_px) / entry_px
+            if pnl_pct < -STOP_LOSS_PCT:
+                # Retire tout plan existant pour ce symbole et injecte un SELL forcé
+                plans = [p for p in plans if p.symbol != sym]
+                plans.append(OrderPlan(
+                    symbol=sym,
+                    action="SELL",
+                    target_weight=0.0,
+                    last_price=current_px,
+                    current_qty=float(qty),
+                    target_qty=0.0,
+                    delta_qty=-float(qty),
+                    est_notional=float(qty) * current_px,
+                    reason=f"STOP-LOSS: {pnl_pct:.1%} < -{STOP_LOSS_PCT:.0%}",
+                ))
+                msg = f"🛑 STOP-LOSS {sym}: {pnl_pct:.1%} (entrée ${entry_px:.2f} → ${current_px:.2f})"
+                print(msg)
+                if not ci_mode:
+                    send_message(msg)
+
         print("\n====== ORDER PLAN (NO EXECUTION) ======")
         if not plans:
             print("No plans.")
@@ -329,33 +465,18 @@ def main() -> None:
         print(plan_summary)
 
         if ci_mode:
-            print("ℹ️  CI mode — order plan logged to logs/order_plan.csv. No Telegram, no approval, no execution.")
+            print("ℹ️  CI mode — order plan logged to logs/order_plan.csv. No Telegram, no execution.")
             return
-
-        send_message(plan_summary + "\n\nReply APPROVE / REJECT (15 min)")
-
-        last_id = drain_updates()
-        approved, _ = wait_for_approval(
-            plan_id=plan_id,
-            timeout_seconds=TELEGRAM_APPROVAL_TIMEOUT,
-            last_update_id=last_id,
-        )
-
-        if not approved:
-            send_message(f"❌ Not approved (or timeout). plan_id={plan_id}. No execution.")
-            print("❌ Not approved (or timeout). Exiting safely.")
-            return
-
-        print("✅ Approved.")
 
         execution_enabled = EXECUTION_ENABLED and ibkr_ok
         if not execution_enabled:
             reason = "IBKR unavailable" if not ibkr_ok else "EXECUTION_ENABLED=false"
-            send_message(f"🧯 Approved but {reason} → NO orders sent. plan_id={plan_id}")
+            send_message(f"🧯 {reason} → NO orders sent. plan_id={plan_id}")
             print(f"🧯 {reason} → NO orders sent.")
             return
 
         execute_plans_paper_ibkr(ib, snap, plans, plan_id)
+        _send_post_execution_report(plans, risk_report, corr_blocks, cb, snap, plan_id, regime)
 
     finally:
         if ib is not None:

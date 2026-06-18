@@ -56,9 +56,14 @@ class PairsTradingAgent(BaseAgent):
 
     def __init__(self, config: Optional[PairsTradingConfig] = None):
         self.cfg = config or PairsTradingConfig()
+        # Cache par symbole pour éviter N downloads identiques dans un même run
+        self._zscore_cache: dict[str, dict] = {}
 
     def _compute_zscore(self, symbol: str) -> dict:
-        """Calcule le z-score du spread pour la paire de ce symbole."""
+        """Calcule le z-score du spread pour la paire de ce symbole — résultat mis en cache."""
+        if symbol in self._zscore_cache:
+            return self._zscore_cache[symbol]
+
         pair = PAIRS.get(symbol)
         if not pair:
             return {}
@@ -84,7 +89,7 @@ class PairsTradingAgent(BaseAgent):
             current_spread = float(spread.iloc[-1])
             mean_spread = float(spread_mean.iloc[-1])
 
-            return {
+            result = {
                 "pair": pair,
                 "zscore": round(current_z, 3),
                 "spread": round(current_spread, 4),
@@ -92,6 +97,8 @@ class PairsTradingAgent(BaseAgent):
                 "s1_price": float(df["s1"].iloc[-1]),
                 "s2_price": float(df["s2"].iloc[-1]),
             }
+            self._zscore_cache[symbol] = result
+            return result
         except Exception:
             return {}
 

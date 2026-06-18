@@ -30,6 +30,9 @@ def select_best(
                      basé sur les résultats du backtest
     priority_bonus : bonus appliqué au score de l'agent prioritaire
     """
+    if not signals:
+        return None
+
     scored = []
     for s in signals:
         score = score_signal(s)

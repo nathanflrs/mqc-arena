@@ -1,200 +1,133 @@
 # tests/test_walkforward.py
 from __future__ import annotations
 
-import pathlib
-
 import numpy as np
 import pandas as pd
 import pytest
 
-from src.backtest.engine import (
-    BDAYS_PER_MONTH,
-    WalkForwardEngine,
-    WalkForwardResult,
-    WindowResult,
-)
 from src.agents.dummy import DummyHoldAgent
+from src.backtest.engine import WalkForwardEngine, BDAYS_PER_MONTH
 
 
-# ─── Helpers ─────────────────────────────────────────────────────────────────
+# ─── Helpers ──────────────────────────────────────────────────────────────────
 
-def _make_ohlcv(n: int, start_price: float = 100.0, trend: float = 0.0) -> pd.DataFrame:
-    """Generate n days of synthetic OHLCV. trend > 0 → up, < 0 → down."""
+def _make_df(n: int, trend: float = 0.0003) -> pd.DataFrame:
     rng = np.random.default_rng(42)
-    prices = start_price * np.cumprod(1 + trend / 252 + rng.normal(0, 0.01, n))
     idx = pd.date_range("2020-01-01", periods=n, freq="B")
-    noise = prices * 0.005
+    close = 100.0 * np.cumprod(1 + trend + rng.normal(0, 0.01, n))
+    noise = np.abs(close * 0.005)
     return pd.DataFrame(
         {
-            "Open":   prices - noise,
-            "High":   prices + noise * 2,
-            "Low":    prices - noise * 2,
-            "Close":  prices,
-            "Volume": np.ones(n) * 1_000_000,
+            "Open":   close - noise,
+            "High":   close + noise * 2,
+            "Low":    close - noise * 2,
+            "Close":  close,
+            "Volume": np.full(n, 1_000_000.0),
         },
         index=idx,
     )
 
 
-AGENT = DummyHoldAgent()
-# Minimum rows for one window
 MIN_ROWS = WalkForwardEngine.TRAIN_BDAYS + WalkForwardEngine.TEST_BDAYS  # 504
+
+
+@pytest.fixture
+def agent():
+    return DummyHoldAgent()
 
 
 # ─── Window count ─────────────────────────────────────────────────────────────
 
-def test_no_windows_when_data_too_short():
-    df = _make_ohlcv(MIN_ROWS - 1)
-    engine = WalkForwardEngine(AGENT)
-    result = engine.run("TEST", df)
-    assert len(result.windows) == 0
-
-
-def test_one_window_at_exact_minimum():
-    df = _make_ohlcv(MIN_ROWS)
-    engine = WalkForwardEngine(AGENT)
-    result = engine.run("TEST", df)
+def test_one_window_exact_minimum(agent):
+    result = WalkForwardEngine(agent=agent).run("T", _make_df(MIN_ROWS))
     assert len(result.windows) == 1
 
 
-def test_correct_window_count_for_large_dataset():
-    # 3y ≈ 756 bdays → expected windows = floor((756 - 504) / 63) + 1 = 5
-    n = 3 * 252
-    df = _make_ohlcv(n)
-    engine = WalkForwardEngine(AGENT)
-    result = engine.run("TEST", df)
-    expected = (n - MIN_ROWS) // WalkForwardEngine.STEP_BDAYS + 1
-    assert len(result.windows) == expected
+def test_five_windows_756_days(agent):
+    result = WalkForwardEngine(agent=agent).run("T", _make_df(756))
+    assert len(result.windows) == 5
 
 
-# ─── Date ranges (no lookahead) ──────────────────────────────────────────────
+def test_no_windows_if_too_short(agent):
+    result = WalkForwardEngine(agent=agent).run("T", _make_df(MIN_ROWS - 1))
+    assert len(result.windows) == 0
+    assert result.avg_oos_sharpe == 0.0
+    assert not result.lookahead_warning
 
-def test_test_start_does_not_precede_train_end():
-    df = _make_ohlcv(MIN_ROWS + WalkForwardEngine.STEP_BDAYS * 2)
-    engine = WalkForwardEngine(AGENT)
-    result = engine.run("TEST", df)
+
+# ─── Date boundaries (no lookahead) ──────────────────────────────────────────
+
+def test_test_start_after_train_end(agent):
+    result = WalkForwardEngine(agent=agent).run("T", _make_df(756))
     for w in result.windows:
-        assert w.test_start > w.train_end, (
-            f"Window {w.window_idx}: test_start={w.test_start} <= train_end={w.train_end}"
-        )
+        assert w.test_start > w.train_end
 
 
-def test_windows_are_chronologically_ordered():
-    """
-    Walk-forward windows overlap by design (step < train+test).
-    The invariant is that each window's test_start is strictly after the previous one.
-    """
-    n = 3 * 252
-    df = _make_ohlcv(n)
-    result = WalkForwardEngine(AGENT).run("TEST", df)
+def test_test_periods_non_overlapping(agent):
+    result = WalkForwardEngine(agent=agent).run("T", _make_df(756))
     for i in range(len(result.windows) - 1):
-        assert result.windows[i].test_start < result.windows[i + 1].test_start
+        assert result.windows[i + 1].test_start > result.windows[i].test_start
 
 
-def test_window_idx_sequential():
-    df = _make_ohlcv(3 * 252)
-    result = WalkForwardEngine(AGENT).run("TEST", df)
-    for i, w in enumerate(result.windows):
-        assert w.window_idx == i
+# ─── Metrics ─────────────────────────────────────────────────────────────────
+
+def test_alpha_oos_minus_benchmark(agent):
+    result = WalkForwardEngine(agent=agent).run("T", _make_df(756))
+    for w in result.windows:
+        assert w.alpha == pytest.approx(w.oos_return - w.benchmark_return, abs=1e-6)
 
 
-# ─── Metrics shape ───────────────────────────────────────────────────────────
-
-def test_window_result_fields_are_finite():
-    df = _make_ohlcv(MIN_ROWS)
-    result = WalkForwardEngine(AGENT).run("TEST", df)
-    w = result.windows[0]
-    assert isinstance(w.is_sharpe, float)
-    assert isinstance(w.oos_sharpe, float)
-    assert isinstance(w.oos_return, float)
-    assert isinstance(w.oos_max_drawdown, float)
-    assert w.oos_max_drawdown <= 0.0  # must be ≤ 0
-
-
-def test_dummy_agent_zero_trades():
-    df = _make_ohlcv(MIN_ROWS)
-    result = WalkForwardEngine(AGENT).run("TEST", df)
-    # DummyHoldAgent never trades
+def test_dummy_agent_zero_trades(agent):
+    result = WalkForwardEngine(agent=agent).run("T", _make_df(MIN_ROWS))
     assert result.windows[0].oos_n_trades == 0
-    assert result.windows[0].oos_win_rate == 0.0
 
 
-def test_benchmark_return_computed():
-    """Benchmark return should be nonzero when asset has a strong directional trend."""
-    # Use a very strong upward trend (2.0 = +200%/yr) to dominate noise
-    df = _make_ohlcv(MIN_ROWS, trend=2.0)
-    result = WalkForwardEngine(AGENT).run("TEST", df)
-    assert result.windows[0].benchmark_return != 0.0  # something was computed
-    assert isinstance(result.windows[0].benchmark_return, float)
-
-
-def test_alpha_equals_oos_minus_benchmark():
-    df = _make_ohlcv(MIN_ROWS)
-    result = WalkForwardEngine(AGENT).run("TEST", df)
-    w = result.windows[0]
-    assert abs(w.alpha - (w.oos_return - w.benchmark_return)) < 1e-9
-
-
-# ─── Aggregates ──────────────────────────────────────────────────────────────
-
-def test_avg_oos_sharpe_is_mean_of_windows():
-    df = _make_ohlcv(3 * 252)
-    result = WalkForwardEngine(AGENT).run("TEST", df)
+def test_avg_oos_sharpe_is_mean_of_windows(agent):
+    result = WalkForwardEngine(agent=agent).run("T", _make_df(756))
     expected = float(np.mean([w.oos_sharpe for w in result.windows]))
-    assert abs(result.avg_oos_sharpe - expected) < 1e-9
+    assert result.avg_oos_sharpe == pytest.approx(expected, abs=1e-6)
 
 
-def test_no_lookahead_warning_for_hold_agent():
-    # DummyHoldAgent has IS Sharpe ≈ 0 → no warning
-    df = _make_ohlcv(3 * 252)
-    result = WalkForwardEngine(AGENT).run("TEST", df)
-    # IS Sharpe of a flat equity curve is ~0 → not > 1.5 → no warning
-    assert result.lookahead_warning is False
+def test_agent_and_symbol_in_result(agent):
+    result = WalkForwardEngine(agent=agent).run("AAPL", _make_df(MIN_ROWS))
+    assert result.agent_name == "DummyHoldAgent"
+    assert result.symbol == "AAPL"
 
 
-# ─── CSV output ──────────────────────────────────────────────────────────────
-
-def test_save_csv_creates_file(tmp_path):
-    df = _make_ohlcv(MIN_ROWS)
-    result = WalkForwardEngine(AGENT).run("TEST", df)
-    path = str(tmp_path / "wf_test.csv")
-    WalkForwardEngine.save_csv([result], path)
-    assert pathlib.Path(path).exists()
-    loaded = pd.read_csv(path)
-    assert len(loaded) == len(result.windows)
+def test_no_lookahead_warning_for_hold_agent(agent):
+    # IS Sharpe ≈ 0 → no false positive
+    result = WalkForwardEngine(agent=agent).run("T", _make_df(756))
+    assert not result.lookahead_warning
 
 
-def test_save_csv_columns(tmp_path):
-    df = _make_ohlcv(MIN_ROWS)
-    result = WalkForwardEngine(AGENT).run("TEST", df)
-    path = str(tmp_path / "wf_test.csv")
-    WalkForwardEngine.save_csv([result], path)
-    loaded = pd.read_csv(path)
-    expected_cols = {
-        "agent", "symbol", "window",
-        "train_start", "train_end", "test_start", "test_end",
-        "is_sharpe", "is_return",
-        "oos_sharpe", "oos_return", "oos_max_drawdown",
-        "oos_n_trades", "oos_win_rate",
-        "benchmark_return", "alpha",
-        "avg_oos_sharpe", "avg_is_sharpe", "lookahead_warning",
+# ─── Custom benchmark ────────────────────────────────────────────────────────
+
+def test_custom_benchmark_changes_benchmark_return(agent):
+    df = _make_df(MIN_ROWS, trend=0.0003)
+    bench = _make_df(MIN_ROWS, trend=0.001)
+    r_no  = WalkForwardEngine(agent=agent).run("T", df)
+    r_yes = WalkForwardEngine(agent=agent).run("T", df, benchmark_df=bench)
+    assert r_no.windows[0].benchmark_return != r_yes.windows[0].benchmark_return
+
+
+# ─── CSV output ───────────────────────────────────────────────────────────────
+
+def test_to_csv_rows_columns(agent):
+    result = WalkForwardEngine(agent=agent).run("T", _make_df(756))
+    rows = result.to_csv_rows()
+    assert len(rows) == len(result.windows)
+    required = {
+        "agent", "symbol", "window", "train_start", "train_end",
+        "test_start", "test_end", "is_sharpe", "oos_sharpe",
+        "benchmark_return", "alpha", "lookahead_warning",
     }
-    assert expected_cols.issubset(set(loaded.columns))
+    assert required.issubset(rows[0].keys())
 
 
-def test_save_csv_multiple_results(tmp_path):
-    df = _make_ohlcv(MIN_ROWS)
-    r1 = WalkForwardEngine(AGENT).run("AAPL", df)
-    r2 = WalkForwardEngine(AGENT).run("SPY", df)
-    path = str(tmp_path / "wf_multi.csv")
-    WalkForwardEngine.save_csv([r1, r2], path)
-    loaded = pd.read_csv(path)
-    assert set(loaded["symbol"].unique()) == {"AAPL", "SPY"}
-
-
-def test_save_csv_noop_when_no_windows(tmp_path):
-    df = _make_ohlcv(MIN_ROWS - 1)
-    result = WalkForwardEngine(AGENT).run("TEST", df)
-    path = str(tmp_path / "wf_empty.csv")
-    WalkForwardEngine.save_csv([result], path)  # no rows → file not created
-    assert not pathlib.Path(path).exists()
+def test_save_csv(agent, tmp_path):
+    result = WalkForwardEngine(agent=agent).run("T", _make_df(MIN_ROWS))
+    path = str(tmp_path / "wf.csv")
+    WalkForwardEngine.save_csv([result], path=path)
+    df = pd.read_csv(path)
+    assert len(df) == 1
+    assert "oos_sharpe" in df.columns

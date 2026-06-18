@@ -59,6 +59,47 @@ def _sharpe_from_roundtrips(trips: List[RoundTrip], risk_free: float = 0.04) -> 
     return float(excess.mean() / std * np.sqrt(trades_per_year))
 
 
+def kelly_half_fraction(
+    trips: List[RoundTrip],
+    min_trades: int = 10,
+    max_fraction: float = 0.25,
+) -> float:
+    """
+    Half-Kelly criterion: optimal position size = f*/2 to reduce variance.
+
+    f* = (p * b - q) / b
+    where:
+        p = win rate (fraction of profitable trades)
+        q = 1 - p
+        b = avg_win / avg_loss  (odds ratio)
+
+    Returns 0.0 if fewer than *min_trades* round-trips (estimates too noisy).
+    Capped at *max_fraction* (default 25%) regardless of formula output.
+    """
+    if len(trips) < min_trades:
+        return 0.0
+
+    returns = np.array([t.return_pct for t in trips])
+    wins  = returns[returns > 0]
+    losses = np.abs(returns[returns < 0])
+
+    p = len(wins) / len(returns)
+    q = 1.0 - p
+
+    if len(wins) == 0 or len(losses) == 0:
+        return 0.0
+
+    b = float(wins.mean()) / float(losses.mean())  # avg win / avg loss
+    if b <= 0:
+        return 0.0
+
+    f_star = (p * b - q) / b
+    half_kelly = f_star / 2.0
+
+    # Clamp: never short (negative) and never exceed max_fraction
+    return float(np.clip(half_kelly, 0.0, max_fraction))
+
+
 def _max_drawdown_from_trips(trips: List[RoundTrip]) -> float:
     """
     Max drawdown on a synthetic cumulative-equity curve built from
@@ -254,6 +295,25 @@ class LiveScorer:
                 avg_holding_days=float(np.mean([t.holding_days for t in trips])) if n > 0 else 0.0,
             )
         return result
+
+    def compute_kelly_weights(
+        self,
+        min_trades: int = 10,
+        max_fraction: float = 0.25,
+    ) -> Dict[str, float]:
+        """
+        Returns {agent_name: half_kelly_fraction} for agents with sufficient data.
+        Agents with < min_trades round-trips are omitted (use default target_weight).
+        """
+        self._load()
+        groups: Dict[str, List[RoundTrip]] = {}
+        for t in self._roundtrips:
+            groups.setdefault(t.agent, []).append(t)
+        return {
+            agent: kelly_half_fraction(trips, min_trades=min_trades, max_fraction=max_fraction)
+            for agent, trips in groups.items()
+            if len(trips) >= min_trades
+        }
 
     def generate_tearsheet(self, path: str | None = None) -> str:
         """

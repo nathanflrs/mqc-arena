@@ -1,3 +1,4 @@
 timestamp,symbol,side,qty,limit_price,last_price,est_notional,target_weight,reason,status,plan_id
 2026-01-26T20:26:08+00:00,AAPL,BUY,391,255.79,255.53419494628903,99913.87022399902,0.1,Buffett screen passed (stable + trend + near-high),PendingSubmit,
 2026-01-29T16:25:28+00:00,AAPL,SELL,1,255.94,256.20001220703125,256.20001220703125,0.1,Buffett screen passed (stable + trend + near-high),PendingSubmit,dce88315
+2026-06-18T19:30:08+00:00,NVDA,BUY,97,209.95,209.85000610351562,20355.450592041016,0.02,Buffett screen passed (stable + trend + near-high),PendingSubmit,7034b672

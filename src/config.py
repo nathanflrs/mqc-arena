@@ -51,6 +51,7 @@ RISK_MAX_NET_LONG_PCT = float(os.getenv("RISK_MAX_NET_LONG_PCT", "0.60"))
 RISK_MAX_SINGLE_POSITION_PCT = float(os.getenv("RISK_MAX_SINGLE_POSITION_PCT", "0.20"))
 RISK_MIN_CASH_PCT = float(os.getenv("RISK_MIN_CASH_PCT", "0.30"))
 RISK_SELL_ONLY_MODE = os.getenv("RISK_SELL_ONLY_MODE", "false").lower() == "true"
+STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", "0.07"))  # 7% par position
 
 # ====== TELEGRAM ======
 TELEGRAM_APPROVAL_TIMEOUT = int(os.getenv("TELEGRAM_APPROVAL_TIMEOUT", "900"))

@@ -40,9 +40,13 @@ class DividendArbitrageAgent(BaseAgent):
 
     def __init__(self, config: Optional[DividendArbitrageConfig] = None):
         self.cfg = config or DividendArbitrageConfig()
+        # Cache par symbole — ticker.info est lent; un download par run suffit
+        self._div_cache: dict[str, dict] = {}
 
     def _get_dividend_info(self, symbol: str) -> dict:
-        """Récupère les infos dividendes via yfinance."""
+        """Récupère les infos dividendes via yfinance — résultat mis en cache par run."""
+        if symbol in self._div_cache:
+            return self._div_cache[symbol]
         try:
             ticker = yf.Ticker(symbol)
             info = ticker.info
@@ -65,13 +69,15 @@ class DividendArbitrageAgent(BaseAgent):
 
             yield_pct = div_per_payment / price if price > 0 else 0.0
 
-            return {
+            result = {
                 "ex_date": ex_date,
                 "div_per_payment": round(div_per_payment, 4),
                 "yield_pct": round(yield_pct, 6),
                 "price": price,
                 "annual_dividend": dividend_rate,
             }
+            self._div_cache[symbol] = result
+            return result
         except Exception:
             return {}
 

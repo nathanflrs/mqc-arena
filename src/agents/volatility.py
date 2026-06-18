@@ -1,6 +1,7 @@
 # src/agents/volatility.py
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Dict, Optional
 
@@ -71,12 +72,17 @@ class VolatilityAgent(BaseAgent):
     - Ratio VIX / VIX MA20 (VIX relatif)
     """
     name = "VolatilityAgent"
+    _VIX_TTL = 300  # secondes entre re-downloads (5 min)
 
     def __init__(self, config: Optional[VolatilityConfig] = None):
         self.cfg = config or VolatilityConfig()
+        self._vix_cache: Optional[dict] = None
+        self._vix_ts: float = 0.0
 
     def _analyze_vix(self) -> dict:
-        """Analyse complète du VIX."""
+        """Analyse complète du VIX — résultat mis en cache pour éviter N downloads par run."""
+        if self._vix_cache is not None and (time.time() - self._vix_ts) < self._VIX_TTL:
+            return self._vix_cache
         try:
             vix_series = _get_vix_series("2y")
             if len(vix_series) < 30:
@@ -96,13 +102,16 @@ class VolatilityAgent(BaseAgent):
             # VIX ratio vs MA20
             vix_ratio = vix_now / vix_ma20 if vix_ma20 > 0 else 1.0
 
-            return {
+            result = {
                 "vix": round(vix_now, 2),
                 "vix_ma20": round(vix_ma20, 2),
                 "zscore": round(zscore, 3),
                 "mom5": round(mom5, 4),
                 "vix_ratio": round(vix_ratio, 3),
             }
+            self._vix_cache = result
+            self._vix_ts = time.time()
+            return result
         except Exception:
             return {"vix": 20.0, "zscore": 0.0, "mom5": 0.0, "vix_ratio": 1.0}
 

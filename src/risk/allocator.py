@@ -68,10 +68,16 @@ def _rolling_sharpe(equity: pd.Series, lookback: int, risk_free: float = 0.04) -
     """Sharpe annualisé sur les `lookback` derniers jours de la courbe d'equity."""
     window = equity.iloc[-lookback:] if len(equity) >= lookback else equity
     returns = window.pct_change().dropna()
-    if len(returns) < 5 or returns.std() == 0:
+    std = returns.std()
+    if len(returns) < 5 or std == 0 or np.isnan(std):
         return 0.0
     excess = returns - risk_free / 252
-    return float(excess.mean() / excess.std() * np.sqrt(252))
+    result = float(excess.mean() / std * np.sqrt(252))
+    if np.isnan(result):
+        return 0.0
+    # Clamp overflow (near-zero std from floating-point noise → 10^16) while
+    # preserving sign and relative ordering for legitimate high-Sharpe curves.
+    return float(np.clip(result, -500.0, 500.0))
 
 
 def _weights_from_sharpes(
@@ -133,6 +139,33 @@ class DynamicAllocator:
             logger.warning(f"Allocator cache invalide: {e}")
             return None
 
+    def _load_walkforward_oos_sharpes(self) -> dict:
+        """
+        Loads avg_oos_sharpe per (agent, symbol) from walkforward_results.csv.
+        Returns {} if the file doesn't exist or is unreadable.
+        """
+        path = Path("logs/walkforward_results.csv")
+        if not path.exists():
+            return {}
+        try:
+            df = pd.read_csv(path)
+            result: dict = {}
+            seen: set = set()
+            for _, row in df.iterrows():
+                agent = str(row.get("agent", ""))
+                sym = str(row.get("symbol", ""))
+                key = (agent, sym)
+                if key in seen or not agent or not sym:
+                    continue
+                sharpe = row.get("avg_oos_sharpe")
+                if pd.notna(sharpe):
+                    result.setdefault(agent, {})[sym] = float(sharpe)
+                    seen.add(key)
+            return result
+        except Exception as e:
+            logger.warning("Impossible de lire walkforward_results.csv: %s", e)
+            return {}
+
     def _save_cache(self, result: AllocationResult) -> None:
         path = Path(self.cfg.cache_path)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -162,21 +195,31 @@ class DynamicAllocator:
         data: Dict[str, pd.DataFrame],
         agents: List[BaseAgent],
     ) -> AllocationResult:
-        # ── 1. Backtest Sharpes ────────────────────────────────────────────
+        # ── 1. Backtest Sharpes (ou OOS Sharpes walk-forward si disponibles) ─
+        wf_sharpes = self._load_walkforward_oos_sharpes()
         bt_sharpes: Dict[str, Dict[str, float]] = {}
 
-        for agent in agents:
-            bt_sharpes[agent.name] = {}
-            for sym, df in data.items():
-                try:
-                    engine = BacktestEngine(agent=agent)
-                    result = engine.run(symbol=sym, df=df)
-                    sharpe = _rolling_sharpe(result.equity_curve, self.cfg.lookback_days)
-                    bt_sharpes[agent.name][sym] = round(sharpe, 4)
-                    logger.info("  [BT] %s / %s → Sharpe=%.2f", agent.name, sym, sharpe)
-                except Exception as e:
-                    logger.warning("  [BT] %s / %s → erreur: %s", agent.name, sym, e)
-                    bt_sharpes[agent.name][sym] = 0.0
+        if wf_sharpes:
+            logger.info("Allocator: walk-forward OOS Sharpes chargés — backtests ignorés")
+            for agent in agents:
+                bt_sharpes[agent.name] = {}
+                for sym in data:
+                    bt_sharpes[agent.name][sym] = round(
+                        wf_sharpes.get(agent.name, {}).get(sym, 0.0), 4
+                    )
+        else:
+            for agent in agents:
+                bt_sharpes[agent.name] = {}
+                for sym, df in data.items():
+                    try:
+                        engine = BacktestEngine(agent=agent)
+                        result = engine.run(symbol=sym, df=df)
+                        sharpe = _rolling_sharpe(result.equity_curve, self.cfg.lookback_days)
+                        bt_sharpes[agent.name][sym] = round(sharpe, 4)
+                        logger.info("  [BT] %s / %s → Sharpe=%.2f", agent.name, sym, sharpe)
+                    except Exception as e:
+                        logger.warning("  [BT] %s / %s → erreur: %s", agent.name, sym, e)
+                        bt_sharpes[agent.name][sym] = 0.0
 
         # ── 2. Live Sharpes (depuis logs) ─────────────────────────────────
         live_scorer = LiveScorer(LiveScorerConfig())

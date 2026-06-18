@@ -76,6 +76,5 @@ def test_buy_preferred_over_sell_on_tie():
     assert best.action == "BUY"
 
 
-def test_empty_signals_raises():
-    with pytest.raises((IndexError, ValueError)):
-        select_best([])
+def test_empty_signals_returns_none():
+    assert select_best([]) is None
