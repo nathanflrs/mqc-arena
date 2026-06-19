@@ -94,7 +94,8 @@ class BacktestEngine:
         agent: BaseAgent,
         initial_capital: float = 100_000.0,
         target_weight: float = 0.95,   # investi 95% du capital
-        commission: float = 0.001,
+        commission: float = 0.0005,    # frais broker IBKR ~0.5 bps
+        slippage_bps: float = 7.0,     # spread bid-ask + impact marché ~7 bps par side
         min_history: int = 210,
         cooldown_days: int = 20,       # minimum 20 jours entre trades (réduit l'over-trading)
         long_bias_bull_threshold: float = 0.90,  # min confidence to exit in bull regime
@@ -103,6 +104,7 @@ class BacktestEngine:
         self.initial_capital = initial_capital
         self.target_weight = target_weight
         self.commission = commission
+        self.slippage_bps = slippage_bps
         self.min_history = min_history
         self.cooldown_days = cooldown_days
         self.long_bias_bull_threshold = long_bias_bull_threshold
@@ -152,12 +154,15 @@ class BacktestEngine:
             portfolio_value = capital + position * px
             days_since_trade = i - last_trade_idx
 
+            # Per-side friction: broker commission + spread/market-impact
+            friction = self.commission + self.slippage_bps / 10_000
+
             # BUY
             if sig.action == "BUY" and position == 0 and days_since_trade >= self.cooldown_days:
                 target_notional = portfolio_value * self.target_weight
                 qty = int(target_notional / px)
                 if qty > 0:
-                    cost = qty * px * (1 + self.commission)
+                    cost = qty * px * (1 + friction)
                     if cost <= capital:
                         capital -= cost
                         position += qty
@@ -177,7 +182,7 @@ class BacktestEngine:
             elif sig.action == "SELL" and position > 0 and days_since_trade >= self.cooldown_days:
                 bull_dampen = regime == "bull" and sig.confidence < self.long_bias_bull_threshold
                 if not bull_dampen:
-                    proceeds = position * px * (1 - self.commission)
+                    proceeds = position * px * (1 - friction)
                     capital += proceeds
                     last_trade_idx = i
                     trades.append(Trade(
@@ -308,7 +313,8 @@ class WalkForwardEngine:
         agent: "BaseAgent",
         initial_capital: float = 100_000.0,
         target_weight: float = 0.95,
-        commission: float = 0.001,
+        commission: float = 0.0005,
+        slippage_bps: float = 7.0,
         min_history: int = 210,
         cooldown_days: int = 20,
     ):
@@ -316,6 +322,7 @@ class WalkForwardEngine:
         self.initial_capital = initial_capital
         self.target_weight = target_weight
         self.commission = commission
+        self.slippage_bps = slippage_bps
         self.min_history = min_history
         self.cooldown_days = cooldown_days
 
@@ -348,6 +355,7 @@ class WalkForwardEngine:
                 initial_capital=self.initial_capital,
                 target_weight=self.target_weight,
                 commission=self.commission,
+                slippage_bps=self.slippage_bps,
                 min_history=self.min_history,
                 cooldown_days=self.cooldown_days,
             )

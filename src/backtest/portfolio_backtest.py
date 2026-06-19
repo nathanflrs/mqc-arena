@@ -35,7 +35,8 @@ from src.config import WATCHLIST, AGENT_PRIORITY
 
 TOTAL_CAPITAL   = 100_000.0
 DATA_PERIOD     = "5y"
-COMMISSION      = 0.001   # 0.1% par trade
+COMMISSION      = 0.0005  # frais broker IBKR ~0.5 bps
+SLIPPAGE_BPS    = 7.0     # spread bid-ask + impact marché ~7 bps par side
 COOLDOWN_DAYS   = 20      # réduit l'over-trading, laisse les positions respirer
 MIN_HISTORY     = 210
 
@@ -179,6 +180,7 @@ def run() -> None:
             initial_capital=capital_per_sym,
             target_weight=0.95,
             commission=COMMISSION,
+            slippage_bps=SLIPPAGE_BPS,
             min_history=MIN_HISTORY,
             cooldown_days=COOLDOWN_DAYS,
         )

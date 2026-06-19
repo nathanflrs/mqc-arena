@@ -358,6 +358,32 @@ tbody tr:hover td{background:rgba(255,255,255,.015)}
         </div>
       </div>
 
+      <!-- Fill stats -->
+      <div class="card" id="fill-stats-card" style="display:none">
+        <div class="sec-label"><span>Exécution — Fill Rate &amp; Slippage</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px">
+          <div>
+            <div class="kpi-label">Fill Rate</div>
+            <div class="kpi-value" id="fs-fill-rate" style="font-size:18px">—</div>
+          </div>
+          <div>
+            <div class="kpi-label">Slippage moy.</div>
+            <div class="kpi-value" id="fs-slip-mean" style="font-size:18px">—</div>
+            <div class="kpi-sub">bps vs signal</div>
+          </div>
+          <div>
+            <div class="kpi-label">Pire slip.</div>
+            <div class="kpi-value" id="fs-slip-worst" style="font-size:18px">—</div>
+            <div class="kpi-sub">bps</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:16px">
+          <span style="font-size:10px;color:var(--t3)">BUY : <span id="fs-slip-buy" style="color:var(--t2)">—</span> bps</span>
+          <span style="font-size:10px;color:var(--t3)">SELL : <span id="fs-slip-sell" style="color:var(--t2)">—</span> bps</span>
+          <span style="font-size:10px;color:var(--t3)">Ordres : <span id="fs-n-orders" style="color:var(--t2)">—</span></span>
+        </div>
+      </div>
+
       <div class="panel-end"></div>
     </div>
 
@@ -405,6 +431,12 @@ tbody tr:hover td{background:rgba(255,255,255,.015)}
     <div class="tab-panel" id="panel-agents">
       <!-- Drift alerts -->
       <div id="drift-section"></div>
+
+      <!-- Regime accuracy -->
+      <div class="card" id="regime-accuracy-card" style="margin-bottom:12px;display:none">
+        <div class="sec-label"><span>Précision du détecteur de régime (fwd 5j)</span></div>
+        <div id="regime-accuracy-body" style="margin-top:10px"></div>
+      </div>
 
       <!-- Live signals -->
       <div class="card">
@@ -505,9 +537,9 @@ function switchTab(i) {
   currentTab = i;
   if (!tabLoaded[i]) {
     tabLoaded[i] = true;
-    if (i === 0) { loadStatus(); loadSignals(); }
+    if (i === 0) { loadStatus(); loadSignals(); loadFillStats(); }
     if (i === 1) { loadPortfolioSummary(); loadPerformance(); }
-    if (i === 2) { loadSignals(); loadDriftAlerts(); }
+    if (i === 2) { loadSignals(); loadDriftAlerts(); loadRegimeAccuracy(); }
     // Controls: no initial load needed
   }
 }
@@ -523,6 +555,7 @@ function revealDashboard() {
   tabLoaded[0] = true;
   loadStatus();
   loadSignals();
+  loadFillStats();
   setInterval(loadStatus, 5000);
 }
 
@@ -595,6 +628,27 @@ async function detectMode() {
       document.getElementById('mode-icon').textContent  = '☁';
       document.getElementById('mode-label').textContent = 'Cloud · GitHub Actions';
     }
+  } catch(_) {}
+}
+
+// ── Overview: Fill stats ──────────────────────────────────────────────────────
+async function loadFillStats() {
+  try {
+    const data = await fetch('/api/fill-stats').then(r => r.json());
+    if (!data.available) return;
+    document.getElementById('fill-stats-card').style.display = 'block';
+    const fmtSlip = v => (v >= 0 ? '+' : '') + v.toFixed(1);
+    const slipColor = v => v > 10 ? 'var(--red)' : v > 5 ? 'var(--gold)' : 'var(--green)';
+    document.getElementById('fs-fill-rate').textContent = (data.fill_rate * 100).toFixed(0) + '%';
+    const smEl = document.getElementById('fs-slip-mean');
+    smEl.textContent = fmtSlip(data.mean_slippage_bps);
+    smEl.style.color = slipColor(data.mean_slippage_bps);
+    const swEl = document.getElementById('fs-slip-worst');
+    swEl.textContent = fmtSlip(data.worst_slippage_bps);
+    swEl.style.color = slipColor(data.worst_slippage_bps);
+    document.getElementById('fs-slip-buy').textContent  = fmtSlip(data.mean_slippage_buy_bps);
+    document.getElementById('fs-slip-sell').textContent = fmtSlip(data.mean_slippage_sell_bps);
+    document.getElementById('fs-n-orders').textContent  = data.n_orders;
   } catch(_) {}
 }
 
@@ -808,6 +862,35 @@ async function loadPerformance() {
         <td style="color:var(--gold)">${Number(row.sharpe).toFixed(2)}</td>
         <td style="color:var(--t3)">${row.trades}</td>
       </tr>`;
+    }).join('');
+  } catch(_) {}
+}
+
+// ── Agents: Regime accuracy ───────────────────────────────────────────────────
+async function loadRegimeAccuracy() {
+  try {
+    const stats = await fetch('/api/regime-accuracy').then(r => r.json());
+    if (!Array.isArray(stats) || !stats.length) return;
+    const card = document.getElementById('regime-accuracy-card');
+    const body = document.getElementById('regime-accuracy-body');
+    card.style.display = 'block';
+    const emoji = {bull:'🟢',bear:'🔴',choppy:'🟡'};
+    const color  = {bull:'var(--green)',bear:'var(--red)',choppy:'var(--gold)'};
+    body.innerHTML = stats.map(s => {
+      const ret   = s.mean_fwd_return_5d;
+      const retCls = ret >= 0 ? 'pos' : 'neg';
+      const retStr = (ret >= 0 ? '+' : '') + (ret * 100).toFixed(2) + '%';
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span>${emoji[s.regime]||'⚪'}</span>
+          <span style="font-weight:700;color:${color[s.regime]||'var(--t2)'};">${s.regime.toUpperCase()}</span>
+          <span style="font-size:10px;color:var(--t3)">(${s.n_observations} obs.)</span>
+        </div>
+        <div style="text-align:right">
+          <span class="${retCls}" style="font-weight:700;font-size:13px">${retStr}</span>
+          <span style="font-size:10px;color:var(--t3);margin-left:8px">hit ${(s.hit_rate*100).toFixed(0)}%</span>
+        </div>
+      </div>`;
     }).join('');
   } catch(_) {}
 }

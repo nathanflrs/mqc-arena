@@ -378,6 +378,28 @@ def get_drift_alerts(user: str = Depends(require_auth)):
         return JSONResponse(content=[])
 
 
+@app.get("/api/regime-accuracy")
+def get_regime_accuracy(user: str = Depends(require_auth)):
+    try:
+        from src.risk.live_scorer import LiveScorer
+        stats = LiveScorer().compute_regime_accuracy()
+        return JSONResponse(content=[s.to_dict() for s in stats])
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+@app.get("/api/fill-stats")
+def get_fill_stats(user: str = Depends(require_auth)):
+    try:
+        from src.risk.live_scorer import LiveScorer
+        stats = LiveScorer().compute_fill_stats()
+        if stats is None:
+            return JSONResponse(content={"available": False})
+        return JSONResponse(content={"available": True, **stats.to_dict()})
+    except Exception as e:
+        return JSONResponse(content={"available": False, "error": str(e)})
+
+
 @app.post("/api/reset-circuit-breaker")
 def reset_circuit_breaker(user: str = Depends(require_auth)):
     try:

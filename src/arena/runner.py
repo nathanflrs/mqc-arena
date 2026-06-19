@@ -125,8 +125,18 @@ def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
         fill_qty = trade.orderStatus.filled
         status = trade.orderStatus.status
 
-        actual_price = float(fill_px) if fill_px and float(fill_px) > 0 else limit_price
+        avg_fill = float(fill_px) if fill_px and float(fill_px) > 0 else 0.0
         actual_qty = int(fill_qty) if fill_qty and int(fill_qty) > 0 else qty
+        last_px = float(p.last_price)
+
+        # Slippage vs signal price (positive = unfavourable)
+        if avg_fill > 0 and last_px > 0:
+            if side == "BUY":
+                slippage_bps = (avg_fill - last_px) / last_px * 10_000
+            else:
+                slippage_bps = (last_px - avg_fill) / last_px * 10_000
+        else:
+            slippage_bps = 0.0
 
         exec_rows.append({
             "plan_id": plan_id,
@@ -134,8 +144,10 @@ def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
             "symbol": p.symbol,
             "side": side,
             "qty": actual_qty,
-            "limit_price": actual_price,
-            "last_price": float(p.last_price),
+            "limit_price": round(limit_price, 4),   # original limit order price
+            "avg_fill_price": round(avg_fill, 4),    # actual IBKR fill (0 = not filled yet)
+            "slippage_bps": round(slippage_bps, 2),  # vs signal price
+            "last_price": round(last_px, 4),
             "est_notional": float(p.est_notional),
             "target_weight": float(p.target_weight),
             "reason": str(p.reason),
@@ -146,13 +158,22 @@ def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
 
 
 def _load_entry_prices() -> dict[str, float]:
-    """Returns the last recorded BUY fill price per symbol from executions.csv."""
+    """Returns the last recorded BUY fill price per symbol from executions.csv.
+    Prefers avg_fill_price when available (new schema), falls back to limit_price."""
     path = Path("logs/executions.csv")
     if not path.exists():
         return {}
     try:
         df = pd.read_csv(path)
         buys = df[df["side"] == "BUY"].sort_values("timestamp")
+        if "avg_fill_price" in buys.columns:
+            # Use fill price when > 0, otherwise fall back to limit_price
+            price_col = buys["avg_fill_price"].where(
+                buys["avg_fill_price"] > 0, buys["limit_price"]
+            )
+            buys = buys.copy()
+            buys["_price"] = price_col
+            return buys.groupby("symbol")["_price"].last().to_dict()
         return buys.groupby("symbol")["limit_price"].last().to_dict()
     except Exception:
         return {}
@@ -314,9 +335,10 @@ def main() -> None:
         alloc_result = DynamicAllocator(AllocatorConfig()).compute(all_data, alloc_agents)
 
         # ====== KELLY WEIGHTS (depuis live round-trips) ======
-        kelly_weights: dict[str, float] = LiveScorer().compute_kelly_weights(min_trades=10)
+        _live_scorer = LiveScorer()
+        kelly_weights: dict[str, float] = _live_scorer.compute_kelly_weights(min_trades=5)
         if kelly_weights:
-            print(f"\n📐 Kelly demi-fraction disponible : {kelly_weights}")
+            print(f"\n📐 Kelly demi-fraction : {kelly_weights}")
 
         print("\n" + alloc_result.telegram_summary())
 
@@ -350,13 +372,19 @@ def main() -> None:
             if dynamic_weight is not None:
                 winner = dataclasses.replace(winner, target_weight=dynamic_weight)
 
-            # Kelly override : prend le min(dynamic_weight, kelly) — toujours conservateur
+            # Kelly blending : blend progressif Kelly ↔ dynamic au fur et à mesure des trades
+            # α = min(1, n_trades/20) — 100% Kelly à partir de 20 round-trips par agent
             kelly_w = kelly_weights.get(winner.agent_name)
             if kelly_w is not None and kelly_w > 0:
-                new_w = min(winner.target_weight, kelly_w)
-                if new_w != winner.target_weight:
-                    print(f"   📐 Kelly {winner.agent_name}: {winner.target_weight:.2f} → {new_w:.2f}")
-                    winner = dataclasses.replace(winner, target_weight=new_w)
+                n_trips = _live_scorer.get_n_trades(winner.agent_name, sym)
+                alpha = min(1.0, n_trips / 20)
+                blended_w = round((1 - alpha) * winner.target_weight + alpha * kelly_w, 4)
+                print(
+                    f"   📐 Kelly {winner.agent_name}/{sym}: "
+                    f"dynamic={winner.target_weight:.3f} kelly={kelly_w:.3f} "
+                    f"α={alpha:.2f} → {blended_w:.3f} ({n_trips} trips)"
+                )
+                winner = dataclasses.replace(winner, target_weight=blended_w)
 
             last_px = get_last_close_1d(df)
             current_qty = snap.positions.get(sym, 0.0)

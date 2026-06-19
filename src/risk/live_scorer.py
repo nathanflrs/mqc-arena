@@ -50,6 +50,42 @@ class DriftAlert:
 
 
 @dataclass
+class RegimeStats:
+    regime: str
+    n_observations: int        # décisions avec données forward disponibles
+    mean_fwd_return_5d: float  # rendement forward moyen à 5j
+    hit_rate: float            # fraction de rendements positifs
+
+    def to_dict(self) -> dict:
+        return {
+            "regime":             self.regime,
+            "n_observations":     self.n_observations,
+            "mean_fwd_return_5d": round(self.mean_fwd_return_5d, 4),
+            "hit_rate":           round(self.hit_rate, 4),
+        }
+
+
+@dataclass
+class FillStats:
+    n_orders: int
+    fill_rate: float           # fraction of orders with avg_fill_price > 0
+    mean_slippage_bps: float   # average slippage vs signal price (all filled orders)
+    mean_slippage_buy_bps: float
+    mean_slippage_sell_bps: float
+    worst_slippage_bps: float  # max unfavourable slippage seen
+
+    def to_dict(self) -> dict:
+        return {
+            "n_orders":              self.n_orders,
+            "fill_rate":             round(self.fill_rate, 4),
+            "mean_slippage_bps":     round(self.mean_slippage_bps, 2),
+            "mean_slippage_buy_bps": round(self.mean_slippage_buy_bps, 2),
+            "mean_slippage_sell_bps":round(self.mean_slippage_sell_bps, 2),
+            "worst_slippage_bps":    round(self.worst_slippage_bps, 2),
+        }
+
+
+@dataclass
 class LiveScorerConfig:
     decisions_path: str = "logs/decisions.csv"
     executions_path: str = "logs/executions.csv"
@@ -451,6 +487,132 @@ class LiveScorer:
                 ))
 
         return sorted(alerts, key=lambda a: a.drift, reverse=True)
+
+    def compute_regime_accuracy(self, fwd_days: int = 5) -> list:
+        """
+        For each signal in decisions.csv, compute the forward N-day return of
+        the underlying symbol, then group by regime (bull/bear/choppy).
+        Returns a list of RegimeStats — empty if insufficient data.
+        """
+        from src.data.market_data import download_ohlcv
+
+        path = Path(self.cfg.decisions_path)
+        if not path.exists():
+            return []
+        try:
+            df = pd.read_csv(path)
+        except Exception:
+            return []
+
+        needed = {"regime", "symbol", "ts"}
+        if not needed.issubset(df.columns):
+            return []
+
+        df = df[["ts", "symbol", "regime"]].dropna(subset=list(needed))
+        df["ts"] = pd.to_datetime(df["ts"], errors="coerce", utc=True)
+        df = df.dropna(subset=["ts"])
+        if df.empty:
+            return []
+
+        records: list = []
+        for sym in df["symbol"].unique():
+            try:
+                ohlcv  = download_ohlcv(sym, period="1y")
+                close  = pd.to_numeric(ohlcv["Close"], errors="coerce").dropna()
+                close.index = pd.to_datetime(close.index, utc=True)
+            except Exception as e:
+                logger.warning("compute_regime_accuracy: %s — %s", sym, e)
+                continue
+
+            for _, row in df[df["symbol"] == sym].iterrows():
+                ts      = row["ts"]
+                regime  = row["regime"]
+                future  = close[close.index > ts]
+                if len(future) < fwd_days:
+                    continue
+                past = close[close.index <= ts]
+                if past.empty:
+                    continue
+                entry_px = float(past.iloc[-1])
+                exit_px  = float(future.iloc[fwd_days - 1])
+                if entry_px <= 0:
+                    continue
+                records.append({"regime": regime, "fwd": (exit_px - entry_px) / entry_px})
+
+        if not records:
+            return []
+
+        fwd_df = pd.DataFrame(records)
+        result: list = []
+        for regime in ["bull", "bear", "choppy"]:
+            sub = fwd_df[fwd_df["regime"] == regime]["fwd"]
+            if sub.empty:
+                continue
+            result.append(RegimeStats(
+                regime=regime,
+                n_observations=len(sub),
+                mean_fwd_return_5d=float(sub.mean()),
+                hit_rate=float((sub > 0).mean()),
+            ))
+        return result
+
+    def compute_fill_stats(self, executions_path: str | None = None) -> FillStats | None:
+        """
+        Reads executions.csv and computes fill rate + slippage statistics.
+        Requires avg_fill_price and slippage_bps columns (new schema from runner.py).
+        Returns None if the file doesn't exist or has no data.
+        """
+        path = Path(executions_path or self.cfg.executions_path)
+        if not path.exists():
+            return None
+        try:
+            df = pd.read_csv(path)
+        except Exception as e:
+            logger.warning("compute_fill_stats: cannot read %s: %s", path, e)
+            return None
+
+        if df.empty:
+            return None
+
+        n_orders = len(df)
+
+        # Fill rate: rows where avg_fill_price column exists and > 0
+        if "avg_fill_price" in df.columns:
+            filled = df[df["avg_fill_price"] > 0]
+            fill_rate = len(filled) / n_orders if n_orders else 0.0
+        else:
+            # Legacy schema — all rows treated as filled (no avg_fill_price column)
+            return FillStats(
+                n_orders=n_orders,
+                fill_rate=1.0,
+                mean_slippage_bps=0.0,
+                mean_slippage_buy_bps=0.0,
+                mean_slippage_sell_bps=0.0,
+                worst_slippage_bps=0.0,
+            )
+
+        if "slippage_bps" not in df.columns or filled.empty:
+            return FillStats(
+                n_orders=n_orders,
+                fill_rate=fill_rate,
+                mean_slippage_bps=0.0,
+                mean_slippage_buy_bps=0.0,
+                mean_slippage_sell_bps=0.0,
+                worst_slippage_bps=0.0,
+            )
+
+        slip = filled["slippage_bps"].dropna()
+        buys  = filled[filled["side"].str.upper() == "BUY"]["slippage_bps"].dropna()
+        sells = filled[filled["side"].str.upper() == "SELL"]["slippage_bps"].dropna()
+
+        return FillStats(
+            n_orders=n_orders,
+            fill_rate=fill_rate,
+            mean_slippage_bps=float(slip.mean()) if len(slip) else 0.0,
+            mean_slippage_buy_bps=float(buys.mean()) if len(buys) else 0.0,
+            mean_slippage_sell_bps=float(sells.mean()) if len(sells) else 0.0,
+            worst_slippage_bps=float(slip.max()) if len(slip) else 0.0,
+        )
 
     def generate_tearsheet(self, path: str | None = None) -> str:
         """
