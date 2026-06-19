@@ -68,7 +68,7 @@ html,body{
 #splash{
   position:fixed;inset:0;z-index:1000;background:var(--bg);
   display:flex;align-items:center;justify-content:center;
-  animation:splash-out .4s ease .4s forwards;
+  animation:splash-out .8s ease 1.5s forwards;
 }
 .splash-in{animation:fadein .6s ease forwards}
 @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
@@ -82,10 +82,10 @@ html,body{
 /* ── Login ── */
 #login-screen{
   position:fixed;inset:0;z-index:900;background:var(--bg);
-  display:none;align-items:center;justify-content:center;
-  opacity:0;transition:opacity .4s;
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .7s ease;
 }
-#login-screen.visible{display:flex;opacity:1}
+#login-screen.visible{opacity:1;pointer-events:auto}
 .login-card{width:min(320px,86vw);display:flex;flex-direction:column;align-items:stretch;animation:fadein .5s ease forwards}
 .login-eyebrow{font-size:9px;font-weight:500;letter-spacing:.3em;text-transform:uppercase;color:var(--t3);margin-bottom:16px;text-align:center}
 .login-field{margin-bottom:10px}
@@ -307,6 +307,16 @@ tr:last-child td{border-bottom:none}
 #regime-banner{display:none}
 #regime-label{display:none}
 #regime-meta{display:none}
+
+/* ── Topbar responsive ── */
+@media (max-width:560px){
+  .topbar{height:auto;flex-wrap:wrap;padding:10px 16px 8px;row-gap:5px;align-items:center}
+  .brand{flex-basis:100%;min-width:0}
+  .brand-sep,.brand-tag{display:none}
+  .topbar-right{width:100%;gap:10px}
+  .btn-topbar{margin-left:auto}
+  .clock{font-size:10px}
+}
 </style>
 </head>
 <body>
@@ -620,7 +630,7 @@ async function checkSessionAndReveal() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  setTimeout(checkSessionAndReveal, 950);
+  setTimeout(checkSessionAndReveal, 2200);
   const form   = document.getElementById('login-form');
   const errEl  = document.getElementById('login-error');
   const submit = document.getElementById('login-submit');
