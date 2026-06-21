@@ -19,6 +19,7 @@ import os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
+import numpy as np
 import pandas as pd
 
 from src.agents.buffett import BuffettAgent
@@ -80,6 +81,165 @@ def _patch_agent_priority(new_priority: dict[str, str]) -> None:
         print("\n⚠️  Impossible de patcher AGENT_PRIORITY automatiquement.")
         print("   Collez manuellement dans src/config.py :")
         print(new_block)
+
+
+# ── P&L helper ────────────────────────────────────────────────────────────────
+
+def _print_pnl_section(
+    df_all: "pd.DataFrame",
+    priority: dict[str, str],
+    symbols: list[str],
+    total_capital: float,
+) -> None:
+    """
+    Print a concrete P&L summary for the AGENT_PRIORITY portfolio.
+
+    Methodology
+    -----------
+    Each OOS window covers TEST_BDAYS ≈ 126 bdays (6 months).
+    avg_oos_return_6m = arithmetic mean of per-window OOS returns.
+    annualized        = (1 + avg_oos_return_6m)^2 − 1
+    oos_years         = calendar span from first test_start to last test_end
+    total_return      = (1 + avg_oos_return_6m)^(oos_years × 2) − 1
+    pnl_$             = (total_capital / n_symbols) × total_return
+
+    Windows overlap by ~50 % (step = 3m, test = 6m), so the compound is an
+    approximation of holding the strategy continuously over the OOS span.
+    """
+    n_sym = len(symbols)
+    cap_per_sym = total_capital / n_sym
+
+    # ── Aggregate per (agent, symbol) ────────────────────────────────────────
+    agg = (
+        df_all
+        .groupby(["agent", "symbol"])
+        .agg(
+            avg_6m_return=("oos_return", "mean"),
+            avg_6m_bench=("benchmark_return", "mean"),
+            n_windows=("oos_return", "count"),
+            oos_start=("test_start", "min"),
+            oos_end=("test_end", "max"),
+        )
+        .reset_index()
+    )
+
+    def _enrich(row):
+        oos_years = (
+            pd.Timestamp(row["oos_end"]) - pd.Timestamp(row["oos_start"])
+        ).days / 365.25
+        n_semi = max(oos_years * 2, 1.0)
+        total_ret  = (1 + row["avg_6m_return"]) ** n_semi - 1
+        total_bench = (1 + row["avg_6m_bench"]) ** n_semi - 1
+        ann = (1 + row["avg_6m_return"]) ** 2 - 1
+        return pd.Series({
+            "oos_years":   round(oos_years, 1),
+            "annualized":  ann,
+            "total_return": total_ret,
+            "total_bench": total_bench,
+            "pnl":         cap_per_sym * total_ret,
+            "bench_pnl":   cap_per_sym * total_bench,
+        })
+
+    enriched = pd.concat([agg, agg.apply(_enrich, axis=1)], axis=1)
+
+    # ── Per-symbol table (AGENT_PRIORITY portfolio) ──────────────────────────
+    W = 79
+    print("\n\n" + "=" * W)
+    print(
+        f"  P&L OOS CONCRET — base {total_capital:,.0f} $"
+        f"  ({n_sym} symboles = {cap_per_sym:,.0f} $/sym)"
+    )
+    print("=" * W)
+    print(
+        f"  {'Sym':<6}  {'Agent':<25}  {'Ann%':>7}  {'Total%':>7}  "
+        f"{'Période':>6}  {'P&L $':>9}  {'vs SPY':>8}"
+    )
+    print("  " + "─" * (W - 2))
+
+    portfolio_pnl    = 0.0
+    portfolio_bench  = 0.0
+    valid_symbols    = 0
+    ann_returns      = []
+
+    for sym in symbols:
+        agent_name = priority.get(sym)
+        if not agent_name:
+            continue
+
+        mask = (enriched["agent"] == agent_name) & (enriched["symbol"] == sym)
+        if not mask.any():
+            continue
+
+        row = enriched[mask].iloc[0]
+        ann    = row["annualized"]
+        total  = row["total_return"]
+        pnl    = row["pnl"]
+        bench  = row["total_bench"]
+        alpha  = total - bench
+        yrs    = row["oos_years"]
+
+        sign_ann   = "+" if ann   >= 0 else ""
+        sign_total = "+" if total >= 0 else ""
+        sign_alpha = "+" if alpha >= 0 else ""
+        pnl_str    = f"{'+' if pnl >= 0 else ''}{pnl:,.0f}"
+
+        print(
+            f"  {sym:<6}  {agent_name:<25}  "
+            f"{sign_ann}{ann*100:>5.1f}%  "
+            f"{sign_total}{total*100:>5.1f}%  "
+            f"{yrs:>5.1f}y  "
+            f"{pnl_str:>9}$  "
+            f"{sign_alpha}{alpha*100:>6.1f}%"
+        )
+
+        portfolio_pnl   += pnl
+        portfolio_bench += row["bench_pnl"]
+        ann_returns.append(ann)
+        valid_symbols   += 1
+
+    # ── Portfolio aggregate ───────────────────────────────────────────────────
+    if valid_symbols:
+        avg_ann = float(np.mean(ann_returns))
+        avg_ann_bench = portfolio_bench / (cap_per_sym * valid_symbols)
+        total_portfolio_ret = portfolio_pnl / total_capital
+        total_bench_ret     = portfolio_bench / total_capital
+        alpha_portfolio     = total_portfolio_ret - total_bench_ret
+
+        print("  " + "─" * (W - 2))
+        sign_p = "+" if portfolio_pnl  >= 0 else ""
+        sign_r = "+" if total_portfolio_ret >= 0 else ""
+        sign_a = "+" if alpha_portfolio >= 0 else ""
+        print(
+            f"  {'PORTFOLIO':32}  "
+            f"{'+' if avg_ann >= 0 else ''}{avg_ann*100:>5.1f}%  "
+            f"{sign_r}{total_portfolio_ret*100:>5.1f}%"
+            f"{'':>8}  "
+            f"{sign_p}{portfolio_pnl:>8,.0f}$  "
+            f"{sign_a}{alpha_portfolio*100:>6.1f}%"
+        )
+        print(
+            f"\n  Retour annualisé moyen (AGENT_PRIORITY) : "
+            f"{'+' if avg_ann >= 0 else ''}{avg_ann*100:.1f}%"
+        )
+        print(
+            f"  P&L total sur {total_capital:,.0f} $ : "
+            f"{'+' if portfolio_pnl >= 0 else ''}{portfolio_pnl:,.0f} $"
+        )
+        print(
+            f"  Alpha portefeuille vs SPY B&H : "
+            f"{'+' if alpha_portfolio >= 0 else ''}{alpha_portfolio*100:.1f}%"
+        )
+    print("=" * W)
+    print(
+        "  Note: retours OOS par fenêtres 6m qui se chevauchent (step 3m)."
+    )
+    print(
+        "  Compound = (1 + avg_6m)^(n_semi_annual)  — approximation valide"
+    )
+    print(
+        "  pour évaluer l'ordre de grandeur du P&L, pas un backtest exact."
+    )
+    print("=" * W)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -205,6 +365,9 @@ def main() -> None:
             print(f"   {c}")
     else:
         print("\n✅ Aucun changement de priorité — OOS confirme les IS.")
+
+    # ── P&L concret : retours OOS en dollars ─────────────────────────────────
+    _print_pnl_section(df_all, new_priority, SYMBOLS, INITIAL_CAPITAL)
 
     # ── Auto-patch config.py ──────────────────────────────────────────────────
     _patch_agent_priority(new_priority)
