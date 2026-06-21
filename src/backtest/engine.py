@@ -99,6 +99,12 @@ class BacktestEngine:
         min_history: int = 210,
         cooldown_days: int = 20,       # minimum 20 jours entre trades (réduit l'over-trading)
         long_bias_bull_threshold: float = 0.90,  # min confidence to exit in bull regime
+        # ── Vol-adjusted sizing ──────────────────────────────────────────────
+        vol_sizing: bool = True,       # halve weight when σ20d > 2×σ1y
+        vol_window: int = 20,
+        vol_lookback: int = 252,
+        vol_multiplier: float = 2.0,
+        size_divisor: float = 2.0,
     ):
         self.agent = agent
         self.initial_capital = initial_capital
@@ -108,6 +114,11 @@ class BacktestEngine:
         self.min_history = min_history
         self.cooldown_days = cooldown_days
         self.long_bias_bull_threshold = long_bias_bull_threshold
+        self.vol_sizing = vol_sizing
+        self.vol_window = vol_window
+        self.vol_lookback = vol_lookback
+        self.vol_multiplier = vol_multiplier
+        self.size_divisor = size_divisor
 
     def run(
         self,
@@ -159,7 +170,19 @@ class BacktestEngine:
 
             # BUY
             if sig.action == "BUY" and position == 0 and days_since_trade >= self.cooldown_days:
-                target_notional = portfolio_value * self.target_weight
+                # ── Vol-adjusted sizing ──────────────────────────────────
+                adj_weight = self.target_weight
+                if self.vol_sizing and i >= self.vol_lookback:
+                    _lr = np.log(
+                        close.iloc[i - self.vol_lookback:i + 1]
+                        / close.iloc[i - self.vol_lookback:i + 1].shift(1)
+                    ).dropna()
+                    if len(_lr) >= self.vol_window:
+                        _v20 = float(_lr.iloc[-self.vol_window:].std() * np.sqrt(252))
+                        _v1y = float(_lr.std() * np.sqrt(252))
+                        if _v1y > 0 and _v20 / _v1y > self.vol_multiplier:
+                            adj_weight = self.target_weight / self.size_divisor
+                target_notional = portfolio_value * adj_weight
                 qty = int(target_notional / px)
                 if qty > 0:
                     cost = qty * px * (1 + friction)
@@ -317,6 +340,11 @@ class WalkForwardEngine:
         slippage_bps: float = 7.0,
         min_history: int = 210,
         cooldown_days: int = 20,
+        vol_sizing: bool = True,
+        vol_window: int = 20,
+        vol_lookback: int = 252,
+        vol_multiplier: float = 2.0,
+        size_divisor: float = 2.0,
     ):
         self.agent = agent
         self.initial_capital = initial_capital
@@ -325,6 +353,11 @@ class WalkForwardEngine:
         self.slippage_bps = slippage_bps
         self.min_history = min_history
         self.cooldown_days = cooldown_days
+        self.vol_sizing = vol_sizing
+        self.vol_window = vol_window
+        self.vol_lookback = vol_lookback
+        self.vol_multiplier = vol_multiplier
+        self.size_divisor = size_divisor
 
     def run(
         self,
@@ -358,6 +391,11 @@ class WalkForwardEngine:
                 slippage_bps=self.slippage_bps,
                 min_history=self.min_history,
                 cooldown_days=self.cooldown_days,
+                vol_sizing=self.vol_sizing,
+                vol_window=self.vol_window,
+                vol_lookback=self.vol_lookback,
+                vol_multiplier=self.vol_multiplier,
+                size_divisor=self.size_divisor,
             )
             close_slice = pd.to_numeric(full_slice["Close"], errors="coerce").dropna()
             regime_series = _compute_regime_series(close_slice)

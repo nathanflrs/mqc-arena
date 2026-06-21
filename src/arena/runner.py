@@ -46,6 +46,8 @@ from src.risk.manager import RiskConfig, RiskManager, DrawdownCircuitBreaker
 from src.risk.allocator import AllocatorConfig, DynamicAllocator
 from src.risk.correlation import CorrelationGuard
 from src.risk.live_scorer import LiveScorer
+from src.risk.earnings_filter import EarningsFilter
+from src.risk.vol_sizing import vol_adjusted_weight
 
 
 def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
@@ -331,6 +333,10 @@ def main() -> None:
         # Télécharge toutes les données en une passe (réutilisées dans la boucle)
         all_data = {sym: download_ohlcv(sym) for sym in WATCHLIST}
 
+        # ====== EARNINGS FILTER — pré-chargement ======
+        earnings_filter = EarningsFilter(buffer_days=3)
+        earnings_filter.prefetch(WATCHLIST)
+
         alloc_agents = [BuffettAgent(), CitadelAgent(), MeanReversionAgent(), TrendFollowingAgent()]
         alloc_result = DynamicAllocator(AllocatorConfig()).compute(all_data, alloc_agents)
 
@@ -385,6 +391,27 @@ def main() -> None:
                     f"α={alpha:.2f} → {blended_w:.3f} ({n_trips} trips)"
                 )
                 winner = dataclasses.replace(winner, target_weight=blended_w)
+
+            # ── Vol-adjusted sizing ──────────────────────────────────────────
+            if winner.action == "BUY":
+                adj_w, vol_reason = vol_adjusted_weight(df, winner.target_weight)
+                if vol_reason:
+                    print(f"   Vol sizing {sym}: {vol_reason}")
+                    winner = dataclasses.replace(winner, target_weight=adj_w)
+
+            # ── Earnings filter — block BUY within 3 bdays of earnings ──────
+            if winner.action == "BUY":
+                blocked, earn_reason = earnings_filter.should_block_buy(sym)
+                if blocked:
+                    msg = f"Earnings filter: {sym} BUY blocked — {earn_reason}"
+                    print(msg)
+                    if not ci_mode:
+                        send_message(f"📅 {msg}")
+                    winner = dataclasses.replace(
+                        winner,
+                        action="HOLD",
+                        reason=f"EARNINGS_BLOCK: {earn_reason}",
+                    )
 
             last_px = get_last_close_1d(df)
             current_qty = snap.positions.get(sym, 0.0)
