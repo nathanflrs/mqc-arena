@@ -83,7 +83,36 @@ def _patch_agent_priority(new_priority: dict[str, str]) -> None:
         print(new_block)
 
 
-# ── P&L helper ────────────────────────────────────────────────────────────────
+# ── P&L helpers ───────────────────────────────────────────────────────────────
+
+def _add_asset_bh(df_all: "pd.DataFrame", all_data: dict) -> "pd.DataFrame":
+    """
+    Add 'asset_bh_return' column = asset own buy-and-hold on each OOS window.
+    Uses test_start / test_end dates from df_all and raw prices from all_data.
+    Safe: returns nan for any window where prices are unavailable.
+    """
+    vals: list[float] = []
+    for _, row in df_all.iterrows():
+        df = all_data.get(row["symbol"])
+        if df is None:
+            vals.append(float("nan"))
+            continue
+        prices = pd.to_numeric(df["Close"], errors="coerce").dropna()
+        try:
+            t0 = pd.Timestamp(row["test_start"])
+            t1 = pd.Timestamp(row["test_end"])
+            i0 = prices.index.searchsorted(t0)
+            i1 = prices.index.searchsorted(t1, side="right") - 1
+            if 0 <= i0 <= i1 < len(prices):
+                vals.append(round(float(prices.iloc[i1] / prices.iloc[i0] - 1), 4))
+            else:
+                vals.append(float("nan"))
+        except Exception:
+            vals.append(float("nan"))
+    out = df_all.copy()
+    out["asset_bh_return"] = vals
+    return out
+
 
 def _print_pnl_section(  # noqa: C901
     df_all: "pd.DataFrame",
@@ -115,6 +144,8 @@ def _print_pnl_section(  # noqa: C901
     # directly without double-counting returns.
     df_even = df_all[df_all["window"] % 2 == 0].copy()
 
+    has_asset_bh = "asset_bh_return" in df_even.columns
+
     # ── Compute geometric compound per (agent, symbol) ───────────────────────
     rows_out = []
     for ag in df_even["agent"].unique():
@@ -125,12 +156,23 @@ def _print_pnl_section(  # noqa: C901
             )
             if sub.empty:
                 continue
-            oos = sub["oos_return"].to_numpy(dtype=float)
-            bench = sub["benchmark_return"].to_numpy(dtype=float)
+            oos   = sub["oos_return"].to_numpy(dtype=float)
+            spy   = sub["benchmark_return"].to_numpy(dtype=float)
+            bh    = (
+                sub["asset_bh_return"].to_numpy(dtype=float)
+                if has_asset_bh else np.full_like(oos, float("nan"))
+            )
             n = len(oos)
             compound_strat = float(np.prod(1.0 + oos)) - 1.0
-            compound_bench = float(np.prod(1.0 + bench)) - 1.0
-            oos_years = n * 0.5   # each independent window = 6m = 0.5y
+            compound_spy   = (
+                float(np.prod(1.0 + spy[~np.isnan(spy)])) - 1.0
+                if not np.all(np.isnan(spy)) else float("nan")
+            )
+            compound_bh    = (
+                float(np.prod(1.0 + bh[~np.isnan(bh)])) - 1.0
+                if not np.all(np.isnan(bh)) else float("nan")
+            )
+            oos_years = n * 0.5
             ann = (
                 float((1.0 + compound_strat) ** (1.0 / oos_years) - 1.0)
                 if oos_years > 0 and compound_strat > -1.0 else float("nan")
@@ -139,14 +181,14 @@ def _print_pnl_section(  # noqa: C901
                 "agent":           ag,
                 "symbol":          sym,
                 "compound_return": compound_strat,
-                "compound_bench":  compound_bench,
+                "compound_spy":    compound_spy,
+                "compound_bh":     compound_bh,
                 "annualized":      ann,
                 "oos_years":       oos_years,
                 "n_windows":       n,
                 "median_6m":       float(np.median(oos)),
                 "max_6m":          float(np.max(oos)),
                 "pnl":             cap_per_sym * compound_strat,
-                "bench_pnl":       cap_per_sym * compound_bench,
             })
 
     if not rows_out:
@@ -156,32 +198,31 @@ def _print_pnl_section(  # noqa: C901
     agg = pd.DataFrame(rows_out)
 
     # ── Per-symbol table ──────────────────────────────────────────────────────
-    W = 93
+    W = 101
     print("\n\n" + "=" * W)
     print(
         f"  P&L OOS — base {total_capital:,.0f} $  ({n_sym} sym x {cap_per_sym:,.0f} $/sym)"
     )
     print(
-        "  Methode: produit des fenetres OOS non-chevauchantes (indices pairs 0,2,4,...)."
+        "  Compound = produit des fenetres non-chevauchantes (indices pairs 0,2,4,...)."
     )
-    print(
-        "  Benchmark = asset B&H sur chaque periode OOS  [PAS SPY]."
-    )
+    spy_label = "vs SPY" if not has_asset_bh or True else "vs bench"
     print("=" * W)
     print(
         f"  {'Sym':<6}  {'Agent':<25}  {'Ann%':>7}  {'Compound%':>10}  "
-        f"{'Periode':>7}  {'P&L $':>10}  {'vs B&H':>8}  {'Med 6m':>7}  {'Max 6m':>7}"
+        f"{'Periode':>7}  {'P&L $':>10}  {spy_label:>8}  {'vs B&H':>8}  {'Med 6m':>7}  {'Max 6m':>7}"
     )
     print("  " + "-" * (W - 2))
 
-    portfolio_pnl   = 0.0
-    portfolio_bench = 0.0
-    ann_list        = []
-    valid_symbols   = 0
+    portfolio_pnl    = 0.0
+    port_spy_bench   = 0.0
+    port_bh_bench    = 0.0
+    ann_list         = []
+    valid_symbols    = 0
 
     def _pct(v: float, width: int = 7) -> str:
         if v != v:  # nan check
-            return f"{'nan':>{width}}"
+            return f"{'n/a':>{width}}"
         s = f"{'+' if v >= 0 else ''}{v * 100:.1f}%"
         return f"{s:>{width}}"
 
@@ -193,62 +234,70 @@ def _print_pnl_section(  # noqa: C901
         if not mask.any():
             continue
 
-        r = agg[mask].iloc[0]
-        ann   = r["annualized"]
-        total = r["compound_return"]
-        pnl   = r["pnl"]
-        alpha = total - r["compound_bench"]
-        yrs   = r["oos_years"]
-        med   = r["median_6m"]
-        mx    = r["max_6m"]
-        flag  = " !" if abs(mx) > 0.50 else "  "
+        r       = agg[mask].iloc[0]
+        ann     = r["annualized"]
+        total   = r["compound_return"]
+        pnl     = r["pnl"]
+        c_spy   = r["compound_spy"]
+        c_bh    = r["compound_bh"]
+        alpha_spy = total - c_spy if c_spy == c_spy else float("nan")
+        alpha_bh  = total - c_bh  if c_bh  == c_bh  else float("nan")
+        yrs     = r["oos_years"]
+        med     = r["median_6m"]
+        mx      = r["max_6m"]
+        flag    = " !" if abs(mx) > 0.50 else "  "
 
         pnl_str = f"{'+' if pnl >= 0 else ''}{pnl:,.0f}$"
         print(
             f"  {sym:<6}  {agent_name:<25}  "
             f"{_pct(ann)}  {_pct(total, 10)}  "
             f"{yrs:>6.1f}y  {pnl_str:>10}  "
-            f"{_pct(alpha)}  {_pct(med)}  {_pct(mx)}{flag}"
+            f"{_pct(alpha_spy)}  {_pct(alpha_bh)}  {_pct(med)}  {_pct(mx)}{flag}"
         )
 
-        portfolio_pnl   += pnl
-        portfolio_bench += r["bench_pnl"]
-        if ann == ann:  # not nan
+        portfolio_pnl  += pnl
+        if c_spy == c_spy:
+            port_spy_bench += cap_per_sym * c_spy
+        if c_bh == c_bh:
+            port_bh_bench  += cap_per_sym * c_bh
+        if ann == ann:
             ann_list.append(ann)
         valid_symbols += 1
 
     # ── Portfolio aggregate ───────────────────────────────────────────────────
     if valid_symbols and ann_list:
-        avg_ann    = float(np.mean(ann_list))
-        port_ret   = portfolio_pnl / total_capital
-        bench_ret  = portfolio_bench / total_capital
-        alpha_port = port_ret - bench_ret
+        avg_ann       = float(np.mean(ann_list))
+        port_ret      = portfolio_pnl  / total_capital
+        spy_bench_ret = port_spy_bench / total_capital
+        bh_bench_ret  = port_bh_bench  / total_capital
+        alpha_spy_p   = port_ret - spy_bench_ret
+        alpha_bh_p    = port_ret - bh_bench_ret
 
         print("  " + "-" * (W - 2))
         pnl_str = f"{'+' if portfolio_pnl >= 0 else ''}{portfolio_pnl:,.0f}$"
         print(
             f"  {'PORTFOLIO (equal-weight)':<32} "
             f"{_pct(avg_ann)}  {_pct(port_ret, 10)}"
-            f"{'':>9}  {pnl_str:>10}  {_pct(alpha_port)}"
+            f"{'':>9}  {pnl_str:>10}  "
+            f"{_pct(alpha_spy_p)}  {_pct(alpha_bh_p)}"
         )
         print()
         print(f"  Retour annualise moyen    : {'+' if avg_ann >= 0 else ''}{avg_ann * 100:.1f}%")
         print(f"  P&L total / {total_capital:,.0f} $  : {'+' if portfolio_pnl >= 0 else ''}{portfolio_pnl:,.0f} $")
-        print(f"  Alpha vs asset B&H         : {'+' if alpha_port >= 0 else ''}{alpha_port * 100:.1f}%")
-        if alpha_port < 0:
+        print(f"  Alpha vs SPY (marche)      : {_pct(alpha_spy_p).strip()}")
+        print(f"  Alpha vs asset B&H         : {_pct(alpha_bh_p).strip()}")
+        if alpha_bh_p == alpha_bh_p and alpha_bh_p < 0:
             print(
-                "  -> Alpha negatif = le systeme a sous-performe le B&H de son propre univers."
+                "  -> Alpha B&H negatif = sur ce bull market, rester long passif aurait"
             )
             print(
-                "     Interpretation: sur un bull market extreme (ex: NVDA x10), rester long"
-            )
-            print(
-                "     sans trader aurait mieux marche. C'est informatif, pas une erreur de code."
+                "     mieux marche que trader activement. Signal utile, pas une erreur."
             )
 
     print("=" * W)
-    print("  '!' = une fenetre individuelle > 50% (ex: NVDA boom IA 2023 H1).")
-    print("  Alpha vs B&H != alpha vs SPY. Pour alpha marche: passer spy_df comme benchmark_df.")
+    print("  '!' = fenetre individuelle > 50% (ex: NVDA boom IA 2023 H1).")
+    print("  vs SPY = alpha marche reel (benchmark_df=spy_df passe au WalkForwardEngine).")
+    print("  vs B&H = alpha vs achat-detention de l'actif lui-meme sur la meme periode.")
     print("=" * W)
 
 
@@ -272,6 +321,13 @@ def main() -> None:
         except Exception as e:
             print(f"   ⚠️  {sym}: {e}")
 
+    # ── SPY as true market benchmark ──────────────────────────────────────────
+    spy_df = all_data.get("SPY")
+    if spy_df is not None:
+        print(f"   SPY benchmark: {len(spy_df)} jours — alpha vs marche actif")
+    else:
+        print("   ⚠️  SPY indisponible — benchmark_return = asset B&H (fallback)")
+
     # ── Run walk-forward ──────────────────────────────────────────────────────
     all_results: list[WalkForwardResult] = []
 
@@ -287,7 +343,7 @@ def main() -> None:
                 continue
 
             engine = WalkForwardEngine(agent=agent, initial_capital=INITIAL_CAPITAL)
-            result = engine.run(symbol=sym, df=df)
+            result = engine.run(symbol=sym, df=df, benchmark_df=spy_df)
 
             warn = " ⚠️  LOOKAHEAD?" if result.lookahead_warning else ""
             oos_s = result.avg_oos_sharpe
@@ -310,6 +366,9 @@ def main() -> None:
         all_rows.extend(r.to_csv_rows())
 
     df_all = pd.DataFrame(all_rows)
+
+    # Add asset buy-and-hold return for each window (used for vs B&H column)
+    df_all = _add_asset_bh(df_all, all_data)
 
     # Sanitize overflow Sharpe values (flat equity / no trades → near-zero std)
     sharpe_cols = [c for c in ["oos_sharpe", "is_sharpe", "avg_oos_sharpe", "avg_is_sharpe"]
