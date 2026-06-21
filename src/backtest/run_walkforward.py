@@ -85,160 +85,170 @@ def _patch_agent_priority(new_priority: dict[str, str]) -> None:
 
 # ── P&L helper ────────────────────────────────────────────────────────────────
 
-def _print_pnl_section(
+def _print_pnl_section(  # noqa: C901
     df_all: "pd.DataFrame",
     priority: dict[str, str],
     symbols: list[str],
     total_capital: float,
 ) -> None:
     """
-    Print a concrete P&L summary for the AGENT_PRIORITY portfolio.
+    Correct P&L summary using non-overlapping OOS windows.
 
-    Methodology
-    -----------
-    Each OOS window covers TEST_BDAYS ≈ 126 bdays (6 months).
-    avg_oos_return_6m = arithmetic mean of per-window OOS returns.
-    annualized        = (1 + avg_oos_return_6m)^2 − 1
-    oos_years         = calendar span from first test_start to last test_end
-    total_return      = (1 + avg_oos_return_6m)^(oos_years × 2) − 1
-    pnl_$             = (total_capital / n_symbols) × total_return
+    Step=3m, Test=6m -> windows 0,1,2,... overlap by 50%.
+    Only even-indexed windows (0,2,4,...) are mutually non-overlapping.
+    compound = prod(1 + r_i for i in even windows) - 1
+    annualized = (1 + compound)^(1/oos_years) - 1  where oos_years = n_even * 0.5
 
-    Windows overlap by ~50 % (step = 3m, test = 6m), so the compound is an
-    approximation of holding the strategy continuously over the OOS span.
+    Benchmark = asset own B&H per OOS period (NOT SPY).
+    Alpha < 0 means strategy underperformed holding the stock outright.
     """
     n_sym = len(symbols)
     cap_per_sym = total_capital / n_sym
 
-    # ── Aggregate per (agent, symbol) ────────────────────────────────────────
-    agg = (
-        df_all
-        .groupby(["agent", "symbol"])
-        .agg(
-            avg_6m_return=("oos_return", "mean"),
-            avg_6m_bench=("benchmark_return", "mean"),
-            n_windows=("oos_return", "count"),
-            oos_start=("test_start", "min"),
-            oos_end=("test_end", "max"),
-        )
-        .reset_index()
-    )
+    if "window" not in df_all.columns:
+        print("\n  [P&L] colonne 'window' absente — skipping.")
+        return
 
-    def _enrich(row):
-        oos_years = (
-            pd.Timestamp(row["oos_end"]) - pd.Timestamp(row["oos_start"])
-        ).days / 365.25
-        n_semi = max(oos_years * 2, 1.0)
-        total_ret  = (1 + row["avg_6m_return"]) ** n_semi - 1
-        total_bench = (1 + row["avg_6m_bench"]) ** n_semi - 1
-        ann = (1 + row["avg_6m_return"]) ** 2 - 1
-        return pd.Series({
-            "oos_years":   round(oos_years, 1),
-            "annualized":  ann,
-            "total_return": total_ret,
-            "total_bench": total_bench,
-            "pnl":         cap_per_sym * total_ret,
-            "bench_pnl":   cap_per_sym * total_bench,
-        })
+    # ── Non-overlapping windows (even indices 0, 2, 4, ...) ──────────────────
+    # Step=3m, Test=6m -> consecutive windows share 3m of data (50% overlap).
+    # Even-indexed windows cover distinct 6m OOS periods and can be compounded
+    # directly without double-counting returns.
+    df_even = df_all[df_all["window"] % 2 == 0].copy()
 
-    enriched = pd.concat([agg, agg.apply(_enrich, axis=1)], axis=1)
+    # ── Compute geometric compound per (agent, symbol) ───────────────────────
+    rows_out = []
+    for ag in df_even["agent"].unique():
+        for sym in df_even["symbol"].unique():
+            sub = (
+                df_even[(df_even["agent"] == ag) & (df_even["symbol"] == sym)]
+                .sort_values("window")
+            )
+            if sub.empty:
+                continue
+            oos = sub["oos_return"].to_numpy(dtype=float)
+            bench = sub["benchmark_return"].to_numpy(dtype=float)
+            n = len(oos)
+            compound_strat = float(np.prod(1.0 + oos)) - 1.0
+            compound_bench = float(np.prod(1.0 + bench)) - 1.0
+            oos_years = n * 0.5   # each independent window = 6m = 0.5y
+            ann = (
+                float((1.0 + compound_strat) ** (1.0 / oos_years) - 1.0)
+                if oos_years > 0 and compound_strat > -1.0 else float("nan")
+            )
+            rows_out.append({
+                "agent":           ag,
+                "symbol":          sym,
+                "compound_return": compound_strat,
+                "compound_bench":  compound_bench,
+                "annualized":      ann,
+                "oos_years":       oos_years,
+                "n_windows":       n,
+                "median_6m":       float(np.median(oos)),
+                "max_6m":          float(np.max(oos)),
+                "pnl":             cap_per_sym * compound_strat,
+                "bench_pnl":       cap_per_sym * compound_bench,
+            })
 
-    # ── Per-symbol table (AGENT_PRIORITY portfolio) ──────────────────────────
-    W = 79
+    if not rows_out:
+        print("\n  [P&L] aucune fenetre paire — skipping.")
+        return
+
+    agg = pd.DataFrame(rows_out)
+
+    # ── Per-symbol table ──────────────────────────────────────────────────────
+    W = 93
     print("\n\n" + "=" * W)
     print(
-        f"  P&L OOS CONCRET — base {total_capital:,.0f} $"
-        f"  ({n_sym} symboles = {cap_per_sym:,.0f} $/sym)"
+        f"  P&L OOS — base {total_capital:,.0f} $  ({n_sym} sym x {cap_per_sym:,.0f} $/sym)"
+    )
+    print(
+        "  Methode: produit des fenetres OOS non-chevauchantes (indices pairs 0,2,4,...)."
+    )
+    print(
+        "  Benchmark = asset B&H sur chaque periode OOS  [PAS SPY]."
     )
     print("=" * W)
     print(
-        f"  {'Sym':<6}  {'Agent':<25}  {'Ann%':>7}  {'Total%':>7}  "
-        f"{'Période':>6}  {'P&L $':>9}  {'vs SPY':>8}"
+        f"  {'Sym':<6}  {'Agent':<25}  {'Ann%':>7}  {'Compound%':>10}  "
+        f"{'Periode':>7}  {'P&L $':>10}  {'vs B&H':>8}  {'Med 6m':>7}  {'Max 6m':>7}"
     )
-    print("  " + "─" * (W - 2))
+    print("  " + "-" * (W - 2))
 
-    portfolio_pnl    = 0.0
-    portfolio_bench  = 0.0
-    valid_symbols    = 0
-    ann_returns      = []
+    portfolio_pnl   = 0.0
+    portfolio_bench = 0.0
+    ann_list        = []
+    valid_symbols   = 0
+
+    def _pct(v: float, width: int = 7) -> str:
+        if v != v:  # nan check
+            return f"{'nan':>{width}}"
+        s = f"{'+' if v >= 0 else ''}{v * 100:.1f}%"
+        return f"{s:>{width}}"
 
     for sym in symbols:
         agent_name = priority.get(sym)
         if not agent_name:
             continue
-
-        mask = (enriched["agent"] == agent_name) & (enriched["symbol"] == sym)
+        mask = (agg["agent"] == agent_name) & (agg["symbol"] == sym)
         if not mask.any():
             continue
 
-        row = enriched[mask].iloc[0]
-        ann    = row["annualized"]
-        total  = row["total_return"]
-        pnl    = row["pnl"]
-        bench  = row["total_bench"]
-        alpha  = total - bench
-        yrs    = row["oos_years"]
+        r = agg[mask].iloc[0]
+        ann   = r["annualized"]
+        total = r["compound_return"]
+        pnl   = r["pnl"]
+        alpha = total - r["compound_bench"]
+        yrs   = r["oos_years"]
+        med   = r["median_6m"]
+        mx    = r["max_6m"]
+        flag  = " !" if abs(mx) > 0.50 else "  "
 
-        sign_ann   = "+" if ann   >= 0 else ""
-        sign_total = "+" if total >= 0 else ""
-        sign_alpha = "+" if alpha >= 0 else ""
-        pnl_str    = f"{'+' if pnl >= 0 else ''}{pnl:,.0f}"
-
+        pnl_str = f"{'+' if pnl >= 0 else ''}{pnl:,.0f}$"
         print(
             f"  {sym:<6}  {agent_name:<25}  "
-            f"{sign_ann}{ann*100:>5.1f}%  "
-            f"{sign_total}{total*100:>5.1f}%  "
-            f"{yrs:>5.1f}y  "
-            f"{pnl_str:>9}$  "
-            f"{sign_alpha}{alpha*100:>6.1f}%"
+            f"{_pct(ann)}  {_pct(total, 10)}  "
+            f"{yrs:>6.1f}y  {pnl_str:>10}  "
+            f"{_pct(alpha)}  {_pct(med)}  {_pct(mx)}{flag}"
         )
 
         portfolio_pnl   += pnl
-        portfolio_bench += row["bench_pnl"]
-        ann_returns.append(ann)
-        valid_symbols   += 1
+        portfolio_bench += r["bench_pnl"]
+        if ann == ann:  # not nan
+            ann_list.append(ann)
+        valid_symbols += 1
 
     # ── Portfolio aggregate ───────────────────────────────────────────────────
-    if valid_symbols:
-        avg_ann = float(np.mean(ann_returns))
-        avg_ann_bench = portfolio_bench / (cap_per_sym * valid_symbols)
-        total_portfolio_ret = portfolio_pnl / total_capital
-        total_bench_ret     = portfolio_bench / total_capital
-        alpha_portfolio     = total_portfolio_ret - total_bench_ret
+    if valid_symbols and ann_list:
+        avg_ann    = float(np.mean(ann_list))
+        port_ret   = portfolio_pnl / total_capital
+        bench_ret  = portfolio_bench / total_capital
+        alpha_port = port_ret - bench_ret
 
-        print("  " + "─" * (W - 2))
-        sign_p = "+" if portfolio_pnl  >= 0 else ""
-        sign_r = "+" if total_portfolio_ret >= 0 else ""
-        sign_a = "+" if alpha_portfolio >= 0 else ""
+        print("  " + "-" * (W - 2))
+        pnl_str = f"{'+' if portfolio_pnl >= 0 else ''}{portfolio_pnl:,.0f}$"
         print(
-            f"  {'PORTFOLIO':32}  "
-            f"{'+' if avg_ann >= 0 else ''}{avg_ann*100:>5.1f}%  "
-            f"{sign_r}{total_portfolio_ret*100:>5.1f}%"
-            f"{'':>8}  "
-            f"{sign_p}{portfolio_pnl:>8,.0f}$  "
-            f"{sign_a}{alpha_portfolio*100:>6.1f}%"
+            f"  {'PORTFOLIO (equal-weight)':<32} "
+            f"{_pct(avg_ann)}  {_pct(port_ret, 10)}"
+            f"{'':>9}  {pnl_str:>10}  {_pct(alpha_port)}"
         )
-        print(
-            f"\n  Retour annualisé moyen (AGENT_PRIORITY) : "
-            f"{'+' if avg_ann >= 0 else ''}{avg_ann*100:.1f}%"
-        )
-        print(
-            f"  P&L total sur {total_capital:,.0f} $ : "
-            f"{'+' if portfolio_pnl >= 0 else ''}{portfolio_pnl:,.0f} $"
-        )
-        print(
-            f"  Alpha portefeuille vs SPY B&H : "
-            f"{'+' if alpha_portfolio >= 0 else ''}{alpha_portfolio*100:.1f}%"
-        )
+        print()
+        print(f"  Retour annualise moyen    : {'+' if avg_ann >= 0 else ''}{avg_ann * 100:.1f}%")
+        print(f"  P&L total / {total_capital:,.0f} $  : {'+' if portfolio_pnl >= 0 else ''}{portfolio_pnl:,.0f} $")
+        print(f"  Alpha vs asset B&H         : {'+' if alpha_port >= 0 else ''}{alpha_port * 100:.1f}%")
+        if alpha_port < 0:
+            print(
+                "  -> Alpha negatif = le systeme a sous-performe le B&H de son propre univers."
+            )
+            print(
+                "     Interpretation: sur un bull market extreme (ex: NVDA x10), rester long"
+            )
+            print(
+                "     sans trader aurait mieux marche. C'est informatif, pas une erreur de code."
+            )
+
     print("=" * W)
-    print(
-        "  Note: retours OOS par fenêtres 6m qui se chevauchent (step 3m)."
-    )
-    print(
-        "  Compound = (1 + avg_6m)^(n_semi_annual)  — approximation valide"
-    )
-    print(
-        "  pour évaluer l'ordre de grandeur du P&L, pas un backtest exact."
-    )
+    print("  '!' = une fenetre individuelle > 50% (ex: NVDA boom IA 2023 H1).")
+    print("  Alpha vs B&H != alpha vs SPY. Pour alpha marche: passer spy_df comme benchmark_df.")
     print("=" * W)
 
 
