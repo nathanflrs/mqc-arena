@@ -30,6 +30,33 @@ def plan_from_signal(
     Ici on fait SIMPLE: target_$ = netliq * target_weight.
     target_qty = target_$ / price.
     """
+    # SELL: full exit regardless of target_weight (agents emit target_weight=0 on SELL)
+    if signal.action == "SELL":
+        delta = -float(current_qty)
+        if abs(delta) < 1e-9:
+            return OrderPlan(
+                symbol=signal.symbol,
+                action="HOLD",
+                target_weight=0.0,
+                last_price=float(last_price),
+                current_qty=float(current_qty),
+                target_qty=float(current_qty),
+                delta_qty=0.0,
+                est_notional=0.0,
+                reason="Already flat",
+            )
+        return OrderPlan(
+            symbol=signal.symbol,
+            action="SELL",
+            target_weight=0.0,
+            last_price=float(last_price),
+            current_qty=float(current_qty),
+            target_qty=0.0,
+            delta_qty=delta,
+            est_notional=abs(delta) * float(last_price),
+            reason=signal.reason,
+        )
+
     if signal.action == "HOLD" or signal.target_weight <= 0:
         return OrderPlan(
             symbol=signal.symbol,

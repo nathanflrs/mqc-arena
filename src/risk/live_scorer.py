@@ -132,44 +132,57 @@ def _sharpe_from_roundtrips(trips: List[RoundTrip], risk_free: float = 0.04) -> 
     return float(excess.mean() / std * np.sqrt(trades_per_year))
 
 
+# ── Transaction cost model (per round-trip) ───────────────────────────────────
+_TC_SPREAD_PER_LEG: float = 0.0002   # 2 bps bid-ask spread per leg (entry + exit)
+_TC_COMMISSION:     float = 0.0005   # 5 bps commission per round-trip
+_TC_ROUND_TRIP:     float = 2 * _TC_SPREAD_PER_LEG + _TC_COMMISSION  # 9 bps total
+
+
 def kelly_half_fraction(
     trips: List[RoundTrip],
     min_trades: int = 10,
     max_fraction: float = 0.25,
 ) -> float:
     """
-    Half-Kelly criterion: optimal position size = f*/2 to reduce variance.
+    Half-Kelly criterion: f*/2, computed on **net** returns after transaction costs.
 
-    f* = (p * b - q) / b
-    where:
-        p = win rate (fraction of profitable trades)
-        q = 1 - p
-        b = avg_win / avg_loss  (odds ratio)
+    Transaction cost model (per round-trip):
+        - spread (entry + exit) = 2 × 2 bps = 4 bps
+        - commission             = 5 bps
+        - total                  = 9 bps  (_TC_ROUND_TRIP)
 
-    Returns 0.0 if fewer than *min_trades* round-trips (estimates too noisy).
+    Returns 0.0 if:
+        - fewer than *min_trades* round-trips (estimates too noisy), OR
+        - mean net return ≤ 0 (edge doesn't clear transaction costs).
+
     Capped at *max_fraction* (default 25%) regardless of formula output.
     """
     if len(trips) < min_trades:
         return 0.0
 
-    returns = np.array([t.return_pct for t in trips])
-    wins  = returns[returns > 0]
-    losses = np.abs(returns[returns < 0])
+    gross_returns = np.array([t.return_pct for t in trips])
+    net_returns   = gross_returns - _TC_ROUND_TRIP
 
-    p = len(wins) / len(returns)
+    # No trade if the average net edge is non-positive
+    if net_returns.mean() <= 0:
+        return 0.0
+
+    wins   = net_returns[net_returns > 0]
+    losses = np.abs(net_returns[net_returns < 0])
+
+    p = len(wins) / len(net_returns)
     q = 1.0 - p
 
     if len(wins) == 0 or len(losses) == 0:
         return 0.0
 
-    b = float(wins.mean()) / float(losses.mean())  # avg win / avg loss
+    b = float(wins.mean()) / float(losses.mean())
     if b <= 0:
         return 0.0
 
-    f_star = (p * b - q) / b
+    f_star     = (p * b - q) / b
     half_kelly = f_star / 2.0
 
-    # Clamp: never short (negative) and never exceed max_fraction
     return float(np.clip(half_kelly, 0.0, max_fraction))
 
 
@@ -251,26 +264,42 @@ class LiveScorer:
             if pid and sym and is_winner and agent:
                 winner_map[(pid, sym)] = agent
 
-        open_positions: Dict[str, Tuple[str, float, pd.Timestamp]] = {}
+        # FIFO queue per symbol — multiple concurrent BUYs on the same ticker are
+        # matched in order rather than overwriting each other.
+        open_positions: Dict[str, List[Tuple[str, float, pd.Timestamp]]] = {}
         roundtrips: List[RoundTrip] = []
 
         for _, row in exc.sort_values("timestamp").iterrows():
             sym = str(row.get("symbol", ""))
             side = str(row.get("side", "")).upper()
             pid = str(row.get("plan_id", ""))
-            price = self._safe_float(row.get("limit_price") or row.get("last_price"))
+
+            # Prefer actual fill price; fall back to limit then signal price.
+            # Skip BUY rows where avg_fill_price=0 (order was not filled).
+            fill_px = self._safe_float(row.get("avg_fill_price"))
+            if fill_px is not None and fill_px > 0:
+                price = fill_px
+            else:
+                price = self._safe_float(row.get("limit_price") or row.get("last_price"))
+
             ts = pd.to_datetime(row.get("timestamp"), utc=True, errors="coerce")
 
             if not sym or not side or price is None or pd.isna(ts):
                 continue
 
             if side == "BUY":
+                # Skip unfilled orders (avg_fill_price=0 in new schema)
+                raw_fill = self._safe_float(row.get("avg_fill_price"))
+                if raw_fill is not None and raw_fill == 0.0:
+                    continue
                 agent = winner_map.get((pid, sym), "")
                 if agent:
-                    open_positions[sym] = (agent, price, ts)
+                    open_positions.setdefault(sym, []).append((agent, price, ts))
 
-            elif side == "SELL" and sym in open_positions:
-                agent, entry_price, entry_date = open_positions.pop(sym)
+            elif side == "SELL" and open_positions.get(sym):
+                agent, entry_price, entry_date = open_positions[sym].pop(0)
+                if not open_positions[sym]:
+                    del open_positions[sym]
                 roundtrips.append(RoundTrip(
                     agent=agent,
                     symbol=sym,

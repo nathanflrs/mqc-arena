@@ -37,16 +37,19 @@ def _compute_regime_series(close: pd.Series) -> pd.Series:
     """
     Per-day regime label from SMA50/SMA200 — used by WalkForwardEngine
     so agents receive regime context during historical backtest.
-    - bull  : close > SMA200 AND SMA50 > SMA200
-    - bear  : close < SMA200 AND SMA50 < SMA200
+
+    Predicates mirror src/data/regime.py detect_regime() exactly so that
+    IS/OOS regime-conditioned Sharpe comparisons are valid:
+    - bull  : close > SMA50 AND SMA50 > SMA200
+    - bear  : close < SMA50 AND SMA50 < SMA200
     - choppy: else (incl. insufficient history for SMA200)
     """
     sma50 = close.rolling(50).mean()
     sma200 = close.rolling(200).mean()
     regime = pd.Series("choppy", index=close.index, dtype=object)
-    valid = sma200.notna()
-    regime[valid & (close > sma200) & (sma50 > sma200)] = "bull"
-    regime[valid & (close < sma200) & (sma50 < sma200)] = "bear"
+    valid = sma200.notna() & sma50.notna()
+    regime[valid & (close > sma50) & (sma50 > sma200)] = "bull"
+    regime[valid & (close < sma50) & (sma50 < sma200)] = "bear"
     return regime
 
 

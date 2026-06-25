@@ -96,6 +96,24 @@ def require_auth(request: Request) -> str:
 JOBS: Dict[str, Dict[str, Any]] = {}
 LOG_QUEUES: Dict[str, asyncio.Queue] = {}
 
+# ── Brute-force protection for /api/login ────────────────────────────────────
+import time as _time
+_LOGIN_ATTEMPTS: Dict[str, list] = {}   # ip → [timestamp, ...]
+_MAX_ATTEMPTS = 5
+_LOCKOUT_SECONDS = 300   # 5 minutes
+
+
+def _check_login_rate(ip: str) -> bool:
+    """Returns True if allowed, False if locked out."""
+    now = _time.monotonic()
+    attempts = [t for t in _LOGIN_ATTEMPTS.get(ip, []) if now - t < _LOCKOUT_SECONDS]
+    _LOGIN_ATTEMPTS[ip] = attempts
+    return len(attempts) < _MAX_ATTEMPTS
+
+
+def _record_failed_login(ip: str) -> None:
+    _LOGIN_ATTEMPTS.setdefault(ip, []).append(_time.monotonic())
+
 LOCAL_COMMANDS = {
     "run":         [sys.executable, "-m", "src.arena.runner"],
     "shadow":      [sys.executable, "-m", "src.backtest.shadow_mode"],
@@ -196,11 +214,19 @@ self.addEventListener('fetch', e => {
 # ── Auth routes ───────────────────────────────────────────────────────────────
 @app.post("/api/login")
 async def login(request: Request):
+    ip = request.client.host if request.client else "unknown"
+    if not _check_login_rate(ip):
+        return JSONResponse(
+            {"error": "Trop de tentatives. Réessayez dans 5 minutes."},
+            status_code=429,
+        )
+
     body = await request.json()
     username = str(body.get("username", "")).strip()
     password = str(body.get("password", ""))
 
     if not auth_mod.verify_login(username, password):
+        _record_failed_login(ip)
         return JSONResponse({"error": "Identifiant ou mot de passe incorrect."}, status_code=401)
 
     token = auth_mod.create_session_token(username)
@@ -229,7 +255,7 @@ def session_info(request: Request):
 
 # ── Mode ──────────────────────────────────────────────────────────────────────
 @app.get("/api/mode")
-def get_mode():
+def get_mode(user: str = Depends(require_auth)):
     return {
         "cloud": IS_CLOUD,
         "github_owner": GITHUB_OWNER,
@@ -274,8 +300,14 @@ async def stream_logs(job_id: str, user: str = Depends(require_auth)):
 
 
 # ── Cloud: trigger GitHub Actions ─────────────────────────────────────────────
+_VALID_TRIGGER_COMMANDS = frozenset(LOCAL_COMMANDS.keys())  # {"run","shadow","backtest","walkforward"}
+
+
 @app.post("/api/trigger/{command}")
 def trigger_github(command: str, user: str = Depends(require_auth)):
+    if command not in _VALID_TRIGGER_COMMANDS:
+        raise HTTPException(status_code=400, detail=f"Unknown command: {command}")
+
     if not IS_CLOUD:
         return JSONResponse({"error": "GitHub env vars non configurés"}, status_code=400)
 

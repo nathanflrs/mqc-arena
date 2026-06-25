@@ -16,8 +16,19 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 USERS_PATH = pathlib.Path(__file__).parent / "users.json"
 USERS_ENV_VAR = "MILAN_USERS_JSON"
 
-SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-insecure-secret-change-me")
+_DEFAULT_SECRET = "dev-insecure-secret-change-me"
+SESSION_SECRET = os.getenv("SESSION_SECRET") or _DEFAULT_SECRET
 SESSION_MAX_AGE = 60 * 60 * 24 * 30  # 30 jours
+
+# Refuse à démarrer en cloud/prod avec le secret par défaut connu publiquement.
+# Générer la valeur : python -c "import secrets; print(secrets.token_hex(32))"
+if SESSION_SECRET == _DEFAULT_SECRET and (
+    os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("PORT")
+):
+    raise RuntimeError(
+        "SESSION_SECRET must be set in production — "
+        "generate: python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
 
 _serializer = URLSafeTimedSerializer(SESSION_SECRET, salt="milan-session")
 

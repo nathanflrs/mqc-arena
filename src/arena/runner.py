@@ -31,14 +31,14 @@ from src.agents.dummy import DummyHoldAgent
 from src.agents.mean_reversion import MeanReversionAgent
 from src.agents.macro import MacroAgent
 from src.agents.trend_following import TrendFollowingAgent
-from src.agents.dividend_arbitrage import DividendArbitrageAgent
+from src.agents.dividend_arbitrage_agent import DividendArbitrageAgent
 from src.agents.pairs_trading import PairsTradingAgent
 from src.agents.volatility import VolatilityAgent
 from src.agents.earnings_sentiment import EarningsSentimentAgent
 from src.broker.ibkr import connect_ibkr
 from src.broker.portfolio import fetch_account_snapshot
 from src.data.market_data import download_ohlcv, get_last_close_1d
-from src.data.regime import detect_regime
+from src.regime.detector import GMMRegimeDetector
 from src.execution.planner import plan_from_signal, OrderPlan
 from src.execution.logger import log_order_plan, log_execution, log_decisions
 from src.notify.telegram import send_message
@@ -294,10 +294,12 @@ def main() -> None:
         # produce a spurious 90%+ drawdown against a real peak and falsely trigger.
         if ibkr_ok:
             cb.evaluate(snap.net_liquidation, ci_mode=ci_mode)
-        if cb.is_triggered:
+        if cb.level > 0:
+            _cb_icon = {1: "🟡", 2: "🟠", 3: "🔴"}.get(cb.level, "")
             msg = (
-                f"🚨 Circuit breaker actif — drawdown={cb.drawdown:.1%} depuis pic "
-                f"(${cb.peak_netliq:,.0f}). SELL-ONLY mode forcé."
+                f"{_cb_icon} Circuit breaker — {cb.level_name} "
+                f"(DD={cb.drawdown:.1%} depuis pic ${cb.peak_netliq:,.0f})"
+                + (" — SELL-ONLY forcé." if cb.is_triggered else "")
             )
             print(msg)
             if not ci_mode:
@@ -316,22 +318,45 @@ def main() -> None:
             EarningsSentimentAgent(),
         ])
 
-        regime_data = detect_regime("SPY")
-        regime = regime_data["regime"]
-        print(
+        # Télécharge toutes les données en une passe — SPY est dans WATCHLIST,
+        # on évite un 2e appel réseau pour le détecteur de régime.
+        all_data = {sym: download_ohlcv(sym) for sym in WATCHLIST}
+
+        _gmm_detector = GMMRegimeDetector()
+        _spy_df       = all_data["SPY"]
+        regime_data   = _gmm_detector.get_regime(_spy_df)
+        regime        = regime_data["regime"]
+        gmm_kelly_scale = GMMRegimeDetector.regime_kelly_scale(
+            regime_data.get("gmm_regime"),
+            regime_data.get("proba", {}),
+        )
+        _regime_line = (
             f"\n🌍 RÉGIME DÉTECTÉ : {regime.upper()} | "
             f"SPY={regime_data['price']} | "
             f"SMA50={regime_data['sma50']} | "
             f"SMA200={regime_data['sma200']} | "
             f"Vol={regime_data['vol_regime']}"
         )
+        if regime_data.get("gmm_available"):
+            _regime_line += (
+                f"\n   GMM: {regime_data['gmm_regime'].upper()}"
+                f" (p={regime_data['proba'].get(regime_data['gmm_regime'], 0):.0%})"
+                f" | Kelly scale: {gmm_kelly_scale:.2f}"
+            )
+        else:
+            _regime_line += "\n   GMM: not fitted — run: python -m src.regime.detector"
+        print(_regime_line)
 
         plan_id = uuid.uuid4().hex[:8]
         plans = []
+        _decisions_summary: list[dict] = []
 
-        # ====== ALLOCATION DYNAMIQUE ======
-        # Télécharge toutes les données en une passe (réutilisées dans la boucle)
-        all_data = {sym: download_ohlcv(sym) for sym in WATCHLIST}
+        # ADV 10 jours pour filtre liquidité (shares, calculé depuis Volume OHLCV)
+        adv_map: dict[str, float] = {
+            sym: float(all_data[sym]["Volume"].tail(10).mean())
+            for sym in WATCHLIST
+            if sym in all_data and len(all_data[sym]) >= 10
+        }
 
         # ====== EARNINGS FILTER — pré-chargement ======
         earnings_filter = EarningsFilter(buffer_days=3)
@@ -354,7 +379,7 @@ def main() -> None:
             # Priority dynamique (remplace AGENT_PRIORITY statique, fallback si symbole absent)
             priority = alloc_result.best_agent.get(sym) or AGENT_PRIORITY.get(sym)
 
-            signals = arena.run(sym, df, regime=regime)
+            signals = arena.run(sym, df, portfolio=snap.positions, regime=regime)
             winner = select_best(signals, priority_agent=priority)
 
             print(f"\n=== RUN {sym} | regime={regime} | priority={priority} ===")
@@ -371,6 +396,7 @@ def main() -> None:
             )
 
             if winner is None:
+                _decisions_summary.append({"symbol": sym, "agent": "NONE", "action": "HOLD"})
                 continue
 
             # Ajuste le target_weight : DynamicAllocator en priorité, puis Kelly si dispo
@@ -382,12 +408,14 @@ def main() -> None:
             # α = min(1, n_trades/20) — 100% Kelly à partir de 20 round-trips par agent
             kelly_w = kelly_weights.get(winner.agent_name)
             if kelly_w is not None and kelly_w > 0:
+                kelly_w_scaled = round(kelly_w * gmm_kelly_scale, 4)
                 n_trips = _live_scorer.get_n_trades(winner.agent_name, sym)
                 alpha = min(1.0, n_trips / 20)
-                blended_w = round((1 - alpha) * winner.target_weight + alpha * kelly_w, 4)
+                blended_w = round((1 - alpha) * winner.target_weight + alpha * kelly_w_scaled, 4)
                 print(
                     f"   📐 Kelly {winner.agent_name}/{sym}: "
                     f"dynamic={winner.target_weight:.3f} kelly={kelly_w:.3f} "
+                    f"×{gmm_kelly_scale:.2f}(GMM)={kelly_w_scaled:.3f} "
                     f"α={alpha:.2f} → {blended_w:.3f} ({n_trips} trips)"
                 )
                 winner = dataclasses.replace(winner, target_weight=blended_w)
@@ -413,6 +441,14 @@ def main() -> None:
                         reason=f"EARNINGS_BLOCK: {earn_reason}",
                     )
 
+            # CB niveau 2 (ALERTE) : bloquer BUY si confiance < 0.85
+            if cb.level == 2 and winner.action == "BUY" and winner.confidence < 0.85:
+                winner = dataclasses.replace(
+                    winner,
+                    action="HOLD",
+                    reason=f"CB_ALERTE: DD {cb.drawdown:.1%} — conf {winner.confidence:.2f} < 0.85",
+                )
+
             last_px = get_last_close_1d(df)
             current_qty = snap.positions.get(sym, 0.0)
 
@@ -423,6 +459,7 @@ def main() -> None:
                 current_qty=current_qty,
             )
             plans.append(plan)
+            _decisions_summary.append({"symbol": sym, "agent": winner.agent_name, "action": winner.action})
 
         # ====== STOP-LOSS PAR POSITION ======
         entry_prices = _load_entry_prices()
@@ -465,13 +502,30 @@ def main() -> None:
                 )
 
         # ====== RISK MANAGER ======
+        # CB graduated response : levels 1/2 override max_net_long et bloquent le scaling régime.
+        # Level 3 (URGENCE) → sell-only. Les levels 0-2 laissent RiskManager appliquer
+        # le scaling régime GMM (sauf si CB est actif — CB prend alors le contrôle total).
+        _cb_long_override = {0: None, 1: 0.25, 2: 0.12, 3: 0.0}[cb.level]
+        if _cb_long_override is not None:
+            risk_max_long       = _cb_long_override
+            gmm_regime_for_risk = None   # CB prime sur le scaling régime
+        else:
+            risk_max_long       = RISK_MAX_NET_LONG_PCT
+            gmm_regime_for_risk = regime_data.get("gmm_regime")
+
         risk_cfg = RiskConfig(
-            max_net_long_pct=RISK_MAX_NET_LONG_PCT,
+            max_net_long_pct=risk_max_long,
             max_single_position_pct=RISK_MAX_SINGLE_POSITION_PCT,
             min_cash_pct=RISK_MIN_CASH_PCT,
             sell_only_mode=RISK_SELL_ONLY_MODE or cb.is_triggered,
         )
-        risk_report = RiskManager(risk_cfg).check(plans, snap)
+        risk_report = RiskManager(risk_cfg).check(
+            plans,
+            snap,
+            gmm_regime=gmm_regime_for_risk,
+            adv_map=adv_map,
+            cb_level=cb.level,
+        )
 
         if risk_report.rejected:
             print(f"⚠️  Risk manager: {len(risk_report.rejected)} plan(s) rejeté(s)")
@@ -494,6 +548,18 @@ def main() -> None:
                     send_message(msg)
 
         log_order_plan(plans, plan_id=plan_id)
+
+        try:
+            from src import track_record
+            digest = track_record.append_daily_entry(
+                plan_id=plan_id,
+                regime=regime,
+                decisions_summary=_decisions_summary,
+                netliq=snap.net_liquidation,
+            )
+            print(f"✅ Track record signed: {digest[:16]}…")
+        except Exception as _tr_err:
+            print(f"⚠️  Track record: {_tr_err}")
 
         if not plans:
             msg = f"Milan Capital — ORDER PLAN ready\nplan_id={plan_id}\nNo plans."
