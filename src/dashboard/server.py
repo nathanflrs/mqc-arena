@@ -469,6 +469,47 @@ def get_agents(user: str = Depends(require_auth)):
         return JSONResponse(content=[])
 
 
+@app.get("/api/monte-carlo")
+def get_monte_carlo(user: str = Depends(require_auth)):
+    """Returns the latest Monte Carlo simulation result from logs/monte_carlo_latest.json."""
+    raw = _read_text("logs/monte_carlo_latest.json")
+    if not raw:
+        return JSONResponse(content={"available": False})
+    try:
+        data = json.loads(raw)
+        return JSONResponse(content={"available": True, **data})
+    except Exception as exc:
+        return JSONResponse(content={"available": False, "error": str(exc)})
+
+
+@app.post("/api/monte-carlo/run")
+def run_monte_carlo(request: Request, user: str = Depends(require_auth)):
+    """Triggers a new Monte Carlo simulation (N=10,000, horizon=90j) and saves results."""
+    if IS_CLOUD:
+        return JSONResponse(
+            {"error": "Monte Carlo run non disponible en mode cloud — utilisez le script local"},
+            status_code=400,
+        )
+    try:
+        from src.analytics.monte_carlo import run_simulation, MonteCarloReporter
+        result = run_simulation(
+            n_simulations=10_000,
+            horizon_days=90,
+            save_path=str(ROOT / "logs" / "monte_carlo_latest.json"),
+        )
+        reporter = MonteCarloReporter()
+        return JSONResponse(content={
+            "ok": True,
+            "summary": reporter.format_tearsheet_section(result),
+            "var_95": result.var_95,
+            "median_return": result.median_return,
+            "sharpe_ratio": result.sharpe_ratio,
+            "prob_circuit_breaker": result.prob_circuit_breaker,
+        })
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 if __name__ == "__main__":
     print(f"🚀  Milan Capital Dashboard → http://localhost:{PORT}")
     print(f"   Mode: {'☁️  Cloud (GitHub Actions)' if IS_CLOUD else '💻 Local (subprocess)'}")

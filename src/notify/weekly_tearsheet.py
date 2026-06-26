@@ -42,11 +42,52 @@ def _send_drift_alerts(scorer: LiveScorer) -> None:
     send_message("\n".join(lines))
 
 
+def _send_dividend_arb_pnl() -> None:
+    from src.agents.dividend_arbitrage_agent import DividendPositionTracker
+    from src.notify.telegram import send_message
+
+    tracker = DividendPositionTracker()
+    trades  = tracker.closed_trades()
+    if not trades:
+        return
+
+    total_pnl = tracker.total_closed_pnl()
+    n         = len(trades)
+    winners   = sum(1 for t in trades if float(t.get("pnl", 0)) > 0)
+    win_rate  = winners / n if n > 0 else 0.0
+    sign      = "+" if total_pnl >= 0 else ""
+
+    send_message(
+        f"📊 Dividend Arbitrage Performance\n"
+        f"Trades: {n}  |  Win rate: {win_rate:.0%}\n"
+        f"P&L total: {sign}${total_pnl:,.2f}"
+    )
+
+
+def _send_monte_carlo() -> None:
+    try:
+        from src.analytics.monte_carlo import run_simulation, MonteCarloReporter
+        from src.notify.telegram import send_message
+
+        result = run_simulation(
+            n_simulations=10_000,
+            horizon_days=90,
+            save_path="logs/monte_carlo_latest.json",
+        )
+        msg = MonteCarloReporter().format_tearsheet_section(result)
+        send_message(msg)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Monte Carlo tearsheet échoué: %s", exc)
+
+
 def run() -> None:
     scorer = LiveScorer()
     scorer.send_weekly_tearsheet()
     _send_portfolio_performance(scorer)
     _send_drift_alerts(scorer)
+    _send_dividend_arb_pnl()
+    _send_monte_carlo()
 
 
 if __name__ == "__main__":
