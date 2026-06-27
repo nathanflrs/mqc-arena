@@ -67,7 +67,6 @@ def _send_dividend_arb_pnl() -> None:
 def _send_monte_carlo() -> None:
     try:
         from src.analytics.monte_carlo import run_simulation, MonteCarloReporter
-        from src.notify.telegram import send_message
 
         result = run_simulation(
             n_simulations=10_000,
@@ -75,10 +74,42 @@ def _send_monte_carlo() -> None:
             save_path="logs/monte_carlo_latest.json",
         )
         msg = MonteCarloReporter().format_tearsheet_section(result)
-        send_message(msg)
+
+        # Emit to event bus (dashboard) — info only, not Telegram
+        try:
+            from src.events.bus import get_bus, Event
+            get_bus().emit(Event(
+                type="monte_carlo",
+                severity="info",
+                title="Monte Carlo Simulation — 90j N=10,000",
+                body=msg,
+                meta={
+                    "var_95": result.var_95,
+                    "prob_positive": result.prob_positive,
+                    "median_return": result.median_return,
+                },
+            ))
+        except Exception:
+            pass
     except Exception as exc:
         import logging
         logging.getLogger(__name__).warning("Monte Carlo tearsheet échoué: %s", exc)
+
+
+def _emit_tearsheet_event(scorer: "LiveScorer") -> None:
+    """Emit a tearsheet info event to the dashboard (no Telegram)."""
+    try:
+        from src.events.bus import get_bus, Event
+        from datetime import date
+        get_bus().emit(Event(
+            type="tearsheet",
+            severity="info",
+            title=f"Weekly Tearsheet — {date.today().isoformat()}",
+            body="Tearsheet hebdomadaire généré. Voir l'onglet Performance pour les détails.",
+            meta={},
+        ))
+    except Exception:
+        pass
 
 
 def run() -> None:
@@ -88,6 +119,7 @@ def run() -> None:
     _send_drift_alerts(scorer)
     _send_dividend_arb_pnl()
     _send_monte_carlo()
+    _emit_tearsheet_event(scorer)
 
 
 if __name__ == "__main__":

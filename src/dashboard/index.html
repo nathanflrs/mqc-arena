@@ -118,19 +118,24 @@ html,body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size
 .topbar{
   flex-shrink:0;height:var(--top-h);
   display:flex;align-items:center;
-  padding:0 20px;padding-top:env(safe-area-inset-top,0px);
+  padding:0 18px;padding-top:env(safe-area-inset-top,0px);
   background:var(--s1);border-bottom:1px solid var(--border-strong);
-  gap:20px;
+  gap:0;overflow:hidden;
 }
-.cmd-left{display:flex;align-items:center;gap:10px;flex-shrink:0}
+/* Left: logo + name — never shrinks */
+.cmd-left{display:flex;align-items:center;gap:9px;flex-shrink:0;margin-right:12px}
 .brand-name{
   font-family:var(--display);font-size:13px;font-weight:800;
-  letter-spacing:.16em;text-transform:uppercase;color:var(--t1);
+  letter-spacing:.14em;text-transform:uppercase;color:var(--t1);white-space:nowrap;
 }
-.cmd-divider{width:1px;height:18px;background:var(--border-strong);flex-shrink:0}
-
-.cmd-center{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
-.live-badge{display:flex;align-items:center;gap:6px;flex-shrink:0}
+/* Hairline separator */
+.cmd-divider{width:1px;height:16px;background:var(--border-strong);flex-shrink:0;margin:0 12px}
+/* Center: LIVE · regime · NAV — takes remaining space, clips if needed */
+.cmd-center{
+  display:flex;align-items:center;gap:10px;
+  flex:1;min-width:0;overflow:hidden;
+}
+.live-badge{display:flex;align-items:center;gap:5px;flex-shrink:0}
 .live-dot{
   width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;
   box-shadow:0 0 0 0 rgba(22,199,132,.4);
@@ -141,10 +146,11 @@ html,body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size
   70%{box-shadow:0 0 0 6px rgba(22,199,132,0)}
   100%{box-shadow:0 0 0 0 rgba(22,199,132,0)}
 }
-.live-label{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.2em;color:var(--green)}
+.live-label{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.18em;color:var(--green);white-space:nowrap}
 .regime-chip{
-  font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.08em;
-  padding:3px 9px;border-radius:3px;border:1px solid;transition:all .4s var(--ease-out);
+  font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.07em;
+  padding:3px 8px;border-radius:3px;border:1px solid;
+  transition:color .4s,border-color .4s,background .4s;
   white-space:nowrap;flex-shrink:0;
 }
 .regime-chip.bull,.regime-chip.bull_quiet,.regime-chip.bull_volatile{
@@ -152,24 +158,34 @@ html,body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size
 }
 .regime-chip.bear{color:var(--red);border-color:var(--red-b);background:var(--red-d)}
 .regime-chip.choppy,.regime-chip.sideways{color:var(--t2);border-color:var(--border);background:transparent}
-#cmd-nav{
+/* NAV value — monospaced, truncates cleanly */
+.cmd-nav-val{
   font-family:var(--mono);font-variant-numeric:tabular-nums;
-  font-size:18px;font-weight:600;color:var(--t1);letter-spacing:.02em;
+  font-size:16px;font-weight:600;color:var(--t1);letter-spacing:.02em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
 }
-
-.cmd-right{display:flex;align-items:center;gap:16px;margin-left:auto;flex-shrink:0}
+/* Right: clock + logout — only logout shown on mobile */
+.cmd-right{display:flex;align-items:center;gap:14px;flex-shrink:0;margin-left:12px}
+/* JS-compat hidden status elements */
 .status-ind{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.1em;color:var(--t3);transition:color .3s}
 .status-ind.active{color:var(--green)}.status-ind.busy{color:var(--amber)}
 .si-dot{width:4px;height:4px;border-radius:50%;background:currentColor}
 .si-dot.pulse{animation:blink 2.4s ease-in-out infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
-.clock{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11px;color:var(--t3)}
+.clock{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11px;color:var(--t3);white-space:nowrap}
 .btn-topbar{
   background:none;border:none;color:var(--t3);font-family:var(--mono);
   font-size:9px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
-  cursor:pointer;padding:4px 0;transition:color .15s;
+  cursor:pointer;padding:4px 0;transition:color .15s;white-space:nowrap;flex-shrink:0;
 }
 .btn-topbar:hover{color:var(--t2)}
+/* Mobile: hide clock + NAV to give room to LIVE + regime */
+@media(max-width:640px){
+  .clock{display:none}
+  .cmd-nav-val{display:none}
+  .cmd-divider:last-of-type{display:none}
+  .topbar{padding:0 14px}
+}
 
 /* ── Layout ── */
 .layout{flex:1;display:flex;overflow:hidden}
@@ -434,10 +450,82 @@ tr:hover td{background:var(--s2)}
 
 /* ── Responsive ── */
 @media(max-width:600px){
-  .topbar{padding:0 14px;gap:12px;padding-top:env(safe-area-inset-top,0px)}
-  #cmd-nav{display:none}
   .panel-inner{padding:14px 14px 0}
   .hero-grid{gap:6px}
+}
+
+/* ── Activity Feed ── */
+.af-toolbar{
+  display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;
+}
+.af-filter{
+  font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;padding:4px 10px;border-radius:4px;cursor:pointer;
+  background:var(--s3);border:1px solid var(--border);color:var(--t3);
+  transition:color .15s,border-color .15s,background .15s;
+}
+.af-filter:hover{color:var(--t2);border-color:var(--border-strong)}
+.af-filter.active{color:var(--cobalt);border-color:var(--cobalt);background:rgba(42,91,215,.12)}
+
+.af-pinned{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
+.af-feed{display:flex;flex-direction:column;gap:6px}
+
+/* Event row */
+.af-row{
+  display:grid;grid-template-columns:auto 1fr;column-gap:12px;
+  background:var(--s2);border:1px solid var(--border);border-radius:6px;
+  padding:10px 12px;
+  animation:af-in .35s var(--ease-out) both;
+  transform-origin:top center;
+}
+@keyframes af-in{
+  from{opacity:0;transform:translateY(-8px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@media(prefers-reduced-motion:reduce){.af-row{animation:none}}
+
+.af-row.critical{
+  border-color:var(--red-b);background:rgba(234,57,67,.06);
+  box-shadow:0 0 0 1px var(--red-b);
+}
+.af-row.critical.acknowledged{
+  border-color:var(--border);background:var(--s2);box-shadow:none;
+}
+.af-row.warning{border-color:rgba(240,160,32,.35);background:rgba(240,160,32,.04)}
+.af-row.pinned{border-left:2px solid var(--red)}
+
+.af-ts{
+  font-family:var(--mono);font-size:10px;color:var(--t3);
+  white-space:nowrap;padding-top:1px;
+}
+.af-body{}
+.af-title{font-size:13px;font-weight:600;color:var(--t1);margin-bottom:3px;line-height:1.3}
+.af-text{font-family:var(--mono);font-size:11px;color:var(--t2);line-height:1.5;white-space:pre-wrap;word-break:break-word;max-height:80px;overflow:hidden}
+.af-text.expanded{max-height:none}
+.af-meta{display:flex;align-items:center;gap:8px;margin-top:6px}
+.af-type{
+  font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;padding:2px 6px;border-radius:3px;
+  background:var(--s3);color:var(--t3);border:1px solid var(--border);
+}
+.af-type.execution{color:var(--green);border-color:var(--green-b);background:var(--green-d)}
+.af-type.briefing{color:var(--cobalt);border-color:rgba(79,134,247,.4);background:rgba(79,134,247,.08)}
+.af-type.tearsheet{color:var(--amber);border-color:rgba(240,160,32,.4);background:rgba(240,160,32,.07)}
+.af-type.monte_carlo{color:#a078e0;border-color:rgba(160,120,224,.4);background:rgba(160,120,224,.07)}
+.af-type.circuit_breaker,.af-type.error{color:var(--red);border-color:var(--red-b);background:var(--red-d)}
+.af-expand{
+  font-family:var(--mono);font-size:9px;color:var(--cobalt);
+  background:none;border:none;cursor:pointer;padding:0;
+}
+.af-ack{
+  font-family:var(--mono);font-size:9px;color:var(--t3);
+  background:none;border:none;cursor:pointer;padding:0;margin-left:auto;
+}
+.af-ack:hover{color:var(--t2)}
+
+.af-empty{
+  font-family:var(--mono);font-size:11px;color:var(--t3);
+  text-align:center;padding:40px 0;
 }
 </style>
 </head>
@@ -478,8 +566,9 @@ tr:hover td{background:var(--s2)}
 
   <!-- COMMAND BAR -->
   <header class="topbar">
+    <!-- Left: logo + name -->
     <div class="cmd-left">
-      <svg viewBox="0 0 120 120" width="24" height="24" aria-hidden="true" style="flex-shrink:0">
+      <svg viewBox="0 0 120 120" width="22" height="22" aria-hidden="true" style="flex-shrink:0">
         <polygon points="60,8 112,60 60,112 8,60" fill="#141d33"/>
         <polygon points="60,35 85,60 60,85 35,60" fill="none" stroke="rgba(255,255,255,0.50)" stroke-width="2.8"/>
         <polygon points="60,51 69,60 60,69 51,60" fill="#4f86f7"/>
@@ -489,21 +578,20 @@ tr:hover td{background:var(--s2)}
 
     <div class="cmd-divider"></div>
 
+    <!-- Center: LIVE pulse · regime · NAV (NAV hidden on mobile) -->
     <div class="cmd-center">
       <div class="live-badge">
         <span class="live-dot"></span>
         <span class="live-label">LIVE</span>
       </div>
       <div class="regime-chip choppy" id="regime-chip">—</div>
-      <span id="cmd-nav" class="mono" style="font-size:18px;font-weight:600;color:var(--t1);font-variant-numeric:tabular-nums">—</span>
+      <span id="cmd-nav" class="cmd-nav-val">—</span>
     </div>
 
+    <!-- Right: clock (desktop only) · logout. Status pill hidden here, lives in overview. -->
     <div class="cmd-right">
-      <div class="status-ind" id="status-pill">
-        <span class="si-dot" id="si-dot"></span>
-        <span id="status-text">ACTIVE</span>
-      </div>
-      <div class="cmd-divider"></div>
+      <!-- Keep IDs for JS compat but visually hidden — status lives in overview panel -->
+      <span id="status-pill" style="display:none"><span id="si-dot"></span><span id="status-text">ACTIVE</span></span>
       <div class="clock" id="clock"></div>
       <button class="btn-topbar" onclick="logout()">Logout</button>
     </div>
@@ -545,6 +633,12 @@ tr:hover td{background:var(--s2)}
           <line x1="10" y1="12" x2="14" y2="12"/>
         </svg>
         Term
+      </button>
+      <button class="sb-btn" id="sidebar-btn-4" onclick="switchTab(4)" aria-label="Activité">
+        <svg class="sb-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4">
+          <path d="M3 4h14M3 8h10M3 12h12M3 16h8"/>
+        </svg>
+        Feed
       </button>
     </nav>
 
@@ -759,6 +853,29 @@ tr:hover td{background:var(--s2)}
         </div>
       </div>
 
+      <!-- ACTIVITY FEED PANEL -->
+      <div class="tab-panel" id="panel-activity">
+        <div class="panel-inner">
+
+          <!-- Filter toggles -->
+          <div class="af-toolbar">
+            <button class="af-filter active" data-type="">Tout</button>
+            <button class="af-filter" data-type="execution">Trades</button>
+            <button class="af-filter" data-type="briefing">Briefing</button>
+            <button class="af-filter" data-type="tearsheet">Tearsheet</button>
+            <button class="af-filter" data-type="monte_carlo">MC</button>
+            <button class="af-filter" data-type="circuit_breaker">CB</button>
+            <button class="af-filter" data-type="error">Erreurs</button>
+          </div>
+
+          <!-- Feed: pinned criticals at top, rest below -->
+          <div id="af-pinned" class="af-pinned"></div>
+          <div id="af-feed" class="af-feed"></div>
+
+          <div class="panel-end"></div>
+        </div>
+      </div>
+
     </div><!-- .main-content -->
 
   </div><!-- .layout -->
@@ -769,6 +886,7 @@ tr:hover td{background:var(--s2)}
     <button class="tab-btn" id="tab-btn-1" onclick="switchTab(1)">Perf</button>
     <button class="tab-btn" id="tab-btn-2" onclick="switchTab(2)">Signaux</button>
     <button class="tab-btn" id="tab-btn-3" onclick="switchTab(3)">Terminal</button>
+    <button class="tab-btn" id="tab-btn-4" onclick="switchTab(4)">Feed</button>
   </nav>
 
 </div><!-- #app -->
@@ -779,11 +897,11 @@ if ('serviceWorker' in navigator) {
 }
 
 // ── Tab switching ──────────────────────────────────────────────────────────────
-const PANELS      = ['panel-overview','panel-performance','panel-agents','panel-controls'];
-const TAB_BTNS    = ['tab-btn-0','tab-btn-1','tab-btn-2','tab-btn-3'];
-const SIDEBAR_IDS = ['sidebar-btn-0','sidebar-btn-1','sidebar-btn-2','sidebar-btn-3'];
+const PANELS      = ['panel-overview','panel-performance','panel-agents','panel-controls','panel-activity'];
+const TAB_BTNS    = ['tab-btn-0','tab-btn-1','tab-btn-2','tab-btn-3','tab-btn-4'];
+const SIDEBAR_IDS = ['sidebar-btn-0','sidebar-btn-1','sidebar-btn-2','sidebar-btn-3','sidebar-btn-4'];
 let currentTab = 0;
-const tabLoaded = [false,false,false,false];
+const tabLoaded = [false,false,false,false,false];
 
 function switchTab(i) {
   PANELS.forEach((id, j) => {
@@ -798,6 +916,7 @@ function switchTab(i) {
     if (i===0) { loadStatus(); loadSignals(); loadFillStats(); loadReturnHero(); loadBestSharpeHero(); }
     if (i===1) { loadPortfolioSummary(); loadPerformance(); loadMonteCarlo(); }
     if (i===2) { loadSignals(); loadDriftAlerts(); loadRegimeAccuracy(); }
+    if (i===4) { loadActivityFeed(); afStartSSE(); }
   }
 }
 
@@ -933,7 +1052,7 @@ async function loadStatus() {
     if (cb.peak_netliq) {
       const navStr = '$' + Math.round(cb.peak_netliq).toLocaleString('en-US');
       countUp(document.getElementById('kpi-netliq'), navStr, cb.peak_netliq);
-      const cmdNav = document.getElementById('cmd-nav');
+      const cmdNav = document.querySelector('.cmd-nav-val');
       if (cmdNav && cmdNav.textContent !== navStr) { cmdNav.textContent = navStr; flashEl(cmdNav); }
     }
 
@@ -1393,6 +1512,161 @@ async function runCmd(cmd) {
     es.onerror = () => { es.close(); activeSource=null; setAllDisabled(false); log('[WARN] Connection lost.','log-warn'); };
   } catch(err) { setAllDisabled(false); log(`[ERR] ${err.message}`,'log-err'); }
 }
+
+// ── Activity Feed ───────────────────────────────────────────────────────────────
+let afFilter = '';        // current type filter
+let afEventSource = null; // live SSE connection
+
+function afFmtTime(iso) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  } catch { return iso; }
+}
+
+function afFmtDate(iso) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('fr-FR', {day:'2-digit',month:'short'}) + ' ' + afFmtTime(iso);
+  } catch { return iso; }
+}
+
+function afBuildRow(ev, prepend = false) {
+  const isCritical = ev.severity === 'critical';
+  const isAcked    = ev.acknowledged == 1;
+
+  const row = document.createElement('div');
+  row.className = [
+    'af-row',
+    ev.severity,
+    isCritical && !isAcked ? 'pinned' : '',
+    isAcked ? 'acknowledged' : '',
+  ].join(' ').trim();
+  row.dataset.id   = ev.id;
+  row.dataset.type = ev.type;
+
+  const textId = `af-text-${ev.id.slice(0,8)}`;
+  const bodyPreview = (ev.body || '').slice(0, 200);
+  const hasMore     = (ev.body || '').length > 200;
+
+  row.innerHTML = `
+    <span class="af-ts">${afFmtDate(ev.timestamp)}</span>
+    <div class="af-body">
+      <div class="af-title">${ev.title || '—'}</div>
+      <div class="af-text" id="${textId}">${bodyPreview}${hasMore ? '…' : ''}</div>
+      <div class="af-meta">
+        <span class="af-type ${ev.type}">${ev.type.replace('_',' ')}</span>
+        ${hasMore ? `<button class="af-expand" onclick="afToggleExpand(this,'${ev.id}','${encodeURIComponent(ev.body||'')}')">voir plus</button>` : ''}
+        ${isCritical && !isAcked ? `<button class="af-ack" onclick="afAck('${ev.id}',this)">Marquer lu ×</button>` : ''}
+      </div>
+    </div>
+  `;
+  return row;
+}
+
+function afToggleExpand(btn, id, encodedBody) {
+  const el = document.getElementById(`af-text-${id.slice(0,8)}`);
+  if (!el) return;
+  if (el.classList.contains('expanded')) {
+    el.textContent = decodeURIComponent(encodedBody).slice(0,200) + '…';
+    el.classList.remove('expanded');
+    btn.textContent = 'voir plus';
+  } else {
+    el.textContent = decodeURIComponent(encodedBody);
+    el.classList.add('expanded');
+    btn.textContent = 'voir moins';
+  }
+}
+
+async function afAck(id, btn) {
+  try {
+    await fetch(`/api/events/${id}/acknowledge`, {method:'POST'});
+    const row = document.querySelector(`.af-row[data-id="${id}"]`);
+    if (row) {
+      row.classList.remove('critical','pinned');
+      row.classList.add('acknowledged');
+      btn.remove();
+    }
+    // Remove from pinned section and re-render in feed
+    loadActivityFeed();
+  } catch(e) {}
+}
+
+function afMatchesFilter(ev) {
+  if (!afFilter) return true;
+  return ev.type === afFilter;
+}
+
+function renderActivityFeed(events) {
+  const pinned = document.getElementById('af-pinned');
+  const feed   = document.getElementById('af-feed');
+  pinned.innerHTML = '';
+  feed.innerHTML   = '';
+
+  const filtered = events.filter(afMatchesFilter);
+  if (!filtered.length) {
+    feed.innerHTML = '<div class="af-empty">Aucun événement</div>';
+    return;
+  }
+
+  // Critical + unacknowledged → pinned section, rest → feed
+  filtered.forEach(ev => {
+    const row = afBuildRow(ev);
+    if (ev.severity === 'critical' && !ev.acknowledged) {
+      pinned.appendChild(row);
+    } else {
+      feed.appendChild(row);
+    }
+  });
+}
+
+async function loadActivityFeed() {
+  try {
+    const url = afFilter ? `/api/events?limit=100&type=${afFilter}` : '/api/events?limit=100';
+    const data = await fetch(url).then(r => r.json());
+    renderActivityFeed(data.events || []);
+  } catch(e) {
+    document.getElementById('af-feed').innerHTML = '<div class="af-empty">Erreur de chargement</div>';
+  }
+}
+
+function afStartSSE() {
+  if (afEventSource) return;
+  afEventSource = new EventSource('/api/events/stream');
+  afEventSource.onmessage = ({data}) => {
+    try {
+      const ev = JSON.parse(data);
+      if (!afMatchesFilter(ev)) return;
+      const pinned = document.getElementById('af-pinned');
+      const feed   = document.getElementById('af-feed');
+      // Remove placeholder
+      const empty = feed.querySelector('.af-empty');
+      if (empty) empty.remove();
+      const row = afBuildRow(ev, true);
+      if (ev.severity === 'critical' && !ev.acknowledged) {
+        pinned.insertBefore(row, pinned.firstChild);
+      } else {
+        feed.insertBefore(row, feed.firstChild);
+      }
+    } catch(e) {}
+  };
+  afEventSource.onerror = () => {
+    afEventSource.close();
+    afEventSource = null;
+    // Reconnect after 10s
+    setTimeout(afStartSSE, 10000);
+  };
+}
+
+// Filter buttons
+document.querySelectorAll('.af-filter').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.af-filter').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    afFilter = btn.dataset.type;
+    loadActivityFeed();
+  });
+});
 </script>
 </body>
 </html>

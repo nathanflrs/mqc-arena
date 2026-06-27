@@ -482,6 +482,65 @@ def get_monte_carlo(user: str = Depends(require_auth)):
         return JSONResponse(content={"available": False, "error": str(exc)})
 
 
+@app.get("/api/events")
+def get_events(
+    limit: int = 100,
+    type: str | None = None,
+    user: str = Depends(require_auth),
+):
+    """Return recent events from the event bus, newest first."""
+    from src.events.bus import get_bus
+    events = get_bus().get_recent(limit=max(1, min(limit, 500)), type_filter=type)
+    return JSONResponse(content={"events": events})
+
+
+@app.get("/api/events/stream")
+async def stream_events(user: str = Depends(require_auth)):
+    """SSE stream of live events. One JSON object per `data:` line."""
+    from src.events.bus import get_bus
+
+    async def generator():
+        bus = get_bus()
+        # subscribe_sse is a blocking generator; run in thread to not block event loop
+        loop = asyncio.get_event_loop()
+        q: asyncio.Queue = asyncio.Queue(maxsize=200)
+
+        def feed():
+            for payload in bus.subscribe_sse():
+                loop.call_soon_threadsafe(q.put_nowait, payload)
+
+        import threading
+        t = threading.Thread(target=feed, daemon=True)
+        t.start()
+
+        try:
+            while True:
+                try:
+                    payload = await asyncio.wait_for(q.get(), timeout=30.0)
+                except asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+                    continue
+                if payload == "__HEARTBEAT__":
+                    yield ": heartbeat\n\n"
+                else:
+                    yield f"data: {payload}\n\n"
+        except asyncio.CancelledError:
+            pass
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/api/events/{event_id}/acknowledge")
+def acknowledge_event(event_id: str, user: str = Depends(require_auth)):
+    from src.events.bus import get_bus
+    get_bus().acknowledge(event_id)
+    return JSONResponse(content={"ok": True})
+
+
 @app.post("/api/monte-carlo/run")
 def run_monte_carlo(request: Request, user: str = Depends(require_auth)):
     """Triggers a new Monte Carlo simulation (N=10,000, horizon=90j) and saves results."""

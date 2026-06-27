@@ -154,8 +154,18 @@ def run() -> None:
 
     message = "\n\n".join(sections)
 
-    # Telegram hard limit: 4096 chars
-    send_message(message[:4096])
+    # Emit to event bus (dashboard) — info severity, not sent to Telegram
+    try:
+        from src.events.bus import get_bus, Event
+        get_bus().emit(Event(
+            type="briefing",
+            severity="info",
+            title=f"Morning Briefing — {date_str}",
+            body=message[:2000],
+            meta={"date": date_str},
+        ))
+    except Exception:
+        pass  # bus unavailable (e.g. GitHub Actions without DB) — non-blocking
 
 
 if __name__ == "__main__":
