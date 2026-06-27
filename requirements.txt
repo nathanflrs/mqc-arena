@@ -26,5 +26,10 @@ anthropic>=0.40.0
 # Charts & PDF (monthly factsheet)
 matplotlib>=3.8
 
+# Factor analysis
+pandas_datareader>=0.10
+statsmodels>=0.14
+pyarrow>=14.0
+
 # Testing
 pytest>=8.0
