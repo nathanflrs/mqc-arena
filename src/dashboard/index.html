@@ -116,9 +116,13 @@ html,body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size
 
 /* ── Command bar ── */
 .topbar{
-  flex-shrink:0;height:var(--top-h);
-  display:flex;align-items:center;
-  padding:0 18px;padding-top:env(safe-area-inset-top,0px);
+  flex-shrink:0;
+  /* Content zone is --top-h; total height grows to include the iOS status bar */
+  height:calc(var(--top-h) + env(safe-area-inset-top,0px));
+  display:flex;align-items:flex-end; /* align items at bottom of the taller bar */
+  padding:0 18px;
+  padding-top:env(safe-area-inset-top,0px); /* push content below status bar */
+  padding-bottom:0;
   background:var(--s1);border-bottom:1px solid var(--border-strong);
   gap:0;overflow:hidden;
 }
@@ -184,7 +188,8 @@ html,body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size
   .clock{display:none}
   .cmd-nav-val{display:none}
   .cmd-divider:last-of-type{display:none}
-  .topbar{padding:0 14px}
+  /* Keep safe-area padding-top; only override horizontal padding */
+  .topbar{padding-left:14px;padding-right:14px}
 }
 
 /* ── Layout ── */
