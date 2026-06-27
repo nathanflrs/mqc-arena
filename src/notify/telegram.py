@@ -100,6 +100,17 @@ def wait_for_approval(
     return False, last_update_id
 
 
+def send_document(file_path: str, caption: str = "") -> None:
+    """Send a file (e.g. PDF) to the configured Telegram chat."""
+    url = f"https://api.telegram.org/bot{_token()}/sendDocument"
+    with open(file_path, "rb") as f:
+        data: dict = {"chat_id": _chat_id()}
+        if caption:
+            data["caption"] = caption
+        r = requests.post(url, data=data, files={"document": f}, timeout=60)
+    r.raise_for_status()
+
+
 def drain_updates() -> int | None:
     last_id = None
     while True:

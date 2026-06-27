@@ -3,9 +3,10 @@ name: Daily Runner
 on:
   schedule:
     - cron: '15 13 * * 1-5'   # Mon–Fri 13:15 UTC (market open +45 min)
-    - cron: '0 7 * * 1-5'     # Mon–Fri 07:00 UTC (8h00 CET heure d'été)
+    - cron: '0 6 * * 1-5'     # Mon–Fri 06:00 UTC (8h00 CEST heure d'été)
     - cron: '15 7 * * 1'      # Mon only 07:15 UTC (tearsheet hebdomadaire)
     - cron: '30 14 * * 1-5'   # Mon–Fri 14:30 UTC (10:30 ET — shadow mode)
+    - cron: '0 7 1 * *'      # 1er du mois 07:00 UTC (factsheet mensuelle)
   workflow_dispatch:            # manual trigger from GitHub UI
 
 jobs:
@@ -110,8 +111,32 @@ jobs:
           git add logs/shadow_signals.csv
           git diff --staged --quiet || (git commit -m "chore: shadow signals $(date +%Y-%m-%d)" && git pull --rebase && git push)
 
+  monthly_factsheet:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 7 1 * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate and send factsheet
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -m src.notify.monthly_factsheet
+
   morning_briefing:
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 7 * * 1-5'
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 6 * * 1-5'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 

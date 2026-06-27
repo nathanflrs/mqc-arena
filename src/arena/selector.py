@@ -29,9 +29,18 @@ def select_best(
     priority_agent : si spécifié, cet agent reçoit un bonus de score
                      basé sur les résultats du backtest
     priority_bonus : bonus appliqué au score de l'agent prioritaire
+
+    Override absolu : DividendArbitrageAgent a la priorité absolue sur
+    n'importe quel autre agent pendant sa fenêtre J-7 → J+1, signalée
+    via meta["div_arb_priority"] = True sur un signal BUY ou SELL.
     """
     if not signals:
         return None
+
+    # Absolute override: DividendArbitrageAgent during its active dividend window
+    for s in signals:
+        if s.meta.get("div_arb_priority") and s.action in ("BUY", "SELL"):
+            return s
 
     scored = []
     for s in signals:

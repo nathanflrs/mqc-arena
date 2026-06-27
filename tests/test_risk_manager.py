@@ -5,7 +5,7 @@ import pytest
 
 from src.broker.portfolio import PortfolioSnapshot
 from src.execution.planner import OrderPlan
-from src.risk.manager import RiskConfig, RiskManager
+from src.risk.manager import DrawdownCircuitBreaker, RiskConfig, RiskManager
 
 
 def _snap(netliq: float = 100_000.0, cash: float = 80_000.0, positions: dict | None = None) -> PortfolioSnapshot:
@@ -182,3 +182,217 @@ def test_sell_only_flag_in_summary():
     mgr = RiskManager(RiskConfig(sell_only_mode=True))
     report = mgr.check([], _snap())
     assert "SELL-ONLY" in report.telegram_summary()
+
+
+# ─── Régime-aware : scaling max_net_long ─────────────────────────────────────
+
+def test_regime_bull_quiet_uses_full_limit():
+    """bull_quiet → scale 1.0 → même limite que sans régime."""
+    # max_single=0.40 pour que Rule 1 ne bloque pas le test de Rule 2
+    mgr = RiskManager(RiskConfig(max_net_long_pct=0.60, max_single_position_pct=0.40, min_cash_pct=0.0))
+    plans = [_plan("AAPL", "BUY", est_notional=36_000)]  # 36% < 60%
+    report = mgr.check(plans, _snap(cash=100_000), gmm_regime="bull_quiet")
+    assert len(report.approved) == 1
+    assert report.regime_scale == pytest.approx(1.0)
+    assert report.effective_max_net_long == pytest.approx(0.60)
+
+
+def test_regime_bear_tightens_limit():
+    """bear → scale 0.35 → effective max = 0.60 * 0.35 = 0.21."""
+    mgr = RiskManager(RiskConfig(max_net_long_pct=0.60, max_single_position_pct=0.30, min_cash_pct=0.0))
+    # 25% notional > 21% effective limit → rejected
+    plans = [_plan("AAPL", "BUY", est_notional=25_000)]
+    report = mgr.check(plans, _snap(cash=100_000), gmm_regime="bear")
+    assert len(report.rejected) == 1
+    assert "régime bear" in report.rejected[0].reason
+    assert report.regime_scale == pytest.approx(0.35)
+    assert report.effective_max_net_long == pytest.approx(0.21)
+
+
+def test_regime_bear_small_position_passes():
+    """bear → 15% notional < 21% effective limit → approved."""
+    mgr = RiskManager(RiskConfig(max_net_long_pct=0.60, max_single_position_pct=0.30, min_cash_pct=0.0))
+    plans = [_plan("AAPL", "BUY", est_notional=15_000)]
+    report = mgr.check(plans, _snap(cash=100_000), gmm_regime="bear")
+    assert len(report.approved) == 1
+
+
+def test_regime_bull_volatile_scale():
+    """bull_volatile → scale 0.75 → effective max = 0.60 * 0.75 = 0.45."""
+    mgr = RiskManager(RiskConfig(max_net_long_pct=0.60, max_single_position_pct=0.30, min_cash_pct=0.0))
+    plans = [_plan("AAPL", "BUY", est_notional=50_000)]  # 50% > 45% → rejected
+    report = mgr.check(plans, _snap(cash=100_000), gmm_regime="bull_volatile")
+    assert len(report.rejected) == 1
+    assert report.effective_max_net_long == pytest.approx(0.45)
+
+
+def test_regime_sideways_scale():
+    """sideways → scale 0.60 → effective max = 0.60 * 0.60 = 0.36."""
+    mgr = RiskManager(RiskConfig(max_net_long_pct=0.60, max_single_position_pct=0.30, min_cash_pct=0.0))
+    plans = [_plan("AAPL", "BUY", est_notional=40_000)]  # 40% > 36% → rejected
+    report = mgr.check(plans, _snap(cash=100_000), gmm_regime="sideways")
+    assert len(report.rejected) == 1
+    assert report.effective_max_net_long == pytest.approx(0.36)
+
+
+def test_no_regime_uses_full_limit():
+    """Sans gmm_regime → scale 1.0 → limite inchangée."""
+    # max_single=0.40 pour éviter que Rule 1 bloque avant Rule 2
+    mgr = RiskManager(RiskConfig(max_net_long_pct=0.40, max_single_position_pct=0.40, min_cash_pct=0.0))
+    plans = [_plan("AAPL", "BUY", est_notional=35_000)]  # 35% < 40% → approved
+    report = mgr.check(plans, _snap(cash=100_000))
+    assert len(report.approved) == 1
+    assert report.regime_scale == pytest.approx(1.0)
+
+
+def test_regime_in_telegram_summary():
+    mgr = RiskManager(RiskConfig(max_net_long_pct=0.60, min_cash_pct=0.0))
+    report = mgr.check([], _snap(), gmm_regime="bear")
+    summary = report.telegram_summary()
+    assert "bear" in summary.lower()
+    assert "0.35" in summary or "35%" in summary
+
+
+# ─── Filtre liquidité ADV ─────────────────────────────────────────────────────
+
+def test_adv_filter_blocks_illiquid_buy():
+    """Position > 1 % de l'ADV → rejetée."""
+    mgr = RiskManager(RiskConfig(max_net_long_pct=1.0, max_single_position_pct=1.0, min_cash_pct=0.0))
+    # 1 000 shares @ $150 = $150 000 notional
+    # ADV = 50 000 shares → 1000/50000 = 2% > 1% → rejeté
+    plans   = [_plan("AAPL", "BUY", est_notional=150_000, last_price=150.0)]
+    adv_map = {"AAPL": 50_000}
+    report  = mgr.check(plans, _snap(netliq=1_000_000, cash=900_000), adv_map=adv_map)
+    assert len(report.rejected) == 1
+    assert "ADV" in report.rejected[0].reason
+
+
+def test_adv_filter_approves_liquid_buy():
+    """Position < 1 % de l'ADV → approuvée."""
+    mgr = RiskManager(RiskConfig(max_net_long_pct=1.0, max_single_position_pct=1.0, min_cash_pct=0.0))
+    # 100 shares @ $150 = $15 000 notional
+    # ADV = 50 000 shares → 100/50000 = 0.2% < 1% → approuvé
+    plans   = [_plan("AAPL", "BUY", est_notional=15_000, last_price=150.0)]
+    adv_map = {"AAPL": 50_000}
+    report  = mgr.check(plans, _snap(netliq=500_000, cash=400_000), adv_map=adv_map)
+    assert len(report.approved) == 1
+
+
+def test_adv_filter_missing_symbol_skips():
+    """Symbole absent de adv_map → filtre ADV ignoré (pas de rejet)."""
+    mgr = RiskManager(RiskConfig(max_net_long_pct=1.0, max_single_position_pct=1.0, min_cash_pct=0.0))
+    plans   = [_plan("TSLA", "BUY", est_notional=50_000, last_price=200.0)]
+    adv_map = {"AAPL": 50_000}  # TSLA absent
+    report  = mgr.check(plans, _snap(netliq=500_000, cash=400_000), adv_map=adv_map)
+    assert len(report.approved) == 1
+
+
+def test_adv_filter_sell_not_checked():
+    """SELL n'est jamais soumis au filtre ADV."""
+    mgr = RiskManager(RiskConfig())
+    plans   = [_plan("AAPL", "SELL", est_notional=500_000, current_qty=10_000, last_price=150.0)]
+    adv_map = {"AAPL": 1}   # ADV ridiculement bas
+    report  = mgr.check(plans, _snap(), adv_map=adv_map)
+    assert len(report.approved) == 1
+
+
+# ─── Circuit breaker gradué ───────────────────────────────────────────────────
+
+def test_cb_level_zero_no_restriction(tmp_path, monkeypatch):
+    monkeypatch.setattr(DrawdownCircuitBreaker, "_STATE_PATH", tmp_path / "cb.json")
+    cb = DrawdownCircuitBreaker()
+    cb.evaluate(100_000)
+    assert cb.level == 0
+    assert cb.level_name == "NORMAL"
+    assert not cb.is_triggered
+
+
+def test_cb_level_1_defensive(tmp_path, monkeypatch):
+    monkeypatch.setattr(DrawdownCircuitBreaker, "_STATE_PATH", tmp_path / "cb.json")
+    cb = DrawdownCircuitBreaker()
+    cb.evaluate(100_000)   # set peak
+    cb.evaluate(95_000)    # 5% DD → level 1
+    assert cb.level == 1
+    assert cb.level_name == "DÉFENSIF"
+    assert not cb.is_triggered
+
+
+def test_cb_level_2_alert(tmp_path, monkeypatch):
+    monkeypatch.setattr(DrawdownCircuitBreaker, "_STATE_PATH", tmp_path / "cb.json")
+    cb = DrawdownCircuitBreaker()
+    cb.evaluate(100_000)
+    cb.evaluate(93_000)    # 7% DD → level 2
+    assert cb.level == 2
+    assert cb.level_name == "ALERTE"
+    assert not cb.is_triggered
+
+
+def test_cb_level_3_emergency(tmp_path, monkeypatch):
+    monkeypatch.setattr(DrawdownCircuitBreaker, "_STATE_PATH", tmp_path / "cb.json")
+    cb = DrawdownCircuitBreaker()
+    cb.evaluate(100_000)
+    cb.evaluate(90_000)    # 10% DD → level 3
+    assert cb.level == 3
+    assert cb.level_name == "URGENCE"
+    assert cb.is_triggered
+
+
+def test_cb_level_3_sticky(tmp_path, monkeypatch):
+    """Une fois à level 3, le niveau reste 3 même si le portefeuille se redresse."""
+    monkeypatch.setattr(DrawdownCircuitBreaker, "_STATE_PATH", tmp_path / "cb.json")
+    cb = DrawdownCircuitBreaker()
+    cb.evaluate(100_000)
+    cb.evaluate(90_000)    # 10% DD → level 3
+    cb.evaluate(99_000)    # quasi-recovery mais sticky
+    assert cb.level == 3
+    assert cb.is_triggered
+
+
+def test_cb_levels_1_and_2_auto_revert(tmp_path, monkeypatch):
+    """Levels 1 et 2 reviennent à 0 si le drawdown se réduit."""
+    monkeypatch.setattr(DrawdownCircuitBreaker, "_STATE_PATH", tmp_path / "cb.json")
+    cb = DrawdownCircuitBreaker()
+    cb.evaluate(100_000)
+    cb.evaluate(94_000)    # 6% → level 1 ou 2 (6% > 4%, < 6% → level 1... wait)
+    # 6% drawdown: > 4% → level 1, not quite > 6% so level 1
+    assert cb.level == 1
+    cb.evaluate(98_000)    # 2% → level 0
+    assert cb.level == 0
+
+
+def test_cb_reset_clears_level_3(tmp_path, monkeypatch):
+    monkeypatch.setattr(DrawdownCircuitBreaker, "_STATE_PATH", tmp_path / "cb.json")
+    cb = DrawdownCircuitBreaker()
+    cb.evaluate(100_000)
+    cb.evaluate(88_000)    # 12% → level 3
+    assert cb.is_triggered
+    cb.reset()
+    assert cb.level == 0
+    assert not cb.is_triggered
+
+
+def test_cb_level_in_risk_report():
+    """Le cb_level passé à check() apparaît dans le rapport."""
+    mgr = RiskManager(RiskConfig())
+    report = mgr.check([], _snap(), cb_level=2)
+    assert report.cb_level == 2
+    assert report.cb_level_name == "ALERTE"
+    assert "ALERTE" in report.telegram_summary()
+
+
+def test_cb_migration_from_old_json(tmp_path, monkeypatch):
+    """Ancien JSON sans 'level' est migré correctement."""
+    monkeypatch.setattr(DrawdownCircuitBreaker, "_STATE_PATH", tmp_path / "cb.json")
+    # Simuler un ancien fichier JSON sans champ 'level'
+    old_state = {
+        "triggered": True,
+        "peak_netliq": 100_000,
+        "current_netliq": 88_000,
+        "drawdown": 0.12,
+        "triggered_at": "2026-01-01T00:00:00+00:00",
+        "drawdown_at_trigger": 0.12,
+    }
+    (tmp_path / "cb.json").write_text(__import__("json").dumps(old_state))
+    cb = DrawdownCircuitBreaker()
+    assert cb.level == 3    # triggered=True → level 3
+    assert cb.is_triggered

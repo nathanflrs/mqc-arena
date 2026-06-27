@@ -15,18 +15,21 @@ WATCHLIST = [
 
 # ====== AGENT PRIORITY PAR SYMBOLE ======
 # Backtest 3 ans — meilleur Sharpe par symbole (run_backtest.py)
+# Note: DividendArbitrageAgent (poids initial 1.0) n'a pas d'entrée ici car
+# il utilise un override absolu via meta["div_arb_priority"] dans selector.select_best()
+# pendant sa fenêtre J-7→J+1 — aucun autre mécanisme de priorité n'est nécessaire.
 AGENT_PRIORITY = {
     "AAPL": "BuffettAgent",
-    "SPY": "MeanReversionAgent",
+    "SPY": "BuffettAgent",
     "QQQ": "CitadelAgent",
     "NVDA": "BuffettAgent",
     "MSFT": "MeanReversionAgent",
     "GOOGL": "CitadelAgent",
     "META": "CitadelAgent",
     "JPM": "MeanReversionAgent",
-    "GS": "MeanReversionAgent",
+    "GS": "BuffettAgent",
     "GLD": "BuffettAgent",
-    "TSLA": "MeanReversionAgent",
+    "TSLA": "BuffettAgent",
     "AMD": "MeanReversionAgent",
     "AMZN": "TrendFollowingAgent",
     "LLY": "CitadelAgent",

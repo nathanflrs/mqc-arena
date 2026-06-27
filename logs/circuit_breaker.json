@@ -1,8 +1,8 @@
 {
   "triggered": false,
   "peak_netliq": 1022515.08,
-  "current_netliq": 1018244.96,
-  "drawdown": 0.004176094889475856,
+  "current_netliq": 1017305.69,
+  "drawdown": 0.005094682808981179,
   "triggered_at": null,
   "drawdown_at_trigger": null
 }

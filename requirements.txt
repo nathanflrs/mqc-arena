@@ -2,6 +2,7 @@
 pandas>=2.0
 numpy>=1.26
 yfinance>=0.2
+scikit-learn>=1.4
 
 # Broker
 ib_insync>=0.9.86
@@ -21,6 +22,9 @@ itsdangerous>=2.1
 
 # AI / LLM
 anthropic>=0.40.0
+
+# Charts & PDF (monthly factsheet)
+matplotlib>=3.8
 
 # Testing
 pytest>=8.0
