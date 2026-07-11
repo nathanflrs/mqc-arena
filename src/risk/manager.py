@@ -30,7 +30,7 @@ _CB_ICONS  = {0: "✅", 1: "🟡", 2: "🟠", 3: "🔴"}
 
 @dataclass
 class RiskConfig:
-    # Max exposition nette longue en % du net_liquidation
+    # Max exposition nette longue en % du net_liquidation (directional only)
     max_net_long_pct: float = 0.40
     # Max notional d'un seul ordre BUY en % du net_liquidation
     max_single_position_pct: float = 0.20
@@ -38,6 +38,13 @@ class RiskConfig:
     min_cash_pct: float = 0.30
     # Kill switch manuel — bloque tous les BUY si True
     sell_only_mode: bool = False
+    # Max gross exposure (long + short combined) for market-neutral pairs positions,
+    # as % of net_liquidation. Tracked separately from max_net_long_pct because
+    # pairs positions are approximately beta-neutral by construction.
+    max_gross_pairs_pct: float = 0.30
+    # Max gross exposure for CTA trend positions (long ETFs + short ETFs combined),
+    # as % of net_liquidation. Excluded from net_long budget.
+    max_gross_cta_pct: float = 0.60
 
 
 @dataclass
@@ -60,6 +67,15 @@ class RiskReport:
     # Circuit breaker state at time of check
     cb_level: int = 0
     cb_level_name: str = "NORMAL"
+    # Market-neutral pairs exposure (gross = |long leg| + |short leg|), as % of NAV.
+    # Tracked separately from net_long because pairs positions are beta-neutral
+    # by construction and must not consume the directional net-long budget.
+    pairs_gross_pre: float = 0.0
+    pairs_gross_post: float = 0.0
+    # CTA trend gross exposure (|long ETFs| + |short ETFs|), as % of NAV.
+    # Excluded from net_long. Both long and short entries checked against max_gross_cta_pct.
+    cta_gross_pre: float = 0.0
+    cta_gross_post: float = 0.0
 
     def telegram_summary(self) -> str:
         lines = ["🛡 Risk Manager"]
@@ -74,6 +90,18 @@ class RiskReport:
         lines += [
             f"  Net long (pre)  : {self.pre_trade_long_pct:.1%}",
             f"  Net long (post) : {self.post_trade_long_pct:.1%}",
+        ]
+        if self.pairs_gross_post > 0 or self.pairs_gross_pre > 0:
+            lines.append(
+                f"  Pairs gross     : {self.pairs_gross_pre:.1%} → {self.pairs_gross_post:.1%}"
+                " (market-neutral, exclu du net long)"
+            )
+        if self.cta_gross_post > 0 or self.cta_gross_pre > 0:
+            lines.append(
+                f"  CTA gross       : {self.cta_gross_pre:.1%} → {self.cta_gross_post:.1%}"
+                " (trend long/short, exclu du net long)"
+            )
+        lines += [
             f"  Approuvés       : {len(self.approved)}",
             f"  Rejetés         : {len(self.rejected)}",
         ]
@@ -106,6 +134,17 @@ class RiskManager:
                           Quand fourni, ajuste max_net_long_pct via _REGIME_SCALE.
             adv_map     — {symbol: adv_10j_en_actions}. Bloque les BUY > 1 % du volume journalier.
             cb_level    — niveau circuit breaker (0‑3). Affiché dans le rapport Telegram.
+
+        Market-neutral routing
+        ----------------------
+        Plans with strategy='market_neutral' (pairs trades) are routed through a
+        separate gross-exposure cap (max_gross_pairs_pct) and are EXCLUDED from
+        the net-long calculation. This prevents pairs positions from consuming the
+        directional long budget — they are beta-neutral by construction.
+
+        The gross pairs cap = (long leg notional + short leg notional) / netliq.
+        Both legs are submitted as separate OrderPlan objects tagged
+        strategy='market_neutral' by the pairs execution layer.
         """
         netliq = snap.net_liquidation
 
@@ -116,29 +155,115 @@ class RiskManager:
         approved: List[OrderPlan] = []
         rejected: List[RejectedPlan] = []
 
+        # Directional net-long (excludes market-neutral and CTA legs)
         current_long_notional = sum(
-            p.current_qty * p.last_price for p in plans if p.current_qty > 0
+            p.current_qty * p.last_price
+            for p in plans
+            if p.current_qty > 0 and p.strategy not in ("market_neutral", "cta_trend")
         )
         projected_long_notional = current_long_notional
         projected_cash = snap.cash
 
-        pre_trade_long_pct = current_long_notional / netliq if netliq > 0 else 0.0
+        # Gross pairs exposure: |long leg| + |short leg| for all market-neutral positions
+        current_pairs_gross = sum(
+            abs(p.current_qty) * p.last_price
+            for p in plans
+            if p.strategy == "market_neutral"
+        )
+        projected_pairs_gross = current_pairs_gross
+
+        # Gross CTA exposure: |long ETFs| + |short ETFs| for all cta_trend positions
+        current_cta_gross = sum(
+            abs(p.current_qty) * p.last_price
+            for p in plans
+            if p.strategy == "cta_trend"
+        )
+        projected_cta_gross = current_cta_gross
+
+        pre_trade_long_pct   = current_long_notional / netliq if netliq > 0 else 0.0
+        pairs_gross_pre      = current_pairs_gross   / netliq if netliq > 0 else 0.0
+        cta_gross_pre        = current_cta_gross     / netliq if netliq > 0 else 0.0
 
         for p in plans:
-            # SELL et HOLD : toujours approuvés
+            is_neutral = p.strategy == "market_neutral"
+            is_cta     = p.strategy == "cta_trend"
+
+            # ── CTA trend : catégorie de risque distincte ──────────────────────
+            # Traité en premier pour éviter que les SELL ouvrant un short CTA
+            # soient auto-approuvés par le bloc SELL/HOLD ci-dessous.
+            if is_cta:
+                if p.action == "HOLD":
+                    approved.append(p)
+                    continue
+
+                # Clôture d'un long CTA (SELL, on était long) → toujours approuvée
+                if p.action == "SELL" and p.current_qty > 0:
+                    approved.append(p)
+                    projected_cta_gross = max(0.0, projected_cta_gross - p.est_notional)
+                    continue
+
+                # Couverture d'un short CTA (BUY, on était short) → toujours approuvée
+                if p.action == "BUY" and p.current_qty < 0:
+                    approved.append(p)
+                    projected_cta_gross = max(0.0, projected_cta_gross - p.est_notional)
+                    continue
+
+                # Nouvelle entrée CTA (ouverture long ou short) — kill switch + gross cap
+                if self.cfg.sell_only_mode:
+                    rejected.append(RejectedPlan(p, "SELL_ONLY_MODE actif — nouvelle entrée CTA bloquée"))
+                    continue
+
+                new_cta_pct = (projected_cta_gross + p.est_notional) / netliq if netliq > 0 else 1.0
+                if new_cta_pct > self.cfg.max_gross_cta_pct:
+                    rejected.append(RejectedPlan(
+                        p,
+                        f"gross CTA {new_cta_pct:.1%} > max {self.cfg.max_gross_cta_pct:.0%} (cta_trend)",
+                    ))
+                    continue
+
+                approved.append(p)
+                projected_cta_gross += p.est_notional
+                continue
+
+            # ── SELL / HOLD : toujours approuvés (non-CTA) ────────────────────
             if p.action in ("SELL", "HOLD"):
                 approved.append(p)
                 if p.action == "SELL":
-                    projected_long_notional = max(0.0, projected_long_notional - p.est_notional)
-                    projected_cash += p.est_notional
+                    if is_neutral:
+                        # Closing a pairs leg reduces gross exposure.
+                        # Cash is approximately self-funding (long proceeds offset short cover),
+                        # so we leave projected_cash unchanged for market-neutral closes.
+                        projected_pairs_gross = max(0.0, projected_pairs_gross - p.est_notional)
+                    else:
+                        projected_long_notional = max(0.0, projected_long_notional - p.est_notional)
+                        projected_cash += p.est_notional
                 continue
 
-            # À partir d'ici : action == BUY
+            # ── BUY ───────────────────────────────────────────────────────────
 
-            # Règle 0 — Kill switch / sell-only
+            # Règle 0 — Kill switch / sell-only (applies to all strategies)
             if self.cfg.sell_only_mode:
                 rejected.append(RejectedPlan(p, "SELL_ONLY_MODE actif — BUY bloqué"))
                 continue
+
+            if is_neutral:
+                # ── Market-neutral path ────────────────────────────────────────
+                # Rule MN-1: gross pairs cap
+                new_gross_pct = (projected_pairs_gross + p.est_notional) / netliq if netliq > 0 else 1.0
+                if new_gross_pct > self.cfg.max_gross_pairs_pct:
+                    rejected.append(RejectedPlan(
+                        p,
+                        f"gross pairs exposure {new_gross_pct:.1%} > max "
+                        f"{self.cfg.max_gross_pairs_pct:.0%} (market-neutral)",
+                    ))
+                    continue
+                # Approved — pairs trades are approximately cash-neutral (long leg
+                # funded by short sale proceeds), so we do not update projected_cash.
+                approved.append(p)
+                projected_pairs_gross += p.est_notional
+                continue
+
+            # ── Directional path (existing rules) ─────────────────────────────
 
             # Règle 1 — Taille unitaire maximale
             single_pct = p.est_notional / netliq if netliq > 0 else 1.0
@@ -187,6 +312,8 @@ class RiskManager:
             projected_cash -= p.est_notional
 
         post_trade_long_pct = projected_long_notional / netliq if netliq > 0 else 0.0
+        pairs_gross_post    = projected_pairs_gross   / netliq if netliq > 0 else 0.0
+        cta_gross_post      = projected_cta_gross     / netliq if netliq > 0 else 0.0
         cb_level_name = _CB_LEVELS.get(cb_level, _CB_LEVELS[0])[0]
 
         return RiskReport(
@@ -200,6 +327,10 @@ class RiskManager:
             effective_max_net_long=effective_max_long,
             cb_level=cb_level,
             cb_level_name=cb_level_name,
+            pairs_gross_pre=pairs_gross_pre,
+            pairs_gross_post=pairs_gross_post,
+            cta_gross_pre=cta_gross_pre,
+            cta_gross_post=cta_gross_post,
         )
 
 
@@ -330,25 +461,37 @@ class DrawdownCircuitBreaker:
         name, _  = _CB_LEVELS.get(level, ("?", None))
         cb_limit = _CB_LEVELS[level][1]
 
+        if level == 3:
+            title = f"🔴 CIRCUIT BREAKER — URGENCE — Milan Capital"
+            body  = (
+                f"Drawdown depuis pic : {dd:.1%}\n"
+                f"Peak NetLiq : ${peak:,.0f} → ${netliq:,.0f}\n"
+                f"⛔ SELL-ONLY MODE actif automatiquement.\n"
+                f"Reset manuel requis."
+            )
+        else:
+            limit_str = f"max_net_long → {cb_limit:.0%}" if cb_limit else ""
+            title = f"{icon} CIRCUIT BREAKER — {name} — Milan Capital"
+            body  = (
+                f"Drawdown depuis pic : {dd:.1%}\n"
+                f"Peak NetLiq : ${peak:,.0f} → ${netliq:,.0f}\n"
+                f"{limit_str}"
+            )
+
+        # Level 1 (DÉFENSIF): avertissement dashboard uniquement.
+        # Levels 2+ (ALERTE, URGENCE): critical → dashboard + Telegram.
+        severity = "warning" if level == 1 else "critical"
+
         try:
-            from src.notify.telegram import send_message
-            if level == 3:
-                msg = (
-                    f"🔴 CIRCUIT BREAKER — URGENCE — Milan Capital\n"
-                    f"Drawdown depuis pic : {dd:.1%}\n"
-                    f"Peak NetLiq : ${peak:,.0f} → ${netliq:,.0f}\n"
-                    f"⛔ SELL-ONLY MODE actif automatiquement.\n"
-                    f"Reset manuel requis."
-                )
-            else:
-                limit_str = f"max_net_long → {cb_limit:.0%}" if cb_limit else ""
-                msg = (
-                    f"{icon} CIRCUIT BREAKER — {name} — Milan Capital\n"
-                    f"Drawdown depuis pic : {dd:.1%}\n"
-                    f"Peak NetLiq : ${peak:,.0f} → ${netliq:,.0f}\n"
-                    f"{limit_str}"
-                )
-            send_message(msg)
+            from src.events.bus import get_bus, Event
+            get_bus().emit(Event(
+                type="circuit_breaker",
+                severity=severity,
+                title=title,
+                body=body,
+                meta={"level": level, "drawdown": round(dd, 4),
+                      "netliq": netliq, "peak": peak},
+            ))
         except Exception:
             pass
 

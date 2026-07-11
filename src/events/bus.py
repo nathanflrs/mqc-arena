@@ -34,9 +34,6 @@ VALID_TYPES = frozenset({
 })
 VALID_SEVERITIES = frozenset({"info", "warning", "critical"})
 
-# Events with severity='critical' are also routed to Telegram.
-# Everything else stays on the dashboard only.
-_CRITICAL_TYPES = frozenset({"circuit_breaker", "error"})
 
 
 # ── Event dataclass ────────────────────────────────────────────────────────────

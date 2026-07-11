@@ -2,13 +2,13 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Milan Capital</title>
 <meta name="theme-color" content="#05080f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="MilCap">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpolygon points='16,2 30,16 16,30 2,16' fill='%230f1c2e'/%3E%3Cpolygon points='16,9 23,16 16,23 9,16' fill='none' stroke='%23ffffff' stroke-width='0.8'/%3E%3Cpolygon points='16,13 19,16 16,19 13,16' fill='%232a5bd7'/%3E%3C/svg%3E">
+<link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACkUlEQVR4nNSXS08TURiG3zNTKAGtxtBI9SdAEEiI7lyZ6qIIYogb7wvjwmhc6gb8C67cqXGjGxfGBdHESKJgi8XioAZj1KS0go2JrbbcnPF8R6eW6XTmzFTT+CZNz9z6PPP1m5kzChocBQ1OAHUkFOmM0nc+OzcOn2HwmS07uvYZCrsnfkQ3Yl8z2gP4iC8BE87AgrRswFjxK+G5BzZHuoYq4RQa0zoSg8d4EiA4U5Q7lXCrBO0DD1FldyzDWe3G5RIBMDbcvCmsrX5begOJSAnIwMsSjFfVg4SrgBP89NER9PV0YiY151tC8Qs/f/YktNfz0F7Ni7E1dAwd69YTql/4VGIGz6ZfYCHzSawbHtgvli0SrpWwFQjt7D7GGLvlBjdTj4RqB+e3lutcQHWDq8EwlEAbjB9FIcGPwaGBKN+ekpZQa8CZG1xp3or2njG0duxF6fMkl1hGWkgoGIpFEX9uLxEMbf+4UlhMVQk4wa9cvohHE5NlOONnHd41iqbWCNSmNrRs60Vx6QmgrwkJRXGQgDEYDHW8NyWknoZTiST+VcoVICMyI0NrFd6++4DDBw+IsWg4fqalXBwt7buhr39HLjUKY60gtu/p70V/XzeuXrtRBTN4eB1O5Bdmb1YJbJRA7Fe5/oTKT11uStB/vpybRmnxMfTVLxJwrHP4qUp4lYApQd1KDVNLggqUFhJF8ZGBG7o+Usi8vG3dZnsfoEvFSYIuNer29O/rXwqe1e7asRwnJE53w3NnjiORnBVjv3BXATeJsUsX8DSexPjDCV9wKQE3CbvIwilS8wGnnqgHLi0gK0GTU0M3jsjCPQlskFAwKKZfFjjNjPNZ7T48pOHT8v/zxcRMQ1/N/lYa/nb8EwAA//8dyWEfAAAABklEQVQDADl7m4OF4dq/AAAAAElFTkSuQmCC">
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icon-180.png?v=3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -62,7 +62,7 @@
   --safe-b:env(safe-area-inset-bottom,0px);
 }
 
-html,body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size:13px;line-height:1.5;height:100%;overflow:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+html,body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size:13px;line-height:1.5;height:100%;overflow:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;touch-action:pan-x pan-y}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 
 /* ── Scrollbar ── */
@@ -129,7 +129,7 @@ html,body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size
 /* Left: logo + name — never shrinks */
 .cmd-left{display:flex;align-items:center;gap:9px;flex-shrink:0;margin-right:12px}
 .brand-name{
-  font-family:var(--display);font-size:13px;font-weight:800;
+  font-family:var(--display);font-size:13px;font-weight:700;
   letter-spacing:.14em;text-transform:uppercase;color:var(--t1);white-space:nowrap;
 }
 /* Hairline separator */
@@ -217,7 +217,7 @@ html,body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size
 
 /* ── Main content ── */
 .main-content{flex:1;overflow:hidden;position:relative}
-.tab-panel{position:absolute;inset:0;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
+.tab-panel{position:absolute;inset:0;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch;touch-action:pan-y}
 .tab-panel.active{display:block}
 .panel-inner{padding:20px 20px 0}
 
@@ -518,6 +518,39 @@ tr:hover td{background:var(--s2)}
 .af-type.tearsheet{color:var(--amber);border-color:rgba(240,160,32,.4);background:rgba(240,160,32,.07)}
 .af-type.monte_carlo{color:#a078e0;border-color:rgba(160,120,224,.4);background:rgba(160,120,224,.07)}
 .af-type.circuit_breaker,.af-type.error{color:var(--red);border-color:var(--red-b);background:var(--red-d)}
+.af-type.alert{color:#f97316;border-color:rgba(249,115,22,.4);background:rgba(249,115,22,.07)}
+/* ── CTA Trend panel ──────────────────────────────────────────────────────── */
+.cta-summary{background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:12px 14px;margin-bottom:14px;display:flex;flex-direction:column;gap:10px}
+.cta-summary-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.cta-sum-label{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--t3);margin-bottom:3px}
+.cta-sum-val{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;font-weight:600;color:var(--t1)}
+.cta-counts{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.cta-count-chip{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.05em;padding:2px 6px;border-radius:2px;border:1px solid}
+.cta-count-chip.long{color:var(--green);border-color:var(--green-b);background:var(--green-d)}
+.cta-count-chip.short{color:var(--red);border-color:var(--red-b);background:var(--red-d)}
+.cta-count-chip.flat{color:var(--t3);border-color:var(--border);background:transparent}
+.cta-bar-wrap{display:flex;flex-direction:column;gap:4px}
+.cta-bar-labels{display:flex;justify-content:space-between;align-items:center}
+.cta-bar-track{height:4px;background:var(--s3);border-radius:2px;overflow:hidden}
+.cta-bar-fill{height:100%;border-radius:2px;transition:width .5s var(--ease-out);background:var(--cobalt-l)}
+.cta-bar-fill.warn{background:var(--amber)}.cta-bar-fill.over{background:var(--red)}
+.cta-tbl{width:100%;border-collapse:collapse}
+.cta-tbl th{font-family:var(--mono);font-size:8px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--t3);padding:0 0 8px;text-align:left;border-bottom:1px solid var(--border)}
+.cta-tbl th:not(:first-child){text-align:right}
+.cta-tbl td{padding:9px 0;border-bottom:1px solid var(--border);font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;vertical-align:middle}
+.cta-tbl td:not(:first-child){text-align:right}
+.cta-tbl tr:last-child td{border-bottom:none}
+.cta-ticker{font-weight:600;color:var(--t1);font-size:12px;letter-spacing:.04em}
+.cta-dir{display:inline-flex;align-items:center;gap:3px;font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.1em;padding:2px 6px;border-radius:2px;border:1px solid;white-space:nowrap}
+.cta-dir.long{color:var(--green);border-color:var(--green-b);background:var(--green-d)}
+.cta-dir.short{color:var(--red);border-color:var(--red-b);background:var(--red-d)}
+.cta-dir.flat{color:var(--t3);border-color:var(--border);background:transparent}
+.cta-dir.hold-long{color:rgba(22,199,132,.45);border-color:rgba(22,199,132,.18);background:rgba(22,199,132,.04)}
+.cta-dir.hold-short{color:rgba(234,57,67,.45);border-color:rgba(234,57,67,.18);background:rgba(234,57,67,.04)}
+.cta-n{font-size:11px;color:var(--t2)}.cta-n.pos{color:var(--green)}.cta-n.neg{color:var(--red)}
+.cta-w{font-size:11px;font-weight:600}.cta-w.pos{color:var(--green)}.cta-w.neg{color:var(--red)}.cta-w.zero{color:var(--t3)}
+.cta-adx-lo{color:var(--t3)}.cta-adx-md{color:var(--amber)}.cta-adx-hi{color:var(--t1)}
+.cta-panel-err{color:var(--t3);font-size:11px;text-align:center;padding:24px 0;font-style:italic}
 .af-expand{
   font-family:var(--mono);font-size:9px;color:var(--cobalt);
   background:none;border:none;cursor:pointer;padding:0;
@@ -532,6 +565,36 @@ tr:hover td{background:var(--s2)}
   font-family:var(--mono);font-size:11px;color:var(--t3);
   text-align:center;padding:40px 0;
 }
+
+/* ── TODAY news section ───────────────────────────────────────────────────── */
+.today-greeting{
+  font-family:var(--display);font-size:11px;font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--t2)
+}
+.today-news-list{display:flex;flex-direction:column;gap:7px}
+.today-news-card{
+  background:var(--s1);border:1px solid var(--border);border-radius:4px;
+  padding:9px 12px;cursor:pointer;text-decoration:none;display:block;
+  transition:border-color .12s
+}
+.today-news-card:hover{border-color:var(--border-strong)}
+.today-nc-top{display:flex;align-items:center;gap:7px;margin-bottom:4px}
+.today-nc-ticker{
+  font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.1em;
+  color:var(--cobalt-l);padding:1px 5px;background:var(--cobalt-d);
+  border:1px solid var(--cobalt-b);border-radius:2px
+}
+.today-nc-cat{font-family:var(--mono);font-size:9px;letter-spacing:.04em;color:var(--t3)}
+.today-nc-age{font-family:var(--mono);font-size:9px;color:var(--t3);margin-left:auto;white-space:nowrap}
+.today-nc-hl{
+  font-family:var(--mono);font-size:11px;color:var(--t1);line-height:1.45;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden
+}
+.today-nc-src{font-family:var(--mono);font-size:9px;color:var(--t3);margin-top:3px}
+.today-empty{
+  font-family:var(--mono);font-size:11px;color:var(--t3);
+  text-align:center;padding:18px 0;font-style:italic
+}
 </style>
 </head>
 <body>
@@ -540,9 +603,9 @@ tr:hover td{background:var(--s2)}
 <div id="splash">
   <div class="splash-inner">
     <svg viewBox="0 0 120 120" width="46" height="46" aria-hidden="true" style="margin-bottom:6px">
-      <polygon points="60,8 112,60 60,112 8,60" fill="#0f1c2e"/>
-      <polygon points="60,35 85,60 60,85 35,60" fill="none" stroke="rgba(255,255,255,0.40)" stroke-width="2.8"/>
-      <polygon points="60,51 69,60 60,69 51,60" fill="#2a5bd7"/>
+      <polygon points="60,8 112,60 60,112 8,60" fill="#ffffff"/>
+      <polygon points="60,35 85,60 60,85 35,60" fill="none" stroke="rgba(255,255,255,0.28)" stroke-width="2.8"/>
+      <polygon points="60,51 69,60 60,69 51,60" fill="#4f86f7"/>
     </svg>
     <div class="splash-eyebrow">Quant Fund</div>
     <div class="splash-wordmark">Milan Capital</div>
@@ -574,8 +637,8 @@ tr:hover td{background:var(--s2)}
     <!-- Left: logo + name -->
     <div class="cmd-left">
       <svg viewBox="0 0 120 120" width="22" height="22" aria-hidden="true" style="flex-shrink:0">
-        <polygon points="60,8 112,60 60,112 8,60" fill="#141d33"/>
-        <polygon points="60,35 85,60 60,85 35,60" fill="none" stroke="rgba(255,255,255,0.50)" stroke-width="2.8"/>
+        <polygon points="60,8 112,60 60,112 8,60" fill="#ffffff"/>
+        <polygon points="60,35 85,60 60,85 35,60" fill="none" stroke="rgba(255,255,255,0.30)" stroke-width="2.8"/>
         <polygon points="60,51 69,60 60,69 51,60" fill="#4f86f7"/>
       </svg>
       <span class="brand-name">Milan Capital</span>
@@ -645,6 +708,14 @@ tr:hover td{background:var(--s2)}
         </svg>
         Feed
       </button>
+      <button class="sb-btn" id="sidebar-btn-5" onclick="switchTab(5)" aria-label="CTA Trend">
+        <svg class="sb-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4">
+          <polyline points="2,14 6,8 10,11 15,4"/>
+          <polyline points="15,4 18,4 18,7"/>
+          <line x1="2" y1="17" x2="18" y2="17" stroke-dasharray="3 2" stroke-width=".9"/>
+        </svg>
+        CTA
+      </button>
     </nav>
 
     <!-- MAIN -->
@@ -653,6 +724,17 @@ tr:hover td{background:var(--s2)}
       <!-- ── OVERVIEW ── -->
       <div class="tab-panel active" id="panel-overview">
         <div class="panel-inner">
+
+          <!-- TODAY: greeting + news cards -->
+          <div class="card card-enter mb-12" style="--i:-1;padding:14px 16px">
+            <div class="card-head" style="margin-bottom:10px">
+              <span class="today-greeting" id="today-greeting">Bonjour, Sir.</span>
+              <span class="card-ts" id="today-ts"></span>
+            </div>
+            <div class="today-news-list" id="today-news-list">
+              <div class="today-empty">Chargement des actualités…</div>
+            </div>
+          </div>
 
           <!-- Hero 5 metrics -->
           <div class="hero-grid mb-12">
@@ -881,6 +963,58 @@ tr:hover td{background:var(--s2)}
         </div>
       </div>
 
+      <!-- ── CTA TREND ── -->
+      <div class="tab-panel" id="panel-cta">
+        <div class="panel-inner">
+
+          <div class="card-head" style="padding:0;margin-bottom:14px">
+            <span class="card-title">CTA — Trend Long/Short</span>
+            <span id="cta-ts" style="font-family:var(--mono);font-size:9px;color:var(--t3)"></span>
+          </div>
+
+          <!-- Summary bandeau -->
+          <div class="cta-summary">
+            <div class="cta-bar-wrap">
+              <div class="cta-bar-labels">
+                <span class="cta-sum-label">Gross exposure CTA</span>
+                <span class="cta-sum-val" id="cta-gross-val">—</span>
+              </div>
+              <div class="cta-bar-track">
+                <div class="cta-bar-fill" id="cta-bar-fill" style="width:0%"></div>
+              </div>
+            </div>
+            <div class="cta-summary-row">
+              <div>
+                <div class="cta-sum-label">Net exposure</div>
+                <div class="cta-sum-val" id="cta-net-val">—</div>
+              </div>
+              <div class="cta-counts" id="cta-counts"></div>
+            </div>
+          </div>
+
+          <!-- ETF table -->
+          <div class="tbl-wrap">
+            <table class="cta-tbl">
+              <thead>
+                <tr>
+                  <th>Ticker</th>
+                  <th>Direction</th>
+                  <th>Mom 63j</th>
+                  <th>Mom 126j</th>
+                  <th>ADX</th>
+                  <th>Poids</th>
+                </tr>
+              </thead>
+              <tbody id="cta-tbody">
+                <tr><td colspan="6" class="cta-panel-err">Chargement…</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="panel-end"></div>
+        </div>
+      </div>
+
     </div><!-- .main-content -->
 
   </div><!-- .layout -->
@@ -892,6 +1026,7 @@ tr:hover td{background:var(--s2)}
     <button class="tab-btn" id="tab-btn-2" onclick="switchTab(2)">Signaux</button>
     <button class="tab-btn" id="tab-btn-3" onclick="switchTab(3)">Terminal</button>
     <button class="tab-btn" id="tab-btn-4" onclick="switchTab(4)">Feed</button>
+    <button class="tab-btn" id="tab-btn-5" onclick="switchTab(5)">CTA</button>
   </nav>
 
 </div><!-- #app -->
@@ -902,11 +1037,11 @@ if ('serviceWorker' in navigator) {
 }
 
 // ── Tab switching ──────────────────────────────────────────────────────────────
-const PANELS      = ['panel-overview','panel-performance','panel-agents','panel-controls','panel-activity'];
-const TAB_BTNS    = ['tab-btn-0','tab-btn-1','tab-btn-2','tab-btn-3','tab-btn-4'];
-const SIDEBAR_IDS = ['sidebar-btn-0','sidebar-btn-1','sidebar-btn-2','sidebar-btn-3','sidebar-btn-4'];
+const PANELS      = ['panel-overview','panel-performance','panel-agents','panel-controls','panel-activity','panel-cta'];
+const TAB_BTNS    = ['tab-btn-0','tab-btn-1','tab-btn-2','tab-btn-3','tab-btn-4','tab-btn-5'];
+const SIDEBAR_IDS = ['sidebar-btn-0','sidebar-btn-1','sidebar-btn-2','sidebar-btn-3','sidebar-btn-4','sidebar-btn-5'];
 let currentTab = 0;
-const tabLoaded = [false,false,false,false,false];
+const tabLoaded = [false,false,false,false,false,false];
 
 function switchTab(i) {
   PANELS.forEach((id, j) => {
@@ -918,10 +1053,11 @@ function switchTab(i) {
   currentTab = i;
   if (!tabLoaded[i]) {
     tabLoaded[i] = true;
-    if (i===0) { loadStatus(); loadSignals(); loadFillStats(); loadReturnHero(); loadBestSharpeHero(); }
+    if (i===0) { loadStatus(); loadSignals(); loadFillStats(); loadReturnHero(); loadBestSharpeHero(); loadNewsToday(); }
     if (i===1) { loadPortfolioSummary(); loadPerformance(); loadMonteCarlo(); }
     if (i===2) { loadSignals(); loadDriftAlerts(); loadRegimeAccuracy(); }
     if (i===4) { loadActivityFeed(); afStartSSE(); }
+    if (i===5) { loadCTA(); }
   }
 }
 
@@ -933,7 +1069,7 @@ function revealDashboard() {
   appEl.style.opacity = '1';
   detectMode();
   tabLoaded[0] = true;
-  loadStatus(); loadSignals(); loadFillStats(); loadReturnHero(); loadBestSharpeHero();
+  loadStatus(); loadSignals(); loadFillStats(); loadReturnHero(); loadBestSharpeHero(); loadNewsToday();
   setInterval(loadStatus, 6000);
 }
 
@@ -1661,6 +1797,148 @@ function afStartSSE() {
     // Reconnect after 10s
     setTimeout(afStartSSE, 10000);
   };
+}
+
+// ── CTA Trend panel ───────────────────────────────────────────────────────────
+function _ctaDirBadge(displayDir) {
+  const cfg = {
+    'long':       ['long',       '▲ LONG'],
+    'short':      ['short',      '▼ SHORT'],
+    'flat':       ['flat',       '— FLAT'],
+    'hold_long':  ['hold-long',  '▲ HOLD'],
+    'hold_short': ['hold-short', '▼ HOLD'],
+  };
+  const [cls, label] = cfg[displayDir] || ['flat','— FLAT'];
+  return `<span class="cta-dir ${cls}">${label}</span>`;
+}
+function _ctaMomFmt(v) {
+  if (!v && v !== 0) return '<span class="cta-n">—</span>';
+  const cls = v > 0.001 ? 'pos' : (v < -0.001 ? 'neg' : '');
+  return `<span class="cta-n ${cls}">${v>=0?'+':''}${(v*100).toFixed(1)}%</span>`;
+}
+function _ctaAdxFmt(adx) {
+  const cls = adx < 15 ? 'cta-adx-lo' : (adx < 25 ? 'cta-adx-md' : 'cta-adx-hi');
+  return `<span class="${cls}">${adx.toFixed(1)}</span>`;
+}
+function _ctaWFmt(w) {
+  if (w === 0) return '<span class="cta-w zero">0%</span>';
+  const cls = w > 0 ? 'pos' : 'neg';
+  return `<span class="cta-w ${cls}">${w>0?'+':''}${(w*100).toFixed(1)}%</span>`;
+}
+function _ctaNetColor(net) {
+  if (net >  0.005) return 'var(--green)';
+  if (net < -0.005) return 'var(--red)';
+  return 'var(--t2)';
+}
+
+function renderCTA(data) {
+  if (data.error && !data.signals?.length) {
+    document.getElementById('cta-tbody').innerHTML =
+      `<tr><td colspan="6" class="cta-panel-err">Erreur : ${data.error}</td></tr>`;
+    return;
+  }
+
+  // Timestamp
+  const ts = data.computed_at ? new Date(data.computed_at) : null;
+  document.getElementById('cta-ts').textContent = ts
+    ? ts.toLocaleDateString('fr-FR',{day:'numeric',month:'short'}) + ' · ' +
+      ts.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})
+    : '';
+
+  // Summary bandeau
+  const gross = data.gross_exposure || 0;
+  const cap   = data.gross_cap || 0.60;
+  const net   = data.net_exposure || 0;
+  const barPct = Math.min(gross / cap * 100, 100).toFixed(1);
+  const barCls = gross > cap * 0.9 ? 'over' : (gross > cap * 0.7 ? 'warn' : '');
+  const fill = document.getElementById('cta-bar-fill');
+  fill.style.width   = barPct + '%';
+  fill.className     = 'cta-bar-fill' + (barCls ? ' ' + barCls : '');
+  document.getElementById('cta-gross-val').innerHTML =
+    `${(gross*100).toFixed(1)}% <span style="color:var(--t3);font-size:9px">/ ${(cap*100).toFixed(0)}%</span>`;
+  const netEl = document.getElementById('cta-net-val');
+  netEl.textContent  = (net>=0?'+':'') + (net*100).toFixed(1) + '%';
+  netEl.style.color  = _ctaNetColor(net);
+
+  const nL = data.n_long || 0, nS = data.n_short || 0, nF = data.n_flat || 0;
+  document.getElementById('cta-counts').innerHTML =
+    (nL ? `<span class="cta-count-chip long">▲ ${nL} LONG</span>` : '') +
+    (nS ? `<span class="cta-count-chip short">▼ ${nS} SHORT</span>` : '') +
+    `<span class="cta-count-chip flat">— ${nF} FLAT</span>`;
+
+  // ETF rows
+  const rows = (data.signals || []).map(s => {
+    const errNote = s.error ? ` <span style="color:var(--t3);font-size:9px">(err)</span>` : '';
+    return `<tr>
+      <td><span class="cta-ticker">${s.symbol}</span>${errNote}</td>
+      <td>${_ctaDirBadge(s.display_dir)}</td>
+      <td>${_ctaMomFmt(s.mom_fast)}</td>
+      <td>${_ctaMomFmt(s.mom_slow)}</td>
+      <td>${_ctaAdxFmt(s.adx)}</td>
+      <td>${_ctaWFmt(s.target_weight)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('cta-tbody').innerHTML =
+    rows || '<tr><td colspan="6" class="cta-panel-err">Aucune donnée</td></tr>';
+}
+
+async function loadCTA() {
+  try {
+    const data = await fetch('/api/cta-signals').then(r => r.json());
+    renderCTA(data);
+  } catch(e) {
+    document.getElementById('cta-tbody').innerHTML =
+      `<tr><td colspan="6" class="cta-panel-err">Erreur réseau</td></tr>`;
+  }
+}
+
+// ── TODAY news ─────────────────────────────────────────────────────────────
+
+function _todayGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning, Sir.';
+  if (h < 18) return 'Good afternoon, Sir.';
+  return 'Good evening, Sir.';
+}
+
+function renderNewsToday(data) {
+  const greeting = document.getElementById('today-greeting');
+  const ts       = document.getElementById('today-ts');
+  const list     = document.getElementById('today-news-list');
+  if (greeting) greeting.textContent = _todayGreeting();
+  if (ts && data.date) ts.textContent = data.date;
+  if (!list) return;
+
+  if (!data.items || data.items.length === 0) {
+    list.innerHTML = '<div class="today-empty">Aucune actualité significative aujourd\'hui.</div>';
+    return;
+  }
+
+  list.innerHTML = data.items.map(item => {
+    const ageStr = item.age_h < 1
+      ? `${Math.round(item.age_h * 60)}m ago`
+      : `${Math.round(item.age_h)}h ago`;
+    const href = item.url ? `href="${item.url}" target="_blank" rel="noopener noreferrer"` : '';
+    return `<a class="today-news-card" ${href}>
+      <div class="today-nc-top">
+        <span class="today-nc-ticker">${item.ticker}</span>
+        <span class="today-nc-cat">${item.icon} ${item.cat_label}</span>
+        <span class="today-nc-age">${ageStr}</span>
+      </div>
+      <div class="today-nc-hl">${item.headline}</div>
+      <div class="today-nc-src">${item.source}</div>
+    </a>`;
+  }).join('');
+}
+
+async function loadNewsToday() {
+  try {
+    const data = await fetch('/api/news-today').then(r => r.json());
+    renderNewsToday(data);
+  } catch(e) {
+    const list = document.getElementById('today-news-list');
+    if (list) list.innerHTML = '<div class="today-empty">Actualités indisponibles.</div>';
+  }
 }
 
 // Filter buttons

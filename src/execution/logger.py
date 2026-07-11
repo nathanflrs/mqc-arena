@@ -60,6 +60,78 @@ def log_execution(exec_rows: list) -> None:
     print("✅ Logged to logs/executions.csv")
 
 
+def compute_pair_roundtrip_pnl(
+    executions_path: str = "logs/executions.csv",
+    long_ticker: str = "",
+    short_ticker: str = "",
+) -> Optional[dict]:
+    """
+    Compute the round-trip P&L for a market-neutral pairs trade.
+
+    Pairs P&L = P&L(long leg) + P&L(short leg)
+
+        Long leg  P&L = (exit_price − entry_price) × long_qty
+        Short leg P&L = (entry_short_price − exit_short_price) × short_qty
+
+    A round-trip is identified by matching BUY/SELL pairs for each leg in
+    executions.csv. This is a best-effort FIFO match — for live scoring,
+    use the pair_id field in the execution log.
+
+    Returns None if insufficient executions are found.
+
+    Note on single-leg risk
+    -----------------------
+    If only one leg of a pair trade appears in executions (e.g., long opened
+    but short failed), the position is NOT market-neutral. The caller must
+    detect this by checking that BOTH legs have entries before interpreting
+    the P&L as market-neutral.
+    """
+    import os
+    if not os.path.exists(executions_path):
+        return None
+
+    df = pd.read_csv(executions_path)
+    if df.empty or "symbol" not in df.columns:
+        return None
+
+    result = {}
+
+    for ticker, is_long in [(long_ticker, True), (short_ticker, False)]:
+        if not ticker:
+            continue
+        leg = df[df["symbol"] == ticker].copy()
+        buys  = leg[leg["side"] == "BUY"].copy()
+        sells = leg[leg["side"] == "SELL"].copy()
+
+        if buys.empty or sells.empty:
+            result[ticker] = {"status": "incomplete", "pnl": None}
+            continue
+
+        if is_long:
+            # Long: bought first, sold to close
+            open_px  = buys["fill_price"].mean()  if "fill_price"  in buys.columns  else buys["last_price"].mean()
+            close_px = sells["fill_price"].mean() if "fill_price"  in sells.columns else sells["last_price"].mean()
+            qty      = buys["qty"].sum()           if "qty"         in buys.columns  else 0.0
+            pnl      = (close_px - open_px) * qty
+        else:
+            # Short: sold first (open short), then bought back (cover)
+            open_px  = sells["fill_price"].mean() if "fill_price" in sells.columns else sells["last_price"].mean()
+            close_px = buys["fill_price"].mean()  if "fill_price" in buys.columns  else buys["last_price"].mean()
+            qty      = sells["qty"].sum()          if "qty"        in sells.columns else 0.0
+            pnl      = (open_px - close_px) * qty
+
+        result[ticker] = {"pnl": round(pnl, 2), "open_px": round(open_px, 4),
+                          "close_px": round(close_px, 4), "qty": qty}
+
+    if long_ticker in result and short_ticker in result:
+        long_pnl  = result[long_ticker].get("pnl") or 0.0
+        short_pnl = result[short_ticker].get("pnl") or 0.0
+        result["pair_total_pnl"] = round(long_pnl + short_pnl, 2)
+        result["pair"] = f"{long_ticker}/{short_ticker}"
+
+    return result or None
+
+
 def log_decisions(
     signals: list,
     symbol: str,

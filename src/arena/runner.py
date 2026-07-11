@@ -41,7 +41,6 @@ from src.data.market_data import download_ohlcv, get_last_close_1d
 from src.regime.detector import GMMRegimeDetector
 from src.execution.planner import plan_from_signal, OrderPlan
 from src.execution.logger import log_order_plan, log_execution, log_decisions
-from src.notify.telegram import send_message
 from src.risk.manager import RiskConfig, RiskManager, DrawdownCircuitBreaker
 from src.risk.allocator import AllocatorConfig, DynamicAllocator
 from src.risk.correlation import CorrelationGuard
@@ -59,8 +58,15 @@ def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
         df_exec = pd.read_csv(exec_log)
         if "plan_id" in df_exec.columns:
             if plan_id in df_exec["plan_id"].astype(str).values:
-                send_message(f"❌ Plan {plan_id} already executed. Aborting.")
-                print(f"❌ Plan {plan_id} already executed. Aborting.")
+                _msg = f"❌ Plan {plan_id} already executed. Aborting."
+                print(_msg)
+                try:
+                    from src.events.bus import get_bus, Event
+                    get_bus().emit(Event(type="execution", severity="info",
+                                        title="Plan déjà exécuté", body=_msg,
+                                        meta={"plan_id": plan_id}))
+                except Exception:
+                    pass
                 return
 
     max_notional = snap.net_liquidation * MAX_NOTIONAL_PCT
@@ -75,8 +81,12 @@ def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
         side = "BUY" if dq > 0 else "SELL"
         qty = abs(dq)
 
-        if side == "SELL":
+        if side == "SELL" and getattr(p, "strategy", "directional") != "market_neutral":
+            # Directional SELL: cap at current holdings to prevent accidental shorts.
             qty = min(qty, int(round(p.current_qty)))
+        # Market-neutral SELL (strategy='market_neutral'): no cap.
+        # IBKR paper trading handles SELL on a non-held position as a short sale.
+        # The RiskManager's gross pairs cap enforces position limits upstream.
         if qty <= 0:
             continue
 
@@ -93,15 +103,30 @@ def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
     candidates = candidates[:MAX_ORDERS_PER_RUN]
 
     if not candidates:
-        send_message("Milan Capital — Execution: no orders after guards (filtered / HOLD).")
         print("No orders after guards.")
+        try:
+            from src.events.bus import get_bus, Event
+            get_bus().emit(Event(type="execution", severity="info",
+                                title="Aucun ordre — filtrés / HOLD",
+                                body="Milan Capital — Execution: no orders after guards (filtered / HOLD).",
+                                meta={"plan_id": plan_id}))
+        except Exception:
+            pass
         return
 
-    send_message(
+    _exec_start = (
         "🚀 AUTO-EXEC — sending PAPER orders (LIMIT)\n"
         f"plan_id={plan_id}\n"
         f"max_orders={MAX_ORDERS_PER_RUN} | max_notional/order={max_notional:.0f} | buffer={LIMIT_BUFFER_BPS}bps"
     )
+    print(_exec_start)
+    try:
+        from src.events.bus import get_bus, Event
+        get_bus().emit(Event(type="execution", severity="info",
+                            title=f"AUTO-EXEC démarré — {plan_id}",
+                            body=_exec_start, meta={"plan_id": plan_id}))
+    except Exception:
+        pass
 
     Path("logs").mkdir(parents=True, exist_ok=True)
     placed: list[tuple] = []
@@ -110,10 +135,18 @@ def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
     for p, side, qty, limit_price in candidates:
         contract = Stock(p.symbol, "SMART", "USD")
         order = LimitOrder(side, qty, round(limit_price, 2))
+        order.tif = "DAY"
+        order.outsideRth = False
         trade = ib.placeOrder(contract, order)
         msg = f"📤 PAPER {p.symbol}: {side} {qty} @ LMT {order.lmtPrice} | status={trade.orderStatus.status}"
         print(msg)
-        send_message(msg)
+        try:
+            from src.events.bus import get_bus, Event
+            get_bus().emit(Event(type="execution", severity="info",
+                                title=f"Ordre PAPER — {p.symbol} {side}",
+                                body=msg, meta={"plan_id": plan_id, "symbol": p.symbol, "side": side}))
+        except Exception:
+            pass
         placed.append((p, side, qty, float(order.lmtPrice), trade))
 
     # ── 2. Wait for IBKR paper fills (fills almost instantly on paper) ───────
@@ -179,6 +212,46 @@ def _load_entry_prices() -> dict[str, float]:
         return buys.groupby("symbol")["limit_price"].last().to_dict()
     except Exception:
         return {}
+
+
+def _run_intraday_news_check(positions: dict[str, float]) -> None:
+    """
+    Fetch latest news for open individual-stock positions and emit a warning
+    event for any earnings or M&A article found today.
+    Non-blocking — any failure is silently swallowed.
+    """
+    try:
+        from src.news.collector import NewsCollector
+        from src.news.selector import NewsSelector
+        from src.events.bus import get_bus, Event
+
+        CTA_EXTRA   = ["TLT", "UUP", "DBC"]
+        all_tickers = WATCHLIST + CTA_EXTRA
+
+        collector = NewsCollector(cache_ttl_hours=6.0)
+        selector  = NewsSelector()
+
+        items  = collector.fetch_all(all_tickers, days_back=1)
+        alerts = selector.check_intraday_alerts(items, positions)
+
+        cat_icon = {"earnings": "📊", "ma": "🤝", "guidance": "📈",
+                    "analyst": "🔍", "general": "📰"}
+        for item in alerts:
+            icon = cat_icon.get(item.category, "📰")
+            get_bus().emit(Event(
+                type     = "news",
+                severity = "warning",
+                title    = f"{icon} {item.category.upper()} — {item.ticker}",
+                body     = item.headline,
+                meta     = {
+                    "ticker":   item.ticker,
+                    "category": item.category,
+                    "source":   item.source,
+                    "url":      item.url,
+                },
+            ))
+    except Exception as exc:
+        print(f"⚠️  Intraday news check failed: {exc}")
 
 
 def _send_post_execution_report(
@@ -254,10 +327,18 @@ def _send_post_execution_report(
     lines.append(f"Ordres : {n_sent} envoyés | {n_risk} bloqués risk | {n_corr} bloqués corrél.")
     lines.append(f"Drawdown : {cb.drawdown:.1%} | Circuit breaker : {cb_status}")
 
+    body = "\n".join(lines)[:2000]
     try:
-        send_message("\n".join(lines)[:4096])
+        from src.events.bus import get_bus, Event
+        get_bus().emit(Event(
+            type="execution",
+            severity="info",
+            title=f"Rapport post-exécution — {plan_id}",
+            body=body,
+            meta={"plan_id": plan_id, "regime": regime, "n_sent": len(plans_sent)},
+        ))
     except Exception as e:
-        print(f"⚠️  Post-execution Telegram report failed: {e}")
+        print(f"⚠️  Post-execution event bus emit failed: {e}")
 
 
 def main() -> None:
@@ -276,7 +357,17 @@ def main() -> None:
         msg = f"⚠️ IBKR unavailable ({e}). Running in analysis-only mode (no execution)."
         print(msg)
         if not ci_mode:
-            send_message(msg)
+            try:
+                from src.events.bus import get_bus, Event
+                get_bus().emit(Event(
+                    type="system",
+                    severity="critical",
+                    title="IBKR unavailable — analysis-only mode",
+                    body=msg,
+                    meta={},
+                ))
+            except Exception:
+                pass
 
     try:
         if ibkr_ok:
@@ -303,7 +394,17 @@ def main() -> None:
             )
             print(msg)
             if not ci_mode:
-                send_message(msg)
+                try:
+                    from src.events.bus import get_bus, Event
+                    get_bus().emit(Event(type="alert", severity="info",
+                                        title=f"Circuit Breaker — Niveau {cb.level}",
+                                        body=msg, meta={"cb_level": cb.level, "drawdown": cb.drawdown}))
+                except Exception:
+                    pass
+
+        # ── Intraday news alerts (individual-stock positions only) ──────────
+        if not ci_mode and snap.positions:
+            _run_intraday_news_check(snap.positions)
 
         arena = Arena([
             DummyHoldAgent(),
@@ -434,7 +535,14 @@ def main() -> None:
                     msg = f"Earnings filter: {sym} BUY blocked — {earn_reason}"
                     print(msg)
                     if not ci_mode:
-                        send_message(f"📅 {msg}")
+                        try:
+                            from src.events.bus import get_bus, Event
+                            get_bus().emit(Event(type="alert", severity="info",
+                                                title=f"Earnings filter — {sym} bloqué",
+                                                body=f"📅 {msg}",
+                                                meta={"symbol": sym}))
+                        except Exception:
+                            pass
                     winner = dataclasses.replace(
                         winner,
                         action="HOLD",
@@ -488,7 +596,14 @@ def main() -> None:
                 msg = f"🛑 STOP-LOSS {sym}: {pnl_pct:.1%} (entrée ${entry_px:.2f} → ${current_px:.2f})"
                 print(msg)
                 if not ci_mode:
-                    send_message(msg)
+                    try:
+                        from src.events.bus import get_bus, Event
+                        get_bus().emit(Event(type="alert", severity="critical",
+                                            title=f"STOP-LOSS déclenché — {sym}",
+                                            body=msg,
+                                            meta={"symbol": sym, "pnl_pct": pnl_pct}))
+                    except Exception:
+                        pass
 
         print("\n====== ORDER PLAN (NO EXECUTION) ======")
         if not plans:
@@ -545,7 +660,14 @@ def main() -> None:
                 )
                 print(msg)
                 if not ci_mode:
-                    send_message(msg)
+                    try:
+                        from src.events.bus import get_bus, Event
+                        get_bus().emit(Event(type="alert", severity="info",
+                                            title=f"Corrélation — {block['symbol']} bloqué",
+                                            body=msg,
+                                            meta={"symbol": block["symbol"], "corr": block["max_corr"]}))
+                    except Exception:
+                        pass
 
         log_order_plan(plans, plan_id=plan_id)
 
@@ -565,7 +687,13 @@ def main() -> None:
             msg = f"Milan Capital — ORDER PLAN ready\nplan_id={plan_id}\nNo plans."
             print(msg)
             if not ci_mode:
-                send_message(msg)
+                try:
+                    from src.events.bus import get_bus, Event
+                    get_bus().emit(Event(type="execution", severity="info",
+                                        title=f"Plan vide — {plan_id}",
+                                        body=msg, meta={"plan_id": plan_id}))
+                except Exception:
+                    pass
             return
 
         lines = []
@@ -592,7 +720,19 @@ def main() -> None:
         execution_enabled = EXECUTION_ENABLED and ibkr_ok
         if not execution_enabled:
             reason = "IBKR unavailable" if not ibkr_ok else "EXECUTION_ENABLED=false"
-            send_message(f"🧯 {reason} → NO orders sent. plan_id={plan_id}")
+            _msg = f"🧯 {reason} → NO orders sent. plan_id={plan_id}"
+            print(_msg)
+            try:
+                from src.events.bus import get_bus, Event
+                get_bus().emit(Event(
+                    type="execution",
+                    severity="info",
+                    title=f"Exécution désactivée — {reason}",
+                    body=_msg,
+                    meta={"plan_id": plan_id, "reason": reason},
+                ))
+            except Exception:
+                pass
             print(f"🧯 {reason} → NO orders sent.")
             return
 

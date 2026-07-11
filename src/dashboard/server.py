@@ -497,19 +497,36 @@ def get_events(
 @app.get("/api/events/stream")
 async def stream_events(user: str = Depends(require_auth)):
     """SSE stream of live events. One JSON object per `data:` line."""
+    import threading
     from src.events.bus import get_bus
 
     async def generator():
-        bus = get_bus()
-        # subscribe_sse is a blocking generator; run in thread to not block event loop
-        loop = asyncio.get_event_loop()
+        bus  = get_bus()
+        loop = asyncio.get_running_loop()
         q: asyncio.Queue = asyncio.Queue(maxsize=200)
+        stop = threading.Event()
 
-        def feed():
-            for payload in bus.subscribe_sse():
-                loop.call_soon_threadsafe(q.put_nowait, payload)
+        def safe_put(payload: str) -> None:
+            # Called inside the event loop via call_soon_threadsafe.
+            # If the asyncio queue is full the client has disconnected —
+            # swallow the error and signal the feed thread to exit.
+            try:
+                q.put_nowait(payload)
+            except asyncio.QueueFull:
+                stop.set()
 
-        import threading
+        def feed() -> None:
+            # Bridge blocking bus generator → asyncio queue.
+            # Explicitly close the generator so bus._unregister() always runs.
+            gen = bus.subscribe_sse()
+            try:
+                for payload in gen:
+                    if stop.is_set():
+                        break
+                    loop.call_soon_threadsafe(safe_put, payload)
+            finally:
+                gen.close()
+
         t = threading.Thread(target=feed, daemon=True)
         t.start()
 
@@ -526,6 +543,9 @@ async def stream_events(user: str = Depends(require_auth)):
                     yield f"data: {payload}\n\n"
         except asyncio.CancelledError:
             pass
+        finally:
+            # Signal feed thread to stop on the next bus timeout (≤ 25 s).
+            stop.set()
 
     return StreamingResponse(
         generator(),
@@ -567,6 +587,209 @@ def run_monte_carlo(request: Request, user: str = Depends(require_auth)):
         })
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/cta-signals")
+def get_cta_signals(user: str = Depends(require_auth)):
+    """CTA Trend signals for the 6-ETF universe. Cached 30 min."""
+    import time as _time
+
+    CACHE_PATH = LOGS / "cta_signals_cache.json"
+    CACHE_TTL  = 1800  # 30 min
+
+    # Return fresh cache
+    if CACHE_PATH.exists():
+        try:
+            cached = json.loads(CACHE_PATH.read_text())
+            if _time.time() - cached.pop("_ts", 0) < CACHE_TTL:
+                return JSONResponse(content=cached)
+        except Exception:
+            pass
+
+    try:
+        from src.agents.cta_trend_agent import CTATrendAgent, CTA_UNIVERSE
+        from src.agents.base import MarketState
+        from src.data.market_data import download_ohlcv
+        from datetime import timezone
+
+        agent = CTATrendAgent()
+
+        # Best-effort portfolio from executions log
+        portfolio: dict[str, float] = {}
+        try:
+            raw = _read_text("logs/executions.csv")
+            if raw:
+                df_exec = pd.read_csv(io.StringIO(raw))
+                for _, row in df_exec.iterrows():
+                    sym = str(row.get("symbol", ""))
+                    if sym in CTA_UNIVERSE:
+                        dq = float(row.get("delta_qty", 0) or 0)
+                        portfolio[sym] = portfolio.get(sym, 0.0) + dq
+        except Exception:
+            pass
+
+        signals = []
+        for sym in CTA_UNIVERSE:
+            try:
+                df = download_ohlcv(sym, period="1y")
+                state = MarketState(
+                    symbol=sym,
+                    price=float(df["Close"].iloc[-1]),
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                )
+                sig  = agent.generate_signal(state, portfolio, data=df)
+                meta = sig.meta or {}
+                cta_dir     = meta.get("cta_direction", "flat")
+                current_qty = float(meta.get("current_qty", portfolio.get(sym, 0.0)))
+
+                if cta_dir == "hold":
+                    if current_qty > 0:
+                        display_dir = "hold_long"
+                    elif current_qty < 0:
+                        display_dir = "hold_short"
+                    else:
+                        display_dir = "flat"
+                else:
+                    display_dir = cta_dir
+
+                signals.append({
+                    "symbol":        sym,
+                    "direction":     cta_dir,
+                    "display_dir":   display_dir,
+                    "mom_fast":      round(float(meta.get("mom_fast",  0.0)), 4),
+                    "mom_slow":      round(float(meta.get("mom_slow",  0.0)), 4),
+                    "adx":           round(float(meta.get("adx",       0.0)), 1),
+                    "realized_vol":  round(float(meta.get("realized_vol", 0.0)), 4),
+                    "target_weight": round(float(sig.target_weight), 4),
+                    "current_qty":   current_qty,
+                })
+            except Exception as exc:
+                signals.append({
+                    "symbol": sym, "direction": "flat", "display_dir": "flat",
+                    "mom_fast": 0.0, "mom_slow": 0.0, "adx": 0.0,
+                    "realized_vol": 0.0, "target_weight": 0.0, "current_qty": 0.0,
+                    "error": str(exc),
+                })
+
+        n_long  = sum(1 for s in signals if s["direction"] == "long")
+        n_short = sum(1 for s in signals if s["direction"] == "short")
+        n_flat  = len(signals) - n_long - n_short
+        gross   = round(sum(abs(s["target_weight"]) for s in signals), 4)
+        net     = round(sum(s["target_weight"]      for s in signals), 4)
+
+        result = {
+            "signals":        signals,
+            "gross_exposure": gross,
+            "net_exposure":   net,
+            "gross_cap":      0.60,
+            "n_long":         n_long,
+            "n_short":        n_short,
+            "n_flat":         n_flat,
+            "computed_at":    datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            CACHE_PATH.write_text(json.dumps({**result, "_ts": _time.time()}))
+        except Exception:
+            pass
+        return JSONResponse(content=result)
+
+    except Exception as exc:
+        return JSONResponse(content={
+            "error": str(exc), "signals": [],
+            "gross_exposure": 0, "net_exposure": 0, "gross_cap": 0.6,
+            "n_long": 0, "n_short": 0, "n_flat": 6,
+        })
+
+
+@app.get("/api/news-today")
+def get_news_today(user: str = Depends(require_auth)):
+    """Scored top-5 news for today. At most 3 server-side Finnhub fetches per calendar day."""
+    import time as _time
+    from datetime import date, timezone
+
+    CACHE_PATH          = LOGS / "news_today_cache.json"
+    MAX_FETCHES_PER_DAY = 3
+    CACHE_FRESH_SECS    = 3600   # re-use cache if < 1h old regardless of fetch count
+    today_str           = date.today().isoformat()
+
+    cached_data:    dict | None = None
+    n_fetches_today: int        = 0
+
+    if CACHE_PATH.exists():
+        try:
+            cached = json.loads(CACHE_PATH.read_text())
+            if cached.get("date") == today_str:
+                n_fetches_today = cached.get("n_fetches", 0)
+                cached_data = cached
+        except Exception:
+            pass
+
+    if cached_data and cached_data.get("items") is not None:
+        cache_age = _time.time() - cached_data.get("_ts", 0)
+        if cache_age < CACHE_FRESH_SECS or n_fetches_today >= MAX_FETCHES_PER_DAY:
+            return JSONResponse(content={k: v for k, v in cached_data.items() if k != "_ts"})
+
+    try:
+        from src.news.collector import NewsCollector
+        from src.news.selector  import NewsSelector
+        from src.config         import WATCHLIST
+
+        CTA_EXTRA   = ["TLT", "UUP", "DBC"]
+        all_tickers = WATCHLIST + CTA_EXTRA
+
+        # Best-effort portfolio from executions log
+        portfolio: dict[str, float] = {}
+        try:
+            raw = _read_text("logs/executions.csv")
+            if raw:
+                df_exec = pd.read_csv(io.StringIO(raw))
+                for _, row in df_exec.iterrows():
+                    sym = str(row.get("symbol", ""))
+                    dq  = float(row.get("delta_qty", 0) or 0)
+                    portfolio[sym] = portfolio.get(sym, 0.0) + dq
+        except Exception:
+            pass
+
+        collector = NewsCollector()
+        selector  = NewsSelector()
+        items     = collector.fetch_all(all_tickers, days_back=1)
+        top       = selector.select_daily(items, portfolio=portfolio, watchlist=WATCHLIST)
+
+        cat_label = {"earnings": "Earnings", "ma": "M&A", "guidance": "Guidance",
+                     "analyst": "Analyst",   "general": "News"}
+        cat_icon  = {"earnings": "📊", "ma": "🤝", "guidance": "📈",
+                     "analyst": "🔍",  "general": "📰"}
+
+        news_items = []
+        for sn in top:
+            age_h = (datetime.now(timezone.utc) - sn.item.datetime).total_seconds() / 3600
+            news_items.append({
+                "ticker":    sn.item.ticker,
+                "headline":  sn.item.headline,
+                "source":    sn.item.source,
+                "url":       sn.item.url,
+                "category":  sn.item.category,
+                "cat_label": cat_label.get(sn.item.category, "News"),
+                "icon":      cat_icon.get(sn.item.category, "📰"),
+                "score":     round(sn.score, 1),
+                "age_h":     round(age_h, 1),
+            })
+
+        result = {
+            "date":      today_str,
+            "items":     news_items,
+            "n_fetches": n_fetches_today + 1,
+            "_ts":       _time.time(),
+        }
+        try:
+            CACHE_PATH.write_text(json.dumps(result))
+        except Exception:
+            pass
+
+        return JSONResponse(content={k: v for k, v in result.items() if k != "_ts"})
+
+    except Exception as exc:
+        return JSONResponse(content={"error": str(exc), "items": [], "date": today_str})
 
 
 if __name__ == "__main__":

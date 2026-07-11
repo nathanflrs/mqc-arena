@@ -297,6 +297,12 @@ class LiveScorer:
                     open_positions.setdefault(sym, []).append((agent, price, ts))
 
             elif side == "SELL" and open_positions.get(sym):
+                # Skip unfilled SELL orders — same guard as BUY above.
+                # A SELL with avg_fill_price=0 was never executed; using limit_price
+                # as exit would create a phantom round-trip with a fictitious exit.
+                raw_fill_sell = self._safe_float(row.get("avg_fill_price"))
+                if raw_fill_sell is not None and raw_fill_sell == 0.0:
+                    continue
                 agent, entry_price, entry_date = open_positions[sym].pop(0)
                 if not open_positions[sym]:
                     del open_positions[sym]
@@ -667,30 +673,39 @@ class LiveScorer:
 
     def send_weekly_tearsheet(self) -> None:
         """
-        Generate tearsheet and send formatted Telegram summary.
+        Generate tearsheet and emit to the event bus (dashboard Activity Feed).
         Called every Monday by src/notify/weekly_tearsheet.py.
         """
         from datetime import datetime
-        from src.notify.telegram import send_message
 
         path = self.generate_tearsheet()
         metrics = self.compute_agent_metrics()
 
         if not metrics:
-            send_message("📊 Tearsheet hebdo : aucun round-trip enregistré pour l'instant.")
-            return
+            body = "📊 Tearsheet hebdo : aucun round-trip enregistré pour l'instant."
+        else:
+            now = datetime.now()
+            lines = [f"📊 TEARSHEET — Semaine {now.strftime('%V')} ({now.year})\n"]
+            for m in sorted(metrics.values(), key=lambda x: x.sharpe, reverse=True):
+                sign = "+" if m.total_pnl_pct >= 0 else ""
+                lines.append(
+                    f"\n🤖 {m.agent}\n"
+                    f"   Trades: {m.n_trades} | Win: {m.win_rate:.0%} | Sharpe: {m.sharpe:.2f}\n"
+                    f"   PnL total: {sign}{m.total_pnl_pct:.1%} | Max DD: {m.max_drawdown:.1%}\n"
+                    f"   Avg/trade: {m.avg_return_pct:+.2%} | Hold moy: {m.avg_holding_days:.0f}j"
+                )
+            lines.append(f"\n📁 {path}")
+            body = "\n".join(lines)
 
-        now = datetime.now()
-        lines = [f"📊 TEARSHEET — Semaine {now.strftime('%V')} ({now.year})\n"]
-
-        for m in sorted(metrics.values(), key=lambda x: x.sharpe, reverse=True):
-            sign = "+" if m.total_pnl_pct >= 0 else ""
-            lines.append(
-                f"\n🤖 {m.agent}\n"
-                f"   Trades: {m.n_trades} | Win: {m.win_rate:.0%} | Sharpe: {m.sharpe:.2f}\n"
-                f"   PnL total: {sign}{m.total_pnl_pct:.1%} | Max DD: {m.max_drawdown:.1%}\n"
-                f"   Avg/trade: {m.avg_return_pct:+.2%} | Hold moy: {m.avg_holding_days:.0f}j"
-            )
-
-        lines.append(f"\n📁 {path}")
-        send_message("\n".join(lines)[:4096])
+        try:
+            from src.events.bus import get_bus, Event
+            from datetime import date
+            get_bus().emit(Event(
+                type="tearsheet",
+                severity="info",
+                title=f"Weekly Tearsheet — {date.today().isoformat()}",
+                body=body[:2000],
+                meta={"tearsheet_path": str(path) if path else None},
+            ))
+        except Exception:
+            pass

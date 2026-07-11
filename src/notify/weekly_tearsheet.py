@@ -1,5 +1,5 @@
 """
-Weekly tearsheet runner — sends PnL attribution report to Telegram.
+Weekly tearsheet runner — emits PnL attribution report to the event bus (dashboard).
 Triggered every Monday at 07:15 UTC via GitHub Actions.
 """
 from __future__ import annotations
@@ -11,25 +11,34 @@ load_dotenv()
 from src.risk.live_scorer import LiveScorer
 
 
-def _send_portfolio_performance(scorer: LiveScorer) -> None:
-    from src.notify.telegram import send_message
+def _emit_portfolio_performance(scorer: LiveScorer) -> None:
     perf = scorer.compute_portfolio_performance()
     if perf is None:
         return
     sign_p = "+" if perf.portfolio_return >= 0 else ""
     sign_s = "+" if perf.spy_return >= 0 else ""
     sign_a = "+" if perf.alpha >= 0 else ""
-    send_message(
+    body = (
         f"📈 Performance portefeuille (depuis le {perf.first_trade_date})\n"
         f"Portefeuille : {sign_p}{perf.portfolio_return:.1%}\n"
         f"SPY B&H      : {sign_s}{perf.spy_return:.1%}\n"
         f"Alpha        : {sign_a}{perf.alpha:.1%}\n"
         f"({perf.n_trades} round-trips)"
     )
+    try:
+        from src.events.bus import get_bus, Event
+        get_bus().emit(Event(
+            type="performance",
+            severity="info",
+            title="Performance portefeuille — Tearsheet",
+            body=body,
+            meta={"portfolio_return": perf.portfolio_return, "alpha": perf.alpha},
+        ))
+    except Exception:
+        pass
 
 
-def _send_drift_alerts(scorer: LiveScorer) -> None:
-    from src.notify.telegram import send_message
+def _emit_drift_alerts(scorer: LiveScorer) -> None:
     alerts = scorer.compute_drift_alerts()
     if not alerts:
         return
@@ -39,12 +48,22 @@ def _send_drift_alerts(scorer: LiveScorer) -> None:
             f"  {a.agent.replace('Agent', '')}: "
             f"OOS={a.oos_sharpe:.2f} | Live={a.live_sharpe:.2f} | Écart={a.drift:.2f}"
         )
-    send_message("\n".join(lines))
+    body = "\n".join(lines)
+    try:
+        from src.events.bus import get_bus, Event
+        get_bus().emit(Event(
+            type="alert",
+            severity="info",
+            title="Dérive Sharpe détectée — Tearsheet",
+            body=body,
+            meta={"n_agents": len(alerts)},
+        ))
+    except Exception:
+        pass
 
 
-def _send_dividend_arb_pnl() -> None:
+def _emit_dividend_arb_pnl() -> None:
     from src.agents.dividend_arbitrage_agent import DividendPositionTracker
-    from src.notify.telegram import send_message
 
     tracker = DividendPositionTracker()
     trades  = tracker.closed_trades()
@@ -56,12 +75,22 @@ def _send_dividend_arb_pnl() -> None:
     winners   = sum(1 for t in trades if float(t.get("pnl", 0)) > 0)
     win_rate  = winners / n if n > 0 else 0.0
     sign      = "+" if total_pnl >= 0 else ""
-
-    send_message(
+    body = (
         f"📊 Dividend Arbitrage Performance\n"
         f"Trades: {n}  |  Win rate: {win_rate:.0%}\n"
         f"P&L total: {sign}${total_pnl:,.2f}"
     )
+    try:
+        from src.events.bus import get_bus, Event
+        get_bus().emit(Event(
+            type="performance",
+            severity="info",
+            title="Dividend Arbitrage — Tearsheet",
+            body=body,
+            meta={"total_pnl": total_pnl, "n_trades": n, "win_rate": win_rate},
+        ))
+    except Exception:
+        pass
 
 
 def _send_monte_carlo() -> None:
@@ -115,9 +144,9 @@ def _emit_tearsheet_event(scorer: "LiveScorer") -> None:
 def run() -> None:
     scorer = LiveScorer()
     scorer.send_weekly_tearsheet()
-    _send_portfolio_performance(scorer)
-    _send_drift_alerts(scorer)
-    _send_dividend_arb_pnl()
+    _emit_portfolio_performance(scorer)
+    _emit_drift_alerts(scorer)
+    _emit_dividend_arb_pnl()
     _send_monte_carlo()
     _emit_tearsheet_event(scorer)
 

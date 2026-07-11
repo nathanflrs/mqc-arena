@@ -252,3 +252,103 @@ def test_events_survive_restart(tmp_path):
     bus2 = EventBus(db_path=db)  # new instance, same DB
     rows = bus2.get_recent()
     assert any(r["title"] == "survives-restart" for r in rows)
+
+
+# ── 10. Notification routing policy ─────────────────────────────────────────
+
+
+def test_morning_briefing_emits_event_not_telegram(tmp_path, monkeypatch):
+    """
+    morning_briefing.run() must emit a 'briefing' event with severity='info'
+    to the event bus and NEVER call Telegram directly.
+    """
+    telegram_called = []
+
+    # Patch the singleton bus with our tmp_bus
+    test_bus = EventBus(db_path=tmp_path / "brief_test.db")
+    monkeypatch.setattr("src.events.bus._bus", test_bus)
+
+    # Intercept any Telegram call at the transport level
+    monkeypatch.setattr(
+        "src.notify.telegram.send_message",
+        lambda *a, **kw: telegram_called.append(a),
+    )
+
+    # Stub out I/O-bound helpers so the test doesn't hit the network
+    monkeypatch.setattr(
+        "src.notify.morning_briefing._build_market_section",
+        lambda: "SPY +1.0%",
+    )
+    monkeypatch.setattr(
+        "src.notify.morning_briefing._build_feed_section",
+        lambda label, emoji, url: "",
+    )
+    monkeypatch.setattr(
+        "src.notify.morning_briefing._build_dividend_section",
+        lambda: "",
+    )
+    monkeypatch.setattr(
+        "src.notify.morning_briefing._build_mc_line",
+        lambda: "",
+    )
+
+    from src.notify.morning_briefing import run
+    run()
+
+    # No direct Telegram call
+    assert telegram_called == [], "morning briefing must not call Telegram directly"
+
+    # A briefing event must have been emitted with severity='info'
+    rows = test_bus.get_recent(type_filter="briefing")
+    assert len(rows) >= 1, "morning briefing must emit a 'briefing' event to the bus"
+    assert rows[0]["severity"] == "info", "morning briefing event must have severity='info'"
+
+
+def test_weekly_tearsheet_emits_event_not_telegram(tmp_path, monkeypatch):
+    """
+    weekly_tearsheet._emit_tearsheet_event() must emit a 'tearsheet' info event.
+    The legacy _send_portfolio_performance / _send_drift_alerts / _send_dividend_arb_pnl
+    functions must route through the bus, not call Telegram directly.
+    """
+    telegram_called = []
+    test_bus = EventBus(db_path=tmp_path / "ts_test.db")
+    monkeypatch.setattr("src.events.bus._bus", test_bus)
+    monkeypatch.setattr(
+        "src.notify.telegram.send_message",
+        lambda *a, **kw: telegram_called.append(a),
+    )
+
+    from src.notify.weekly_tearsheet import _emit_tearsheet_event
+    from unittest.mock import MagicMock
+
+    scorer = MagicMock()
+    _emit_tearsheet_event(scorer)
+
+    assert telegram_called == [], "tearsheet emitter must not call Telegram directly"
+    rows = test_bus.get_recent(type_filter="tearsheet")
+    assert len(rows) >= 1, "tearsheet emitter must emit a 'tearsheet' event to the bus"
+    assert rows[0]["severity"] == "info"
+
+
+def test_stop_loss_routes_critical_to_telegram(tmp_path, monkeypatch):
+    """
+    A stop-loss event emitted as severity='critical' must be routed to Telegram
+    through the event bus (not bypassing it), confirming the routing policy.
+    """
+    test_bus = EventBus(db_path=tmp_path / "sl_test.db")
+    routed = []
+    monkeypatch.setattr(
+        "src.events.bus.EventBus._route_to_telegram",
+        lambda self, ev: routed.append(ev),
+    )
+
+    test_bus.emit(Event(
+        type="alert",
+        severity="critical",
+        title="STOP-LOSS déclenché — AAPL",
+        body="🛑 STOP-LOSS AAPL: -8.5%",
+        meta={"symbol": "AAPL"},
+    ))
+
+    assert len(routed) == 1, "critical event (stop-loss) must be routed to Telegram via bus"
+    assert "STOP-LOSS" in routed[0].title

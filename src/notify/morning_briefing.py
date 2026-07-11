@@ -1,5 +1,5 @@
 """
-Morning market briefing: RSS scraping + yfinance → Telegram.
+Morning market briefing: RSS scraping + yfinance → dashboard (event bus).
 Runs at 08h00 CET (07:00 UTC) via GitHub Actions on trading days.
 No LLM — raw data formatted directly.
 """
@@ -11,7 +11,6 @@ import feedparser
 import yfinance as yf
 from dotenv import load_dotenv
 
-from src.notify.telegram import send_message
 from src.config import WATCHLIST
 
 load_dotenv()
@@ -101,6 +100,36 @@ def _build_feed_section(label: str, emoji: str, url: str) -> str:
     return f"{header}\n{bullets}"
 
 
+def _build_news_section() -> str:
+    """Top-5 scored news for today's WATCHLIST + CTA universe. Non-blocking."""
+    try:
+        from src.news.collector import NewsCollector
+        from src.news.selector import NewsSelector
+
+        CTA_EXTRA = ["TLT", "UUP", "DBC"]
+        all_tickers = WATCHLIST + CTA_EXTRA
+
+        collector = NewsCollector()
+        selector  = NewsSelector()
+
+        items = collector.fetch_all(all_tickers, days_back=1)
+        top   = selector.select_daily(items, portfolio={}, watchlist=WATCHLIST)
+
+        if not top:
+            return ""
+
+        cat_icon = {"earnings": "📊", "ma": "🤝", "guidance": "📈",
+                    "analyst": "🔍", "general": "📰"}
+        lines = ["📰 TODAY'S NEWS"]
+        for sn in top:
+            icon = cat_icon.get(sn.item.category, "📰")
+            headline = sn.item.headline[:90].rstrip()
+            lines.append(f"{icon} [{sn.item.ticker}] {headline}")
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
 def _build_dividend_section() -> str:
     try:
         from src.agents.dividend_arbitrage_agent import generate_dividend_report
@@ -135,6 +164,7 @@ def run() -> None:
 
     market    = _build_market_section()
     mc_line   = _build_mc_line()
+    news      = _build_news_section()
     div_cal   = _build_dividend_section()
     feeds     = [_build_feed_section(label, emoji, url) for label, emoji, url in RSS_FEEDS]
     feeds_text= "\n\n".join(s for s in feeds if s)
@@ -147,6 +177,8 @@ def run() -> None:
         f"☀️ Milan Capital — Morning Briefing\n{date_str} | 08:00 CET",
         f"📈 MARCHÉS PRÉ-MARKET\n{market_block}",
     ]
+    if news:
+        sections.append(news)
     if div_cal:
         sections.append(div_cal)
     if feeds_text:
