@@ -1340,3 +1340,143 @@ SPY,bull,BuffettAgent,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-h
 ,LLY,bull,,HOLD,0.1,0.0,No pair defined for this symbol,,a44394e9,2026-06-24T12:58:01+00:00,PairsTradingAgent,False
 ,LLY,bull,,HOLD,0.3,0.0,Vol HOLD: VIX=18.99 | z=0.27 | mom5=15.7%,,a44394e9,2026-06-24T12:58:01+00:00,VolatilityAgent,False
 ,LLY,bull,,HOLD,0.1,0.0,EarningsSentiment: API error — TypeError,,a44394e9,2026-06-24T12:58:01+00:00,EarningsSentimentAgent,False
+,AAPL,bull,,HOLD,0.0,0.0,Baseline hold,,99411ad5,2026-07-15T19:04:43+00:00,DummyHoldAgent,False
+,AAPL,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,99411ad5,2026-07-15T19:04:43+00:00,BuffettAgent,True
+,AAPL,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,99411ad5,2026-07-15T19:04:43+00:00,CitadelAgent,False
+,AAPL,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=70.5),,99411ad5,2026-07-15T19:04:43+00:00,MeanReversionAgent,False
+,AAPL,bull,,BUY,0.6,0.08,Macro RISK ON: SPY=7.95% GLD=-15.40% TLT=-1.77%,,99411ad5,2026-07-15T19:04:43+00:00,MacroAgent,False
+,AAPL,bull,,BUY,0.8,0.1,TrendFollow BUY: MAs alignées + ADX=25.7 + mom20=10.72%,,99411ad5,2026-07-15T19:04:43+00:00,TrendFollowingAgent,False
+,AAPL,bull,,HOLD,0.2,0.0,No dividend data available,,99411ad5,2026-07-15T19:04:43+00:00,DividendArbitrageAgent,False
+,AAPL,bull,,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",,99411ad5,2026-07-15T19:04:43+00:00,PairsTradingAgent,False
+,AAPL,bull,,HOLD,0.3,0.0,Vol HOLD: VIX=15.85 | z=-0.68 | mom5=-6.2%,,99411ad5,2026-07-15T19:04:43+00:00,VolatilityAgent,False
+,AAPL,bull,,HOLD,0.1,0.0,EarningsSentiment: API error — TypeError,,99411ad5,2026-07-15T19:04:43+00:00,EarningsSentimentAgent,False
+,SPY,bull,,HOLD,0.0,0.0,Baseline hold,,99411ad5,2026-07-15T19:04:45+00:00,DummyHoldAgent,False
+,SPY,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,99411ad5,2026-07-15T19:04:45+00:00,BuffettAgent,True
+,SPY,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,99411ad5,2026-07-15T19:04:45+00:00,CitadelAgent,False
+,SPY,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=67.5),,99411ad5,2026-07-15T19:04:45+00:00,MeanReversionAgent,False
+,SPY,bull,,BUY,0.6,0.08,Macro RISK ON: SPY=7.94% GLD=-15.41% TLT=-1.77%,,99411ad5,2026-07-15T19:04:45+00:00,MacroAgent,False
+,SPY,bull,,HOLD,0.3,0.0,"No trend setup (ADX=23.1, bull=True)",,99411ad5,2026-07-15T19:04:45+00:00,TrendFollowingAgent,False
+,SPY,bull,,HOLD,0.2,0.0,No dividend data available,,99411ad5,2026-07-15T19:04:45+00:00,DividendArbitrageAgent,False
+,SPY,bull,,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",,99411ad5,2026-07-15T19:04:45+00:00,PairsTradingAgent,False
+,SPY,bull,,HOLD,0.3,0.0,Vol HOLD: VIX=15.85 | z=-0.68 | mom5=-6.2%,,99411ad5,2026-07-15T19:04:45+00:00,VolatilityAgent,False
+,SPY,bull,,HOLD,0.1,0.0,EarningsSentiment: API error — TypeError,,99411ad5,2026-07-15T19:04:45+00:00,EarningsSentimentAgent,False
+,QQQ,bull,,HOLD,0.0,0.0,Baseline hold,,99411ad5,2026-07-15T19:04:46+00:00,DummyHoldAgent,False
+,QQQ,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,99411ad5,2026-07-15T19:04:46+00:00,BuffettAgent,True
+,QQQ,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,99411ad5,2026-07-15T19:04:46+00:00,CitadelAgent,False
+,QQQ,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=52.2),,99411ad5,2026-07-15T19:04:46+00:00,MeanReversionAgent,False
+,QQQ,bull,,BUY,0.6,0.08,Macro RISK ON: SPY=7.95% GLD=-15.41% TLT=-1.77%,,99411ad5,2026-07-15T19:04:46+00:00,MacroAgent,False
+,QQQ,bull,,HOLD,0.3,0.0,"No trend setup (ADX=16.3, bull=False)",,99411ad5,2026-07-15T19:04:46+00:00,TrendFollowingAgent,False
+,QQQ,bull,,HOLD,0.2,0.0,No dividend data available,,99411ad5,2026-07-15T19:04:46+00:00,DividendArbitrageAgent,False
+,QQQ,bull,,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",,99411ad5,2026-07-15T19:04:46+00:00,PairsTradingAgent,False
+,QQQ,bull,,HOLD,0.3,0.0,Vol HOLD: VIX=15.85 | z=-0.68 | mom5=-6.2%,,99411ad5,2026-07-15T19:04:46+00:00,VolatilityAgent,False
+,QQQ,bull,,HOLD,0.1,0.0,EarningsSentiment: API error — TypeError,,99411ad5,2026-07-15T19:04:46+00:00,EarningsSentimentAgent,False
+,NVDA,bull,,HOLD,0.0,0.0,Baseline hold,,99411ad5,2026-07-15T19:04:47+00:00,DummyHoldAgent,False
+,NVDA,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,99411ad5,2026-07-15T19:04:47+00:00,BuffettAgent,True
+,NVDA,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,99411ad5,2026-07-15T19:04:47+00:00,CitadelAgent,False
+,NVDA,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=61.5),,99411ad5,2026-07-15T19:04:47+00:00,MeanReversionAgent,False
+,NVDA,bull,,BUY,0.6,0.08,Macro RISK ON: SPY=7.95% GLD=-15.41% TLT=-1.77%,,99411ad5,2026-07-15T19:04:47+00:00,MacroAgent,False
+,NVDA,bull,,HOLD,0.3,0.0,"No trend setup (ADX=24.5, bull=False)",,99411ad5,2026-07-15T19:04:47+00:00,TrendFollowingAgent,False
+,NVDA,bull,,HOLD,0.2,0.0,No dividend data available,,99411ad5,2026-07-15T19:04:47+00:00,DividendArbitrageAgent,False
+,NVDA,bull,,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",,99411ad5,2026-07-15T19:04:47+00:00,PairsTradingAgent,False
+,NVDA,bull,,HOLD,0.3,0.0,Vol HOLD: VIX=15.85 | z=-0.68 | mom5=-6.2%,,99411ad5,2026-07-15T19:04:47+00:00,VolatilityAgent,False
+,NVDA,bull,,HOLD,0.1,0.0,EarningsSentiment: API error — TypeError,,99411ad5,2026-07-15T19:04:47+00:00,EarningsSentimentAgent,False
+,MSFT,bull,,HOLD,0.0,0.0,Baseline hold,,99411ad5,2026-07-15T19:04:49+00:00,DummyHoldAgent,False
+,MSFT,bull,,HOLD,0.55,0.0,Buffett screen not strong enough,,99411ad5,2026-07-15T19:04:49+00:00,BuffettAgent,False
+,MSFT,bull,,HOLD,0.1,0.0,No Citadel momentum setup,,99411ad5,2026-07-15T19:04:49+00:00,CitadelAgent,False
+,MSFT,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=65.9),,99411ad5,2026-07-15T19:04:49+00:00,MeanReversionAgent,False
+,MSFT,bull,,BUY,0.6,0.08,Macro RISK ON: SPY=7.95% GLD=-15.41% TLT=-1.77%,,99411ad5,2026-07-15T19:04:49+00:00,MacroAgent,True
+,MSFT,bull,,HOLD,0.3,0.0,"No trend setup (ADX=22.4, bull=False)",,99411ad5,2026-07-15T19:04:49+00:00,TrendFollowingAgent,False
+,MSFT,bull,,HOLD,0.2,0.0,J-36: hors fenêtre (max J-7),,99411ad5,2026-07-15T19:04:49+00:00,DividendArbitrageAgent,False
+,MSFT,bull,,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",,99411ad5,2026-07-15T19:04:49+00:00,PairsTradingAgent,False
+,MSFT,bull,,HOLD,0.3,0.0,Vol HOLD: VIX=15.85 | z=-0.68 | mom5=-6.2%,,99411ad5,2026-07-15T19:04:49+00:00,VolatilityAgent,False
+,MSFT,bull,,HOLD,0.1,0.0,EarningsSentiment: API error — TypeError,,99411ad5,2026-07-15T19:04:49+00:00,EarningsSentimentAgent,False
+,GOOGL,bull,,HOLD,0.0,0.0,Baseline hold,,99411ad5,2026-07-15T19:04:51+00:00,DummyHoldAgent,False
+,GOOGL,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,99411ad5,2026-07-15T19:04:51+00:00,BuffettAgent,True
+,GOOGL,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,99411ad5,2026-07-15T19:04:51+00:00,CitadelAgent,False
+,GOOGL,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=67.4),,99411ad5,2026-07-15T19:04:51+00:00,MeanReversionAgent,False
+,GOOGL,bull,,BUY,0.6,0.08,Macro RISK ON: SPY=7.95% GLD=-15.42% TLT=-1.77%,,99411ad5,2026-07-15T19:04:51+00:00,MacroAgent,False
+,GOOGL,bull,,HOLD,0.3,0.0,"No trend setup (ADX=15.4, bull=False)",,99411ad5,2026-07-15T19:04:51+00:00,TrendFollowingAgent,False
+,GOOGL,bull,,HOLD,0.2,0.0,No dividend data available,,99411ad5,2026-07-15T19:04:51+00:00,DividendArbitrageAgent,False
+,GOOGL,bull,,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",,99411ad5,2026-07-15T19:04:51+00:00,PairsTradingAgent,False
+,GOOGL,bull,,HOLD,0.3,0.0,Vol HOLD: VIX=15.85 | z=-0.68 | mom5=-6.2%,,99411ad5,2026-07-15T19:04:51+00:00,VolatilityAgent,False
+,GOOGL,bull,,HOLD,0.1,0.0,EarningsSentiment: API error — TypeError,,99411ad5,2026-07-15T19:04:51+00:00,EarningsSentimentAgent,False
+,META,bull,,HOLD,0.0,0.0,Baseline hold,,99411ad5,2026-07-15T19:04:52+00:00,DummyHoldAgent,False
+,META,bull,,BUY,0.7,0.1,Buffett screen passed (stable + trend + near-high),,99411ad5,2026-07-15T19:04:52+00:00,BuffettAgent,True
+,META,bull,,HOLD,0.1,0.0,No Citadel momentum setup,,99411ad5,2026-07-15T19:04:52+00:00,CitadelAgent,False
+,META,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=73.1),,99411ad5,2026-07-15T19:04:52+00:00,MeanReversionAgent,False
+,META,bull,,BUY,0.6,0.08,Macro RISK ON: SPY=7.95% GLD=-15.41% TLT=-1.77%,,99411ad5,2026-07-15T19:04:52+00:00,MacroAgent,False
+,META,bull,,HOLD,0.3,0.0,"No trend setup (ADX=27.8, bull=False)",,99411ad5,2026-07-15T19:04:52+00:00,TrendFollowingAgent,False
+,META,bull,,HOLD,0.2,0.0,No dividend data available,,99411ad5,2026-07-15T19:04:52+00:00,DividendArbitrageAgent,False
+,META,bull,,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",,99411ad5,2026-07-15T19:04:52+00:00,PairsTradingAgent,False
+,META,bull,,HOLD,0.3,0.0,Vol HOLD: VIX=15.85 | z=-0.68 | mom5=-6.2%,,99411ad5,2026-07-15T19:04:52+00:00,VolatilityAgent,False
+,META,bull,,HOLD,0.1,0.0,EarningsSentiment: API error — TypeError,,99411ad5,2026-07-15T19:04:52+00:00,EarningsSentimentAgent,False
+,JPM,bull,,HOLD,0.0,0.0,Baseline hold,,99411ad5,2026-07-15T19:04:54+00:00,DummyHoldAgent,False
+,JPM,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,99411ad5,2026-07-15T19:04:54+00:00,BuffettAgent,True
+,JPM,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,99411ad5,2026-07-15T19:04:54+00:00,CitadelAgent,False
+,JPM,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=63.9),,99411ad5,2026-07-15T19:04:54+00:00,MeanReversionAgent,False
+,JPM,bull,,BUY,0.6,0.08,Macro RISK ON: SPY=7.95% GLD=-15.42% TLT=-1.77%,,99411ad5,2026-07-15T19:04:54+00:00,MacroAgent,False
+,JPM,bull,,BUY,0.8,0.1,TrendFollow BUY: MAs alignées + ADX=28.6 + mom20=8.90%,,99411ad5,2026-07-15T19:04:54+00:00,TrendFollowingAgent,False
+,JPM,bull,,HOLD,0.2,0.0,No dividend data available,,99411ad5,2026-07-15T19:04:54+00:00,DividendArbitrageAgent,False
+,JPM,bull,,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",,99411ad5,2026-07-15T19:04:54+00:00,PairsTradingAgent,False
+,JPM,bull,,HOLD,0.3,0.0,Vol HOLD: VIX=15.85 | z=-0.68 | mom5=-6.2%,,99411ad5,2026-07-15T19:04:54+00:00,VolatilityAgent,False
+,JPM,bull,,HOLD,0.1,0.0,EarningsSentiment: API error — TypeError,,99411ad5,2026-07-15T19:04:54+00:00,EarningsSentimentAgent,False
+,GS,bull,,HOLD,0.0,0.0,Baseline hold,,99411ad5,2026-07-15T19:04:55+00:00,DummyHoldAgent,False
+,GS,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,99411ad5,2026-07-15T19:04:55+00:00,BuffettAgent,True
+,GS,bull,,BUY,0.9,0.12,Citadel v2: trend + momentum + volume,,99411ad5,2026-07-15T19:04:55+00:00,CitadelAgent,False
+,GS,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=62.5),,99411ad5,2026-07-15T19:04:55+00:00,MeanReversionAgent,False
+,GS,bull,,BUY,0.6,0.08,Macro RISK ON: SPY=7.95% GLD=-15.42% TLT=-1.77%,,99411ad5,2026-07-15T19:04:55+00:00,MacroAgent,False
+,GS,bull,,HOLD,0.3,0.0,"No trend setup (ADX=14.6, bull=True)",,99411ad5,2026-07-15T19:04:55+00:00,TrendFollowingAgent,False
+,GS,bull,,HOLD,0.2,0.0,No dividend data available,,99411ad5,2026-07-15T19:04:55+00:00,DividendArbitrageAgent,False
+,GS,bull,,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",,99411ad5,2026-07-15T19:04:55+00:00,PairsTradingAgent,False
+,GS,bull,,HOLD,0.3,0.0,Vol HOLD: VIX=15.85 | z=-0.68 | mom5=-6.2%,,99411ad5,2026-07-15T19:04:55+00:00,VolatilityAgent,False
+,GS,bull,,HOLD,0.1,0.0,EarningsSentiment: API error — TypeError,,99411ad5,2026-07-15T19:04:55+00:00,EarningsSentimentAgent,False
+,GLD,bull,,HOLD,0.0,0.0,Baseline hold,,99411ad5,2026-07-15T19:04:57+00:00,DummyHoldAgent,False
+,GLD,bull,,HOLD,0.55,0.0,Buffett screen not strong enough,,99411ad5,2026-07-15T19:04:57+00:00,BuffettAgent,False
+,GLD,bull,,HOLD,0.1,0.0,No Citadel momentum setup,,99411ad5,2026-07-15T19:04:57+00:00,CitadelAgent,False
+,GLD,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=56.1),,99411ad5,2026-07-15T19:04:57+00:00,MeanReversionAgent,False
+,GLD,bull,,BUY,0.6,0.08,Macro RISK ON: SPY=7.95% GLD=-15.42% TLT=-1.77%,,99411ad5,2026-07-15T19:04:57+00:00,MacroAgent,True
+,GLD,bull,,HOLD,0.3,0.0,"No trend setup (ADX=27.4, bull=False)",,99411ad5,2026-07-15T19:04:57+00:00,TrendFollowingAgent,False
+,GLD,bull,,HOLD,0.2,0.0,No dividend data available,,99411ad5,2026-07-15T19:04:57+00:00,DividendArbitrageAgent,False
+,GLD,bull,,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",,99411ad5,2026-07-15T19:04:57+00:00,PairsTradingAgent,False
+,GLD,bull,,HOLD,0.3,0.0,Vol HOLD: VIX=15.85 | z=-0.68 | mom5=-6.2%,,99411ad5,2026-07-15T19:04:57+00:00,VolatilityAgent,False
+,GLD,bull,,HOLD,0.1,0.0,EarningsSentiment: API error — TypeError,,99411ad5,2026-07-15T19:04:57+00:00,EarningsSentimentAgent,False
+,TSLA,bull,,HOLD,0.0,0.0,Baseline hold,,99411ad5,2026-07-15T19:04:59+00:00,DummyHoldAgent,False
+,TSLA,bull,,HOLD,0.35,0.0,Buffett screen not strong enough,,99411ad5,2026-07-15T19:04:59+00:00,BuffettAgent,False
+,TSLA,bull,,HOLD,0.1,0.0,No Citadel momentum setup,,99411ad5,2026-07-15T19:04:59+00:00,CitadelAgent,False
+,TSLA,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=56.2),,99411ad5,2026-07-15T19:04:59+00:00,MeanReversionAgent,False
+,TSLA,bull,,BUY,0.6,0.08,Macro RISK ON: SPY=7.95% GLD=-15.42% TLT=-1.77%,,99411ad5,2026-07-15T19:04:59+00:00,MacroAgent,True
+,TSLA,bull,,HOLD,0.3,0.0,"No trend setup (ADX=11.6, bull=False)",,99411ad5,2026-07-15T19:04:59+00:00,TrendFollowingAgent,False
+,TSLA,bull,,HOLD,0.2,0.0,No dividend data available,,99411ad5,2026-07-15T19:04:59+00:00,DividendArbitrageAgent,False
+,TSLA,bull,,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",,99411ad5,2026-07-15T19:04:59+00:00,PairsTradingAgent,False
+,TSLA,bull,,HOLD,0.3,0.0,Vol HOLD: VIX=15.85 | z=-0.68 | mom5=-6.2%,,99411ad5,2026-07-15T19:04:59+00:00,VolatilityAgent,False
+,TSLA,bull,,HOLD,0.1,0.0,EarningsSentiment: API error — TypeError,,99411ad5,2026-07-15T19:04:59+00:00,EarningsSentimentAgent,False
+,AMD,bull,,HOLD,0.0,0.0,Baseline hold,,99411ad5,2026-07-15T19:05:00+00:00,DummyHoldAgent,False
+,AMD,bull,,BUY,0.7,0.1,Buffett screen passed (stable + trend + near-high),,99411ad5,2026-07-15T19:05:00+00:00,BuffettAgent,True
+,AMD,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,99411ad5,2026-07-15T19:05:00+00:00,CitadelAgent,False
+,AMD,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=51.3),,99411ad5,2026-07-15T19:05:00+00:00,MeanReversionAgent,False
+,AMD,bull,,BUY,0.6,0.08,Macro RISK ON: SPY=7.95% GLD=-15.42% TLT=-1.77%,,99411ad5,2026-07-15T19:05:00+00:00,MacroAgent,False
+,AMD,bull,,HOLD,0.3,0.0,"No trend setup (ADX=21.3, bull=False)",,99411ad5,2026-07-15T19:05:00+00:00,TrendFollowingAgent,False
+,AMD,bull,,HOLD,0.2,0.0,No dividend data available,,99411ad5,2026-07-15T19:05:00+00:00,DividendArbitrageAgent,False
+,AMD,bull,,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",,99411ad5,2026-07-15T19:05:00+00:00,PairsTradingAgent,False
+,AMD,bull,,HOLD,0.3,0.0,Vol HOLD: VIX=15.85 | z=-0.68 | mom5=-6.2%,,99411ad5,2026-07-15T19:05:00+00:00,VolatilityAgent,False
+,AMD,bull,,HOLD,0.1,0.0,EarningsSentiment: API error — TypeError,,99411ad5,2026-07-15T19:05:00+00:00,EarningsSentimentAgent,False
+,AMZN,bull,,HOLD,0.0,0.0,Baseline hold,,99411ad5,2026-07-15T19:05:01+00:00,DummyHoldAgent,False
+,AMZN,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,99411ad5,2026-07-15T19:05:01+00:00,BuffettAgent,True
+,AMZN,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,99411ad5,2026-07-15T19:05:01+00:00,CitadelAgent,False
+,AMZN,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=71.8),,99411ad5,2026-07-15T19:05:01+00:00,MeanReversionAgent,False
+,AMZN,bull,,BUY,0.6,0.08,Macro RISK ON: SPY=7.95% GLD=-15.42% TLT=-1.77%,,99411ad5,2026-07-15T19:05:01+00:00,MacroAgent,False
+,AMZN,bull,,HOLD,0.3,0.0,"No trend setup (ADX=25.5, bull=False)",,99411ad5,2026-07-15T19:05:01+00:00,TrendFollowingAgent,False
+,AMZN,bull,,HOLD,0.2,0.0,No dividend data available,,99411ad5,2026-07-15T19:05:01+00:00,DividendArbitrageAgent,False
+,AMZN,bull,,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",,99411ad5,2026-07-15T19:05:01+00:00,PairsTradingAgent,False
+,AMZN,bull,,HOLD,0.3,0.0,Vol HOLD: VIX=15.85 | z=-0.68 | mom5=-6.2%,,99411ad5,2026-07-15T19:05:01+00:00,VolatilityAgent,False
+,AMZN,bull,,HOLD,0.1,0.0,EarningsSentiment: API error — TypeError,,99411ad5,2026-07-15T19:05:01+00:00,EarningsSentimentAgent,False
+,LLY,bull,,HOLD,0.0,0.0,Baseline hold,,99411ad5,2026-07-15T19:05:03+00:00,DummyHoldAgent,False
+,LLY,bull,,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),,99411ad5,2026-07-15T19:05:03+00:00,BuffettAgent,True
+,LLY,bull,,HOLD,0.3,0.0,No Citadel momentum setup,,99411ad5,2026-07-15T19:05:03+00:00,CitadelAgent,False
+,LLY,bull,,HOLD,0.3,0.0,No mean reversion setup (RSI=56.4),,99411ad5,2026-07-15T19:05:03+00:00,MeanReversionAgent,False
+,LLY,bull,,BUY,0.6,0.08,Macro RISK ON: SPY=7.95% GLD=-15.42% TLT=-1.77%,,99411ad5,2026-07-15T19:05:03+00:00,MacroAgent,False
+,LLY,bull,,HOLD,0.3,0.0,"No trend setup (ADX=23.5, bull=False)",,99411ad5,2026-07-15T19:05:03+00:00,TrendFollowingAgent,False
+,LLY,bull,,HOLD,0.2,0.0,J-30: hors fenêtre (max J-7),,99411ad5,2026-07-15T19:05:03+00:00,DividendArbitrageAgent,False
+,LLY,bull,,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",,99411ad5,2026-07-15T19:05:03+00:00,PairsTradingAgent,False
+,LLY,bull,,HOLD,0.3,0.0,Vol HOLD: VIX=15.85 | z=-0.68 | mom5=-6.2%,,99411ad5,2026-07-15T19:05:03+00:00,VolatilityAgent,False
+,LLY,bull,,HOLD,0.1,0.0,EarningsSentiment: API error — TypeError,,99411ad5,2026-07-15T19:05:03+00:00,EarningsSentimentAgent,False
