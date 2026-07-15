@@ -24,6 +24,7 @@ VALID_AGENTS = {
     "PairsTradingAgent",
     "DummyHoldAgent",
     "InsiderBuyAgent",
+    "CrossSectionalMomentumAgent",
 }
 
 

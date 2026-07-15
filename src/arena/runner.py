@@ -41,6 +41,7 @@ from src.agents.volatility import VolatilityAgent
 from src.agents.earnings_sentiment import EarningsSentimentAgent
 from src.agents.cta_trend_agent import CTATrendAgent, CTA_UNIVERSE
 from src.agents.insider_buy import InsiderBuyAgent
+from src.agents.momentum import CrossSectionalMomentumAgent
 from src.agents.base import MarketState
 from src.broker.ibkr import connect_ibkr
 from src.broker.portfolio import fetch_account_snapshot
@@ -495,6 +496,7 @@ def main() -> None:
 
         # Arena créée APRÈS all_data — MacroAgent reçoit SPY/GLD pré-chargés
         # pour éviter 2 appels réseau redondants par run.
+        # CrossSectionalMomentumAgent reçoit tout all_data pour le ranking JT.
         arena = Arena([
             DummyHoldAgent(),
             BuffettAgent(),
@@ -510,6 +512,7 @@ def main() -> None:
             VolatilityAgent(),
             EarningsSentimentAgent(),
             InsiderBuyAgent(),
+            CrossSectionalMomentumAgent(universe=all_data),
         ])
 
         _gmm_detector = GMMRegimeDetector()

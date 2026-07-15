@@ -337,17 +337,21 @@ def trigger_github(command: str, user: str = Depends(require_auth)):
 # ── Risk Assistant IA ─────────────────────────────────────────────────────────
 @app.post("/api/ask")
 async def ask_assistant(request: Request, user: str = Depends(require_auth)):
+    import asyncio
     body = await request.json()
     question = str(body.get("question", "")).strip()
     if not question:
         raise HTTPException(status_code=400, detail="question required")
     try:
         from src.risk.assistant import RiskAssistant, build_context
-        ctx    = build_context(LOGS)
-        answer = RiskAssistant().ask(question, ctx)
+        ctx = build_context(LOGS)
+        # L'appel Anthropic est synchrone/bloquant — on l'isole dans un thread
+        # pour ne pas bloquer l'event loop FastAPI (sinon httpx ne peut pas
+        # compléter son propre I/O → Connection error).
+        answer = await asyncio.to_thread(RiskAssistant().ask, question, ctx)
         return {"answer": answer}
     except Exception as exc:
-        logger.error("ask_assistant: %s", exc)
+        logger.error("ask_assistant: %s", exc, exc_info=True)
         return JSONResponse({"answer": f"Erreur serveur : {exc}"}, status_code=500)
 
 
