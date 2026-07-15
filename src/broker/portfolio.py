@@ -1,6 +1,6 @@
 from __future__ import annotations
-from dataclasses import dataclass
-from typing import Dict, Tuple, Optional
+from dataclasses import dataclass, field
+from typing import Dict, Optional
 
 from ib_insync import IB
 
@@ -9,7 +9,8 @@ from ib_insync import IB
 class PortfolioSnapshot:
     net_liquidation: float
     cash: float
-    positions: Dict[str, float]  # symbol -> quantity
+    positions: Dict[str, float]        # symbol → quantity
+    avg_costs: Dict[str, float] = field(default_factory=dict)  # symbol → IBKR avgCost
 
 
 def _to_float(x: Optional[str], default: float = 0.0) -> float:
@@ -33,12 +34,17 @@ def fetch_account_snapshot(ib: IB) -> PortfolioSnapshot:
         elif row.tag == "TotalCashValue":
             cash = _to_float(row.value)
 
-    pos = {}
+    pos: Dict[str, float] = {}
+    avg_costs: Dict[str, float] = {}
     for p in ib.positions():
-        # p.contract.symbol (ex: AAPL), p.position (qty)
         sym = getattr(p.contract, "symbol", None)
         if not sym:
             continue
         pos[str(sym)] = float(p.position)
+        cost = getattr(p, "avgCost", 0.0)
+        if cost and float(cost) > 0:
+            avg_costs[str(sym)] = float(cost)
 
-    return PortfolioSnapshot(net_liquidation=nl, cash=cash, positions=pos)
+    return PortfolioSnapshot(
+        net_liquidation=nl, cash=cash, positions=pos, avg_costs=avg_costs
+    )

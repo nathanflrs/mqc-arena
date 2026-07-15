@@ -96,7 +96,7 @@ class NewsCollector:
         cache_dir:       str  = "logs/news_cache",
         cache_ttl_hours: float = 6.0,
     ) -> None:
-        self._api_key  = api_key or os.getenv("FINNHUB_API_KEY", "")
+        self._api_key  = api_key if api_key is not None else os.getenv("FINNHUB_API_KEY", "")
         self._cache    = Path(cache_dir)
         self._cache.mkdir(parents=True, exist_ok=True)
         self._ttl      = timedelta(hours=cache_ttl_hours)

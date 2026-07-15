@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from src.events.bus import Event, EventBus
+from src.events.bus import Event, EventBus, VALID_TYPES, VALID_SEVERITIES
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -352,3 +352,46 @@ def test_stop_loss_routes_critical_to_telegram(tmp_path, monkeypatch):
 
     assert len(routed) == 1, "critical event (stop-loss) must be routed to Telegram via bus"
     assert "STOP-LOSS" in routed[0].title
+
+
+# ── 11. Fix 3 — VALID_TYPES coverage ─────────────────────────────────────────
+
+def test_alert_in_valid_types():
+    assert "alert" in VALID_TYPES
+
+def test_system_in_valid_types():
+    assert "system" in VALID_TYPES
+
+def test_performance_in_valid_types():
+    assert "performance" in VALID_TYPES
+
+def test_legacy_types_still_present():
+    for t in ("execution", "briefing", "circuit_breaker", "regime_change",
+              "error", "tearsheet", "monte_carlo", "news"):
+        assert t in VALID_TYPES, f"{t!r} removed from VALID_TYPES"
+
+def test_unknown_type_emits_warning_and_stores(tmp_path, caplog):
+    """Unknown type must NOT be silently dropped — it's stored with a log warning."""
+    import logging
+    bus = EventBus(db_path=tmp_path / "warn_test.db")
+    with caplog.at_level(logging.WARNING, logger="src.events.bus"):
+        bus.emit(Event(type="__sentinel_unknown__", severity="info",
+                       title="test", body=""))
+    recent = bus.get_recent(limit=10)
+    assert any(e["type"] == "__sentinel_unknown__" for e in recent), "unknown type must still be stored"
+    assert any("unknown event type" in r.message.lower() for r in caplog.records)
+
+def test_stop_loss_alert_visible_in_activity_feed(tmp_path, monkeypatch):
+    """
+    Confirms the stop-loss alert (type='alert') appears when querying the feed
+    without a type_filter (simulating the dashboard Activity Feed).
+    """
+    bus = EventBus(db_path=tmp_path / "feed_test.db")
+    monkeypatch.setattr("src.events.bus.EventBus._route_to_telegram", lambda *a: None)
+    bus.emit(Event(type="alert", severity="critical",
+                   title="STOP-LOSS XOM", body="🛑 XOM -9.2%",
+                   meta={"symbol": "XOM", "pnl_pct": -0.092}))
+    all_events = bus.get_recent(limit=50)
+    stop_loss_events = [e for e in all_events if e["type"] == "alert"]
+    assert len(stop_loss_events) >= 1
+    assert "XOM" in stop_loss_events[0]["title"]

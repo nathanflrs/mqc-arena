@@ -23,8 +23,11 @@ from typing import Dict, Any
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
+import logging
 import pandas as pd
 import requests as _requests
+
+logger = logging.getLogger(__name__)
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, Response
 import uvicorn
@@ -329,6 +332,23 @@ def trigger_github(command: str, user: str = Depends(require_auth)):
         actions_url = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/actions"
         return {"status": "triggered", "command": command, "actions_url": actions_url}
     return JSONResponse({"error": resp.text, "code": resp.status_code}, status_code=502)
+
+
+# ── Risk Assistant IA ─────────────────────────────────────────────────────────
+@app.post("/api/ask")
+async def ask_assistant(request: Request, user: str = Depends(require_auth)):
+    body = await request.json()
+    question = str(body.get("question", "")).strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="question required")
+    try:
+        from src.risk.assistant import RiskAssistant, build_context
+        ctx    = build_context(LOGS)
+        answer = RiskAssistant().ask(question, ctx)
+        return {"answer": answer}
+    except Exception as exc:
+        logger.error("ask_assistant: %s", exc)
+        return JSONResponse({"answer": f"Erreur serveur : {exc}"}, status_code=500)
 
 
 # ── Data routes ───────────────────────────────────────────────────────────────

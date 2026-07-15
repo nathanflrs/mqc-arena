@@ -2,15 +2,21 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass
 from datetime import date
 from typing import Dict, List, Optional
 
 import anthropic
-import yfinance as yf
 
 from src.agents.base import BaseAgent, MarketState, AgentSignal
+from src.news.collector import NewsCollector
+
+logger = logging.getLogger(__name__)
+
+# Module-level flag: warn only once per process when ANTHROPIC_API_KEY is absent.
+_missing_key_warned = False
 
 
 @dataclass
@@ -19,7 +25,9 @@ class EarningsSentimentConfig:
     min_confidence: float = 0.55
     max_news_items: int = 5
     cache_ttl_hours: float = 6.0
-    model: str = "claude-opus-4-8"
+    # Haiku 4.5 is sufficient for sentiment classification at a fraction of the cost
+    # of Opus. At 14 tickers × N runs/day, Opus + extended thinking was prohibitive.
+    model: str = "claude-haiku-4-5-20251001"
 
 
 class EarningsSentimentAgent(BaseAgent):
@@ -43,8 +51,20 @@ class EarningsSentimentAgent(BaseAgent):
         self._cache_ts: Dict[str, float] = {}
 
     def _get_client(self) -> anthropic.Anthropic:
+        global _missing_key_warned
         if self._client is None:
-            self._client = anthropic.Anthropic()
+            try:
+                self._client = anthropic.Anthropic()
+            except TypeError as exc:
+                # SDK raises TypeError when ANTHROPIC_API_KEY is absent.
+                # Warn once per process so 14 tickers don't spam the log.
+                if not _missing_key_warned:
+                    logger.warning(
+                        "EarningsSentimentAgent: ANTHROPIC_API_KEY not set — "
+                        "emitting HOLD for all tickers this run. Add it to .env."
+                    )
+                    _missing_key_warned = True
+                raise
         return self._client
 
     def _cache_key(self, symbol: str) -> str:
@@ -58,9 +78,12 @@ class EarningsSentimentAgent(BaseAgent):
 
     def _fetch_news(self, symbol: str) -> List[dict]:
         try:
-            ticker = yf.Ticker(symbol)
-            news = ticker.news or []
-            return news[: self.cfg.max_news_items]
+            collector = NewsCollector()
+            items = collector.fetch_company_news(symbol, days_back=2)
+            return [
+                {"title": it.headline, "publisher": it.source, "category": it.category}
+                for it in items[: self.cfg.max_news_items]
+            ]
         except Exception:
             return []
 
@@ -69,12 +92,10 @@ class EarningsSentimentAgent(BaseAgent):
             return "No recent news available."
         lines = []
         for i, item in enumerate(items, 1):
-            title = item.get("title", "")
+            title     = item.get("title", "")
             publisher = item.get("publisher", "")
-            summary = item.get("summary", item.get("description", ""))[:200]
-            lines.append(f"{i}. [{publisher}] {title}")
-            if summary:
-                lines.append(f"   {summary}")
+            category  = item.get("category", "")
+            lines.append(f"{i}. [{publisher}] ({category}) {title}")
         return "\n".join(lines)
 
     def _extract_json(self, text: str) -> dict:
@@ -122,7 +143,6 @@ Guidelines:
         response = client.messages.create(
             model=self.cfg.model,
             max_tokens=512,
-            thinking={"type": "adaptive"},
             messages=[{"role": "user", "content": prompt}],
         )
         text = next(

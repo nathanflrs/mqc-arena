@@ -20,7 +20,7 @@ from src.agents.citadel import CitadelAgent
 from src.agents.mean_reversion import MeanReversionAgent
 from src.agents.macro import MacroAgent
 from src.agents.trend_following import TrendFollowingAgent
-from src.agents.dividend_arbitrage import DividendArbitrageAgent
+from src.agents.dividend_arbitrage_agent import DividendArbitrageAgent
 from src.agents.pairs_trading import PairsTradingAgent
 from src.agents.volatility import VolatilityAgent
 from src.agents.dummy import DummyHoldAgent

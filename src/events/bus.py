@@ -31,6 +31,7 @@ DB_PATH = Path("logs/events.db")
 VALID_TYPES = frozenset({
     "execution", "briefing", "circuit_breaker", "regime_change",
     "error", "tearsheet", "monte_carlo", "news",
+    "alert", "system", "performance",
 })
 VALID_SEVERITIES = frozenset({"info", "warning", "critical"})
 
@@ -112,6 +113,10 @@ class EventBus:
 
     def emit(self, event: Event) -> None:
         """Persist, push SSE, and route to Telegram if critical."""
+        if event.type not in VALID_TYPES:
+            logger.warning("EventBus: unknown event type %r — event stored but may not display correctly", event.type)
+        if event.severity not in VALID_SEVERITIES:
+            logger.warning("EventBus: unknown severity %r — defaulting to info routing", event.severity)
         self._persist(event)
         self._push_sse(event)
         if event.severity == "critical":

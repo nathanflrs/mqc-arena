@@ -595,6 +595,69 @@ tr:hover td{background:var(--s2)}
   font-family:var(--mono);font-size:11px;color:var(--t3);
   text-align:center;padding:18px 0;font-style:italic
 }
+
+/* ── Milan AI chat ────────────────────────────────────────────────────────── */
+.ai-wrap{display:flex;flex-direction:column;height:calc(100vh - 80px);min-height:300px}
+.ai-history{
+  flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:14px;
+  padding-bottom:12px;
+}
+.ai-bubble{
+  display:flex;flex-direction:column;gap:4px;max-width:88%;
+}
+.ai-bubble.user{align-self:flex-end;align-items:flex-end}
+.ai-bubble.assistant{align-self:flex-start;align-items:flex-start}
+.ai-btext{
+  font-family:var(--mono);font-size:12px;line-height:1.6;
+  padding:10px 13px;border-radius:6px;white-space:pre-wrap;word-break:break-word;
+}
+.ai-bubble.user .ai-btext{
+  background:var(--cobalt-d);border:1px solid var(--cobalt-b);color:var(--t1);
+}
+.ai-bubble.assistant .ai-btext{
+  background:var(--s1);border:1px solid var(--border);color:var(--t1);
+}
+.ai-blabel{font-family:var(--mono);font-size:9px;letter-spacing:.07em;color:var(--t3)}
+.ai-thinking{
+  font-family:var(--mono);font-size:11px;color:var(--t3);
+  display:flex;align-items:center;gap:6px;padding:6px 0;
+}
+.ai-thinking::before{content:'';width:8px;height:8px;border-radius:50%;
+  background:var(--cobalt-l);animation:ai-pulse 1s ease-in-out infinite}
+@keyframes ai-pulse{0%,100%{opacity:.3}50%{opacity:1}}
+.ai-input-row{
+  display:flex;gap:8px;align-items:flex-end;
+  padding-top:12px;border-top:1px solid var(--border);margin-top:4px;
+}
+.ai-input{
+  flex:1;background:var(--s1);border:1px solid var(--border);
+  color:var(--t1);border-radius:5px;
+  font-family:var(--mono);font-size:12px;
+  padding:9px 11px;resize:none;min-height:40px;max-height:110px;
+  outline:none;transition:border-color .12s;
+}
+.ai-input:focus{border-color:var(--cobalt-b)}
+.ai-send{
+  background:var(--cobalt-d);border:1px solid var(--cobalt-b);
+  color:var(--cobalt-l);border-radius:5px;
+  font-family:var(--mono);font-size:11px;font-weight:600;
+  padding:9px 14px;cursor:pointer;white-space:nowrap;transition:opacity .12s;
+  flex-shrink:0;
+}
+.ai-send:disabled{opacity:.4;cursor:not-allowed}
+.ai-empty{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;color:var(--t3);
+}
+.ai-empty-icon{font-size:28px;opacity:.4}
+.ai-empty-hint{font-family:var(--mono);font-size:11px;text-align:center;line-height:1.6;max-width:240px}
+.ai-suggestion-row{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-top:4px}
+.ai-suggestion{
+  font-family:var(--mono);font-size:10px;color:var(--cobalt-l);
+  background:var(--cobalt-d);border:1px solid var(--cobalt-b);
+  border-radius:4px;padding:4px 10px;cursor:pointer;transition:opacity .1s;
+}
+.ai-suggestion:hover{opacity:.7}
 </style>
 </head>
 <body>
@@ -715,6 +778,15 @@ tr:hover td{background:var(--s2)}
           <line x1="2" y1="17" x2="18" y2="17" stroke-dasharray="3 2" stroke-width=".9"/>
         </svg>
         CTA
+      </button>
+      <button class="sb-btn" id="sidebar-btn-6" onclick="switchTab(6)" aria-label="Milan AI">
+        <svg class="sb-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4">
+          <path d="M10 2a7 7 0 0 1 7 7c0 3.3-2.3 6.1-5.5 6.8L10 18l-1.5-2.2C5.3 15.1 3 12.3 3 9a7 7 0 0 1 7-7z"/>
+          <circle cx="7.5" cy="9" r=".9" fill="currentColor" stroke="none"/>
+          <circle cx="10" cy="9" r=".9" fill="currentColor" stroke="none"/>
+          <circle cx="12.5" cy="9" r=".9" fill="currentColor" stroke="none"/>
+        </svg>
+        Milan AI
       </button>
     </nav>
 
@@ -1015,6 +1087,45 @@ tr:hover td{background:var(--s2)}
         </div>
       </div>
 
+      <!-- ── MILAN AI ── -->
+      <div class="tab-panel" id="panel-ai">
+        <div class="panel-inner" style="display:flex;flex-direction:column;height:100%">
+
+          <div class="card-head" style="padding:0;margin-bottom:14px;flex-shrink:0">
+            <span class="card-title">Milan AI — Assistant Portfolio</span>
+            <button onclick="aiClear()" style="font-family:var(--mono);font-size:9px;color:var(--t3);background:none;border:none;cursor:pointer;margin-left:auto">Effacer</button>
+          </div>
+
+          <div class="ai-wrap">
+            <div class="ai-history" id="ai-history">
+              <div class="ai-empty" id="ai-empty">
+                <div class="ai-empty-icon">◆</div>
+                <div class="ai-empty-hint">Pose-moi une question sur ton portfolio, les signaux ou le risque.</div>
+                <div class="ai-suggestion-row">
+                  <button class="ai-suggestion" onclick="aiSuggest(this)">Quel est mon risque actuel ?</button>
+                  <button class="ai-suggestion" onclick="aiSuggest(this)">Résume les signaux d'aujourd'hui</button>
+                  <button class="ai-suggestion" onclick="aiSuggest(this)">Est-ce que le circuit breaker est actif ?</button>
+                  <button class="ai-suggestion" onclick="aiSuggest(this)">Explique la VaR</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="ai-input-row">
+              <textarea
+                class="ai-input"
+                id="ai-input"
+                rows="1"
+                placeholder="Demande-moi quelque chose…"
+                onkeydown="aiKeyDown(event)"
+                oninput="aiAutoResize(this)"
+              ></textarea>
+              <button class="ai-send" id="ai-send" onclick="aiSend()">Envoyer</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
     </div><!-- .main-content -->
 
   </div><!-- .layout -->
@@ -1027,6 +1138,7 @@ tr:hover td{background:var(--s2)}
     <button class="tab-btn" id="tab-btn-3" onclick="switchTab(3)">Terminal</button>
     <button class="tab-btn" id="tab-btn-4" onclick="switchTab(4)">Feed</button>
     <button class="tab-btn" id="tab-btn-5" onclick="switchTab(5)">CTA</button>
+    <button class="tab-btn" id="tab-btn-6" onclick="switchTab(6)">Milan AI</button>
   </nav>
 
 </div><!-- #app -->
@@ -1037,11 +1149,11 @@ if ('serviceWorker' in navigator) {
 }
 
 // ── Tab switching ──────────────────────────────────────────────────────────────
-const PANELS      = ['panel-overview','panel-performance','panel-agents','panel-controls','panel-activity','panel-cta'];
-const TAB_BTNS    = ['tab-btn-0','tab-btn-1','tab-btn-2','tab-btn-3','tab-btn-4','tab-btn-5'];
-const SIDEBAR_IDS = ['sidebar-btn-0','sidebar-btn-1','sidebar-btn-2','sidebar-btn-3','sidebar-btn-4','sidebar-btn-5'];
+const PANELS      = ['panel-overview','panel-performance','panel-agents','panel-controls','panel-activity','panel-cta','panel-ai'];
+const TAB_BTNS    = ['tab-btn-0','tab-btn-1','tab-btn-2','tab-btn-3','tab-btn-4','tab-btn-5','tab-btn-6'];
+const SIDEBAR_IDS = ['sidebar-btn-0','sidebar-btn-1','sidebar-btn-2','sidebar-btn-3','sidebar-btn-4','sidebar-btn-5','sidebar-btn-6'];
 let currentTab = 0;
-const tabLoaded = [false,false,false,false,false,false];
+const tabLoaded = [false,false,false,false,false,false,false];
 
 function switchTab(i) {
   PANELS.forEach((id, j) => {
@@ -1950,6 +2062,95 @@ document.querySelectorAll('.af-filter').forEach(btn => {
     loadActivityFeed();
   });
 });
+
+// ── Milan AI chat ───────────────────────────────────────────────────────────────
+const aiHistoryEl = document.getElementById('ai-history');
+const aiEmptyEl   = document.getElementById('ai-empty');
+const aiInputEl   = document.getElementById('ai-input');
+const aiSendBtn   = document.getElementById('ai-send');
+let aiThinking = false;
+
+function aiAutoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 110) + 'px';
+}
+
+function aiKeyDown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); aiSend(); }
+}
+
+function aiSuggest(btn) {
+  aiInputEl.value = btn.textContent.trim();
+  aiAutoResize(aiInputEl);
+  aiSend();
+}
+
+function aiAppendBubble(role, text) {
+  if (aiEmptyEl) aiEmptyEl.style.display = 'none';
+  const wrap = document.createElement('div');
+  wrap.className = `ai-bubble ${role}`;
+  const label = document.createElement('div');
+  label.className = 'ai-blabel';
+  label.textContent = role === 'user' ? 'TOI' : 'MILAN AI';
+  const btext = document.createElement('div');
+  btext.className = 'ai-btext';
+  btext.textContent = text;
+  wrap.appendChild(label);
+  wrap.appendChild(btext);
+  aiHistoryEl.appendChild(wrap);
+  wrap.scrollIntoView({behavior:'smooth', block:'end'});
+  return btext;
+}
+
+function aiShowThinking() {
+  const el = document.createElement('div');
+  el.className = 'ai-thinking';
+  el.id = 'ai-thinking-indicator';
+  el.textContent = 'Milan réfléchit…';
+  aiHistoryEl.appendChild(el);
+  el.scrollIntoView({behavior:'smooth', block:'end'});
+}
+
+function aiHideThinking() {
+  const el = document.getElementById('ai-thinking-indicator');
+  if (el) el.remove();
+}
+
+async function aiSend() {
+  const q = aiInputEl.value.trim();
+  if (!q || aiThinking) return;
+  aiThinking = true;
+  aiSendBtn.disabled = true;
+  aiInputEl.value = '';
+  aiInputEl.style.height = 'auto';
+
+  aiAppendBubble('user', q);
+  aiShowThinking();
+
+  try {
+    const res  = await fetch('/api/ask', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({question: q}),
+    });
+    const data = await res.json();
+    aiHideThinking();
+    aiAppendBubble('assistant', data.answer || data.error || 'Pas de réponse.');
+  } catch(err) {
+    aiHideThinking();
+    aiAppendBubble('assistant', `Erreur réseau : ${err.message}`);
+  } finally {
+    aiThinking = false;
+    aiSendBtn.disabled = false;
+    aiInputEl.focus();
+  }
+}
+
+function aiClear() {
+  aiHistoryEl.innerHTML = '';
+  aiHistoryEl.appendChild(aiEmptyEl);
+  aiEmptyEl.style.display = '';
+}
 </script>
 </body>
 </html>

@@ -767,12 +767,15 @@ def test_zero_crossings_rejects_low():
 
 
 def test_ma_risk_flag():
-    """Regional bank and airline pairs must carry ma_risk='high'; energy pairs 'low'."""
+    """Regional bank pairs must carry ma_risk='high'; ETF and energy pairs 'low'."""
     assert ("RF",  "FITB") in CANDIDATE_PAIRS, "RF/FITB must be in candidate universe"
     assert ("CFG", "HBAN") in CANDIDATE_PAIRS, "CFG/HBAN must be in candidate universe"
     assert _MA_RISK[("RF",  "FITB")]  == "high"
     assert _MA_RISK[("CFG", "HBAN")]  == "high"
-    assert _MA_RISK[("DAL", "UAL")]   == "high"
+    # ETF pairs: zero M&A risk
+    assert _MA_RISK[("SPY", "QQQ")]   == "low"
+    assert _MA_RISK[("GLD", "SLV")]   == "low"
+    # Equity pairs: stable regulated
     assert _MA_RISK[("XOM", "CVX")]   == "low"
     assert _MA_RISK[("SO",  "DUK")]   == "low"
 
@@ -815,3 +818,94 @@ def test_validate_pair_full_report():
     assert hasattr(report, "ma_risk")
     assert hasattr(report, "rolling_fail_rate")
     assert hasattr(report, "robustness_score")
+
+
+# ── ETF pairs universe (Sprint 2) ────────────────────────────────────────────
+
+from src.config import WATCHLIST as _WATCHLIST
+
+
+# Tier-1 ETF pairs: A-leg must be in WATCHLIST so runner can route signals.
+_TIER1_ETF_PAIRS = [
+    ("SPY",  "QQQ"),
+    ("SPY",  "IWM"),
+    ("GLD",  "SLV"),
+    ("QQQ",  "XLK"),
+]
+
+# Tier-2 sector ETF pairs (validation-only; A-leg not required in WATCHLIST).
+_TIER2_ETF_PAIRS = [
+    ("XLF",  "XLK"),
+    ("XLE",  "XLU"),
+    ("XLV",  "XLP"),
+]
+
+
+def test_tier1_etf_pairs_present_in_candidate_universe():
+    """All Tier-1 ETF pairs must be in CANDIDATE_PAIRS."""
+    for pair in _TIER1_ETF_PAIRS:
+        assert pair in CANDIDATE_PAIRS, \
+            f"ETF pair {pair[0]}/{pair[1]} missing from CANDIDATE_PAIRS"
+
+
+def test_tier2_etf_pairs_present_in_candidate_universe():
+    """All Tier-2 sector ETF pairs must be in CANDIDATE_PAIRS."""
+    for pair in _TIER2_ETF_PAIRS:
+        assert pair in CANDIDATE_PAIRS, \
+            f"Sector ETF pair {pair[0]}/{pair[1]} missing from CANDIDATE_PAIRS"
+
+
+def test_tier1_a_legs_in_watchlist():
+    """Every Tier-1 pair's A-leg must be in the directional WATCHLIST."""
+    watchlist_set = set(_WATCHLIST)
+    for a, b in _TIER1_ETF_PAIRS:
+        assert a in watchlist_set, \
+            f"Tier-1 A-leg '{a}' (pair {a}/{b}) not in WATCHLIST — " \
+            "signal would never be routed to execution"
+
+
+def test_etf_pairs_have_low_ma_risk():
+    """All ETF pairs must have M&A risk 'low' (ETFs are never acquired)."""
+    for a, b in _TIER1_ETF_PAIRS + _TIER2_ETF_PAIRS:
+        risk = _MA_RISK.get((a, b), _MA_RISK.get((b, a), None))
+        assert risk == "low", \
+            f"ETF pair {a}/{b} has ma_risk={risk!r}, expected 'low'"
+
+
+def test_candidate_pairs_no_duplicates():
+    """CANDIDATE_PAIRS must contain no duplicate pairs."""
+    seen = set()
+    for pair in CANDIDATE_PAIRS:
+        assert pair not in seen, f"Duplicate pair: {pair}"
+        seen.add(pair)
+
+
+def test_all_candidate_pairs_have_ma_risk_entry():
+    """Every pair in CANDIDATE_PAIRS must have an entry in _MA_RISK."""
+    for a, b in CANDIDATE_PAIRS:
+        has_entry = (a, b) in _MA_RISK or (b, a) in _MA_RISK
+        assert has_entry, \
+            f"Pair {a}/{b} missing from _MA_RISK dict — add an entry"
+
+
+def test_etf_pairs_synth_validation_accepts_cointegrated():
+    """
+    Selector accepts a synthetically cointegrated pair regardless of ticker names.
+    Verifies the validation pipeline works correctly for ETF-style data.
+    """
+    prices = _make_cointegrated_prices(n=700)
+    cfg    = PairsTradingConfig(multi_window_check=True, min_robustness_score=2)
+    sel    = PairSelector(cfg)
+    sel._price_cache.update(prices)
+
+    import src.agents.pairs_trading as pt_mod
+    orig = pt_mod.CANDIDATE_PAIRS
+    # Simulate SPY/QQQ with synthetic cointegrated data
+    pt_mod.CANDIDATE_PAIRS = [("SYNTH_A", "SYNTH_B")]
+    try:
+        pair = sel._test_pair("SYNTH_A", "SYNTH_B")
+        assert pair is not None, "Cointegrated ETF-style pair should be accepted"
+        assert pair.robustness_score >= 2
+        assert pair.ma_risk == "low"   # default when not in _MA_RISK
+    finally:
+        pt_mod.CANDIDATE_PAIRS = orig

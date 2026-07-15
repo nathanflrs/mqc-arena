@@ -301,7 +301,7 @@ def test_adv_filter_sell_not_checked():
 def test_cb_level_zero_no_restriction(tmp_path, monkeypatch):
     monkeypatch.setattr(DrawdownCircuitBreaker, "_STATE_PATH", tmp_path / "cb.json")
     cb = DrawdownCircuitBreaker()
-    cb.evaluate(100_000)
+    cb.evaluate(100_000, ci_mode=True)
     assert cb.level == 0
     assert cb.level_name == "NORMAL"
     assert not cb.is_triggered
@@ -310,8 +310,8 @@ def test_cb_level_zero_no_restriction(tmp_path, monkeypatch):
 def test_cb_level_1_defensive(tmp_path, monkeypatch):
     monkeypatch.setattr(DrawdownCircuitBreaker, "_STATE_PATH", tmp_path / "cb.json")
     cb = DrawdownCircuitBreaker()
-    cb.evaluate(100_000)   # set peak
-    cb.evaluate(95_000)    # 5% DD → level 1
+    cb.evaluate(100_000, ci_mode=True)   # set peak
+    cb.evaluate(95_000, ci_mode=True)    # 5% DD → level 1
     assert cb.level == 1
     assert cb.level_name == "DÉFENSIF"
     assert not cb.is_triggered
@@ -320,8 +320,8 @@ def test_cb_level_1_defensive(tmp_path, monkeypatch):
 def test_cb_level_2_alert(tmp_path, monkeypatch):
     monkeypatch.setattr(DrawdownCircuitBreaker, "_STATE_PATH", tmp_path / "cb.json")
     cb = DrawdownCircuitBreaker()
-    cb.evaluate(100_000)
-    cb.evaluate(93_000)    # 7% DD → level 2
+    cb.evaluate(100_000, ci_mode=True)
+    cb.evaluate(93_000, ci_mode=True)    # 7% DD → level 2
     assert cb.level == 2
     assert cb.level_name == "ALERTE"
     assert not cb.is_triggered
@@ -330,8 +330,8 @@ def test_cb_level_2_alert(tmp_path, monkeypatch):
 def test_cb_level_3_emergency(tmp_path, monkeypatch):
     monkeypatch.setattr(DrawdownCircuitBreaker, "_STATE_PATH", tmp_path / "cb.json")
     cb = DrawdownCircuitBreaker()
-    cb.evaluate(100_000)
-    cb.evaluate(90_000)    # 10% DD → level 3
+    cb.evaluate(100_000, ci_mode=True)
+    cb.evaluate(90_000, ci_mode=True)    # 10% DD → level 3
     assert cb.level == 3
     assert cb.level_name == "URGENCE"
     assert cb.is_triggered
@@ -341,9 +341,9 @@ def test_cb_level_3_sticky(tmp_path, monkeypatch):
     """Une fois à level 3, le niveau reste 3 même si le portefeuille se redresse."""
     monkeypatch.setattr(DrawdownCircuitBreaker, "_STATE_PATH", tmp_path / "cb.json")
     cb = DrawdownCircuitBreaker()
-    cb.evaluate(100_000)
-    cb.evaluate(90_000)    # 10% DD → level 3
-    cb.evaluate(99_000)    # quasi-recovery mais sticky
+    cb.evaluate(100_000, ci_mode=True)
+    cb.evaluate(90_000, ci_mode=True)    # 10% DD → level 3
+    cb.evaluate(99_000, ci_mode=True)    # quasi-recovery mais sticky
     assert cb.level == 3
     assert cb.is_triggered
 
@@ -352,19 +352,19 @@ def test_cb_levels_1_and_2_auto_revert(tmp_path, monkeypatch):
     """Levels 1 et 2 reviennent à 0 si le drawdown se réduit."""
     monkeypatch.setattr(DrawdownCircuitBreaker, "_STATE_PATH", tmp_path / "cb.json")
     cb = DrawdownCircuitBreaker()
-    cb.evaluate(100_000)
-    cb.evaluate(94_000)    # 6% → level 1 ou 2 (6% > 4%, < 6% → level 1... wait)
+    cb.evaluate(100_000, ci_mode=True)
+    cb.evaluate(94_000, ci_mode=True)    # 6% → level 1 ou 2 (6% > 4%, < 6% → level 1... wait)
     # 6% drawdown: > 4% → level 1, not quite > 6% so level 1
     assert cb.level == 1
-    cb.evaluate(98_000)    # 2% → level 0
+    cb.evaluate(98_000, ci_mode=True)    # 2% → level 0
     assert cb.level == 0
 
 
 def test_cb_reset_clears_level_3(tmp_path, monkeypatch):
     monkeypatch.setattr(DrawdownCircuitBreaker, "_STATE_PATH", tmp_path / "cb.json")
     cb = DrawdownCircuitBreaker()
-    cb.evaluate(100_000)
-    cb.evaluate(88_000)    # 12% → level 3
+    cb.evaluate(100_000, ci_mode=True)
+    cb.evaluate(88_000, ci_mode=True)    # 12% → level 3
     assert cb.is_triggered
     cb.reset()
     assert cb.level == 0

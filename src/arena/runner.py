@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import os
 import uuid
-from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -31,15 +33,20 @@ from src.agents.dummy import DummyHoldAgent
 from src.agents.mean_reversion import MeanReversionAgent
 from src.agents.macro import MacroAgent
 from src.agents.trend_following import TrendFollowingAgent
-from src.agents.dividend_arbitrage_agent import DividendArbitrageAgent
+from src.agents.dividend_arbitrage_agent import (
+    DividendArbitrageAgent, DividendPositionTracker, DivPosition,
+)
 from src.agents.pairs_trading import PairsTradingAgent
 from src.agents.volatility import VolatilityAgent
 from src.agents.earnings_sentiment import EarningsSentimentAgent
+from src.agents.cta_trend_agent import CTATrendAgent, CTA_UNIVERSE
+from src.agents.insider_buy import InsiderBuyAgent
+from src.agents.base import MarketState
 from src.broker.ibkr import connect_ibkr
 from src.broker.portfolio import fetch_account_snapshot
 from src.data.market_data import download_ohlcv, get_last_close_1d
 from src.regime.detector import GMMRegimeDetector
-from src.execution.planner import plan_from_signal, OrderPlan
+from src.execution.planner import plan_from_signal, cta_plan_from_signal, pairs_plans_from_signal, OrderPlan
 from src.execution.logger import log_order_plan, log_execution, log_decisions
 from src.risk.manager import RiskConfig, RiskManager, DrawdownCircuitBreaker
 from src.risk.allocator import AllocatorConfig, DynamicAllocator
@@ -47,6 +54,7 @@ from src.risk.correlation import CorrelationGuard
 from src.risk.live_scorer import LiveScorer
 from src.risk.earnings_filter import EarningsFilter
 from src.risk.vol_sizing import vol_adjusted_weight
+from src.risk.var_engine import HistoricalVaREngine, VaRConfig
 
 
 def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
@@ -192,26 +200,89 @@ def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
     log_execution(exec_rows)
 
 
-def _load_entry_prices() -> dict[str, float]:
-    """Returns the last recorded BUY fill price per symbol from executions.csv.
-    Prefers avg_fill_price when available (new schema), falls back to limit_price."""
-    path = Path("logs/executions.csv")
-    if not path.exists():
-        return {}
+def _load_entry_prices(
+    avg_costs: dict[str, float] | None = None,
+    plan_prices_path: str | Path = "logs/entry_prices.json",
+    exec_path: str | Path = "logs/executions.csv",
+) -> dict[str, float]:
+    """
+    3-tier lookup for position entry prices — used by the stop-loss engine.
+
+    Tier 3 (lowest):  logs/entry_prices.json  — plan signal price, written at BUY
+                      approval. Always available when a plan was created.
+    Tier 2:           avg_costs               — IBKR-reported average cost basis.
+                      Most precise when IBKR is connected.
+    Tier 1 (highest): logs/executions.csv     — actual broker fill price.
+                      Overrides when the fill was recorded.
+
+    Each tier overwrites the previous so the highest-fidelity price wins.
+    Returns {} when no source has data (stop-loss skips that symbol with a warning).
+    """
+    result: dict[str, float] = {}
+
+    # Tier 3: plan signal price (persistent fallback)
+    plan_path = Path(plan_prices_path)
+    if plan_path.exists():
+        try:
+            result.update(json.loads(plan_path.read_text()))
+        except Exception:
+            pass
+
+    # Tier 2: IBKR avgCost from live portfolio (overrides plan price)
+    if avg_costs:
+        result.update({k: v for k, v in avg_costs.items() if v > 0})
+
+    # Tier 1: executions.csv actual fill price (highest priority)
+    ex = Path(exec_path)
+    if ex.exists():
+        try:
+            df = pd.read_csv(ex)
+            buys = df[df["side"] == "BUY"].sort_values("timestamp")
+            if "avg_fill_price" in buys.columns:
+                price_col = buys["avg_fill_price"].where(
+                    buys["avg_fill_price"] > 0, buys["limit_price"]
+                )
+                buys = buys.copy()
+                buys["_price"] = price_col
+                result.update(buys.groupby("symbol")["_price"].last().to_dict())
+            else:
+                result.update(buys.groupby("symbol")["limit_price"].last().to_dict())
+        except Exception:
+            pass
+
+    return result
+
+
+def _write_plan_entry_prices(
+    approved_plans: list[OrderPlan],
+    path: str | Path = "logs/entry_prices.json",
+) -> None:
+    """
+    Persist entry prices for approved BUY plans so stop-loss has a reference
+    even when IBKR fills are delayed or absent.
+
+    - BUY plan:  record last_price as provisional entry (setdefault — first BUY wins,
+                 scale-ins don't shift the reference).
+    - SELL plan to target_qty=0: remove symbol (position fully closed).
+    """
+    p = Path(path)
+    existing: dict[str, float] = {}
+    if p.exists():
+        try:
+            existing = json.loads(p.read_text())
+        except Exception:
+            pass
+
+    for plan in approved_plans:
+        if plan.action == "BUY" and plan.last_price > 0:
+            existing.setdefault(plan.symbol, plan.last_price)
+        elif plan.action == "SELL" and plan.target_qty == 0.0:
+            existing.pop(plan.symbol, None)
+
     try:
-        df = pd.read_csv(path)
-        buys = df[df["side"] == "BUY"].sort_values("timestamp")
-        if "avg_fill_price" in buys.columns:
-            # Use fill price when > 0, otherwise fall back to limit_price
-            price_col = buys["avg_fill_price"].where(
-                buys["avg_fill_price"] > 0, buys["limit_price"]
-            )
-            buys = buys.copy()
-            buys["_price"] = price_col
-            return buys.groupby("symbol")["_price"].last().to_dict()
-        return buys.groupby("symbol")["limit_price"].last().to_dict()
-    except Exception:
-        return {}
+        p.write_text(json.dumps(existing, indent=2))
+    except Exception as exc:
+        print(f"⚠️  _write_plan_entry_prices: {exc}")
 
 
 def _run_intraday_news_check(positions: dict[str, float]) -> None:
@@ -373,6 +444,12 @@ def main() -> None:
         if ibkr_ok:
             snap = fetch_account_snapshot(ib)
             print(f"✅ IBKR connected | NetLiq={snap.net_liquidation:.2f} | Cash={snap.cash:.2f}")
+            _ec_path = Path("logs/equity_curve.csv")
+            _ec_header = not _ec_path.exists()
+            with _ec_path.open("a") as _ec_f:
+                if _ec_header:
+                    _ec_f.write("date,netliq\n")
+                _ec_f.write(f"{datetime.now(timezone.utc).date().isoformat()},{snap.net_liquidation:.2f}\n")
         else:
             from src.broker.portfolio import PortfolioSnapshot
             snap = PortfolioSnapshot(net_liquidation=100_000.0, cash=100_000.0, positions={})
@@ -406,22 +483,34 @@ def main() -> None:
         if not ci_mode and snap.positions:
             _run_intraday_news_check(snap.positions)
 
+        # Télécharge les 14 tickers en parallèle — réduit 60-90s → ~10-15s.
+        with ThreadPoolExecutor(max_workers=8) as _pool:
+            _futures = {sym: _pool.submit(download_ohlcv, sym) for sym in WATCHLIST}
+            all_data: dict = {}
+            for sym, fut in _futures.items():
+                try:
+                    all_data[sym] = fut.result()
+                except Exception as _e:
+                    print(f"⚠️  download_ohlcv({sym}) failed: {_e}")
+
+        # Arena créée APRÈS all_data — MacroAgent reçoit SPY/GLD pré-chargés
+        # pour éviter 2 appels réseau redondants par run.
         arena = Arena([
             DummyHoldAgent(),
             BuffettAgent(),
             CitadelAgent(),
             MeanReversionAgent(),
-            MacroAgent(),
+            MacroAgent(preloaded={
+                "SPY": all_data.get("SPY"),
+                "GLD": all_data.get("GLD"),
+            }),
             TrendFollowingAgent(),
             DividendArbitrageAgent(),
             PairsTradingAgent(),
             VolatilityAgent(),
             EarningsSentimentAgent(),
+            InsiderBuyAgent(),
         ])
-
-        # Télécharge toutes les données en une passe — SPY est dans WATCHLIST,
-        # on évite un 2e appel réseau pour le détecteur de régime.
-        all_data = {sym: download_ohlcv(sym) for sym in WATCHLIST}
 
         _gmm_detector = GMMRegimeDetector()
         _spy_df       = all_data["SPY"]
@@ -451,6 +540,42 @@ def main() -> None:
         plan_id = uuid.uuid4().hex[:8]
         plans = []
         _decisions_summary: list[dict] = []
+        _pending_divArb: dict[str, dict] = {}  # sym → signal meta, populated before RiskManager
+
+        # ====== VAR TEMPS RÉEL ======
+        _var_engine = HistoricalVaREngine(VaRConfig(lookback_days=252, risk_budget_pct=0.03))
+        _var_result = _var_engine.compute(snap.positions, all_data, snap.net_liquidation)
+        if _var_result is not None:
+            _var_line = (
+                f"\n📊 VaR 1-jour — 95%: ${_var_result.var_95_usd:,.0f} ({_var_result.var_95_pct:.2%}) | "
+                f"99%: ${_var_result.var_99_usd:,.0f} ({_var_result.var_99_pct:.2%}) | "
+                f"CVaR 99%: ${_var_result.cvar_99_usd:,.0f} | "
+                f"{_var_result.n_positions} position(s) × {_var_result.n_days}j"
+            )
+            print(_var_line)
+            if _var_engine.exceeds_budget(_var_result, snap.net_liquidation) and not ci_mode:
+                try:
+                    from src.events.bus import get_bus, Event
+                    get_bus().emit(Event(
+                        type="alert",
+                        severity="critical",
+                        title=f"VaR 99% dépasse le budget risque",
+                        body=(
+                            f"🚨 VaR 1-jour 99% = ${_var_result.var_99_usd:,.0f} "
+                            f"({_var_result.var_99_usd / snap.net_liquidation:.2%} du portfolio) "
+                            f"> seuil 3%.\n"
+                            f"CVaR 99% = ${_var_result.cvar_99_usd:,.0f}\n"
+                            f"Positions: {_var_result.n_positions} | Historique: {_var_result.n_days}j"
+                        ),
+                        meta={
+                            "var_99_usd": _var_result.var_99_usd,
+                            "var_99_pct": _var_result.var_99_pct,
+                            "cvar_99_usd": _var_result.cvar_99_usd,
+                            "budget_pct": _var_engine.cfg.risk_budget_pct,
+                        },
+                    ))
+                except Exception as _ve:
+                    print(f"⚠️  VaR alert emit failed: {_ve}")
 
         # ADV 10 jours pour filtre liquidité (shares, calculé depuis Volume OHLCV)
         adv_map: dict[str, float] = {
@@ -560,22 +685,59 @@ def main() -> None:
             last_px = get_last_close_1d(df)
             current_qty = snap.positions.get(sym, 0.0)
 
-            plan = plan_from_signal(
-                winner,
-                net_liquidation=snap.net_liquidation,
-                last_price=last_px,
-                current_qty=current_qty,
-            )
-            plans.append(plan)
+            if winner.agent_name == "PairsTradingAgent":
+                # Build a prices dict with both legs; fetch partner price on demand
+                meta = winner.meta or {}
+                pair_legs = meta.get("pair_legs", {})
+                direction = meta.get("direction", "")
+                if direction in ("long_a_short_b", "short_a_long_b"):
+                    leg_tickers = {pair_legs["long"][0], pair_legs["short"][0]}
+                elif direction == "close":
+                    leg_tickers = {pair_legs.get("close_long", ""), pair_legs.get("close_short", "")}
+                else:
+                    leg_tickers = set()
+                prices: dict[str, float] = {}
+                for t in leg_tickers:
+                    if t in all_data:
+                        prices[t] = get_last_close_1d(all_data[t])
+                    else:
+                        try:
+                            _partner_df = download_ohlcv(t)
+                            all_data[t] = _partner_df
+                            prices[t] = get_last_close_1d(_partner_df)
+                        except Exception as exc:
+                            print(f"⚠️  PairsTradingAgent: no price data for {t} — {exc}")
+                pair_plans = pairs_plans_from_signal(
+                    winner,
+                    net_liquidation=snap.net_liquidation,
+                    prices=prices,
+                    current_qtys=snap.positions,
+                )
+                plans.extend(pair_plans)
+                if not pair_plans:
+                    print(f"⚠️  PairsTradingAgent: signal for {sym} produced 0 plans — skipped")
+            else:
+                plan = plan_from_signal(
+                    winner,
+                    net_liquidation=snap.net_liquidation,
+                    last_price=last_px,
+                    current_qty=current_qty,
+                )
+                plans.append(plan)
+                # DivArb: capture pending position data — written to tracker only after
+                # RiskManager confirms the plan (prevents phantom SELL on next run).
+                if winner.agent_name == "DividendArbitrageAgent" and winner.action == "BUY":
+                    _pending_divArb[sym] = winner.meta or {}
             _decisions_summary.append({"symbol": sym, "agent": winner.agent_name, "action": winner.action})
 
         # ====== STOP-LOSS PAR POSITION ======
-        entry_prices = _load_entry_prices()
+        entry_prices = _load_entry_prices(avg_costs=snap.avg_costs)
         for sym, qty in snap.positions.items():
             if qty <= 0 or sym not in all_data:
                 continue
             entry_px = entry_prices.get(sym)
             if entry_px is None:
+                print(f"⚠️  Stop-loss {sym}: aucun prix d'entrée connu (fill absent, avgCost=0, plan non enregistré) — ignoré")
                 continue
             current_px = get_last_close_1d(all_data[sym])
             pnl_pct = (current_px - entry_px) / entry_px
@@ -604,6 +766,46 @@ def main() -> None:
                                             meta={"symbol": sym, "pnl_pct": pnl_pct}))
                     except Exception:
                         pass
+
+        # ====== CTA TREND — boucle séparée (TLT/UUP/DBC hors WATCHLIST) ======
+        # SPY/QQQ/GLD sont dans WATCHLIST et traités par l'Arena ci-dessus.
+        # Seuls TLT/UUP/DBC n'ont pas de couverture Arena et nécessitent ce loop.
+        _cta_agent  = CTATrendAgent()
+        _CTA_EXTRA  = [s for s in CTA_UNIVERSE if s not in WATCHLIST]  # TLT, UUP, DBC
+        cta_data: dict = dict(all_data)
+        for _sym in _CTA_EXTRA:
+            if _sym not in cta_data:
+                try:
+                    cta_data[_sym] = download_ohlcv(_sym)
+                except Exception as _exc:
+                    print(f"⚠️  CTA: téléchargement {_sym} échoué: {_exc}")
+
+        print("\n====== CTA TREND SIGNALS ======")
+        for _sym in _CTA_EXTRA:
+            _df_cta = cta_data.get(_sym)
+            if _df_cta is None or _df_cta.empty:
+                print(f"   {_sym}: données absentes — HOLD")
+                continue
+            _px_cta  = get_last_close_1d(_df_cta)
+            _state   = MarketState(symbol=_sym, price=_px_cta,
+                                   timestamp=str(_df_cta.index[-1]))
+            _sig_cta = _cta_agent.generate_signal(
+                _state, snap.positions, regime=regime, data=_df_cta
+            )
+            _plan_cta = cta_plan_from_signal(
+                _sig_cta,
+                net_liquidation=snap.net_liquidation,
+                last_price=_px_cta,
+                current_qty=float(snap.positions.get(_sym, 0.0)),
+            )
+            print(
+                f"   {_sym}: {_sig_cta.action} | tw={_sig_cta.target_weight:+.3f} | "
+                f"conf={_sig_cta.confidence:.2f} | {_sig_cta.reason[:80]}"
+            )
+            plans.append(_plan_cta)
+            _decisions_summary.append({
+                "symbol": _sym, "agent": "CTATrendAgent", "action": _sig_cta.action
+            })
 
         print("\n====== ORDER PLAN (NO EXECUTION) ======")
         if not plans:
@@ -668,6 +870,29 @@ def main() -> None:
                                             meta={"symbol": block["symbol"], "corr": block["max_corr"]}))
                     except Exception:
                         pass
+
+        # Persist BUY plan prices so stop-loss has a reference even without IBKR fills
+        _write_plan_entry_prices(plans)
+
+        # Record DivArb positions AFTER RiskManager + CorrelationGuard — only for approved plans.
+        # This prevents phantom SELL signals when a DivArb BUY is rejected.
+        if _pending_divArb:
+            _divArb_tracker = DividendPositionTracker()
+            for _plan in plans:
+                if _plan.symbol in _pending_divArb and _plan.action == "BUY":
+                    _dmeta = _pending_divArb[_plan.symbol]
+                    try:
+                        _divArb_tracker.open_position(DivPosition(
+                            ticker           = _plan.symbol,
+                            entry_date       = date.today().isoformat(),
+                            entry_price      = _plan.last_price,
+                            ex_date          = _dmeta["ex_date"],
+                            dividend_amount  = _dmeta["dividend_amount"],
+                            target_exit_date = _dmeta.get("_divpos_target_exit", ""),
+                            shares           = float(_plan.delta_qty),
+                        ))
+                    except Exception as _de:
+                        print(f"⚠️  DivArb tracker write failed for {_plan.symbol}: {_de}")
 
         log_order_plan(plans, plan_id=plan_id)
 

@@ -2,15 +2,17 @@
 #
 # PairsTradingAgent — Statistical arbitrage, market-neutral.
 #
-# STATE: "ARMED BUT AT REST"
-# As of 2026-06-29, no pair in the candidate universe passes the
-# multi-criteria filter (Engle-Granger multi-window + half-life + Hurst +
-# zero-crossings + rolling p-value stability).
-# NVDA/AMD passes only on 252j (15% of rolling windows), window artifact.
+# STATE: "ARMED — ETF PAIRS UNIVERSE ACTIVE"
+# Rebuilt 2026-07-15 with Tier-1 ETF pairs whose A-legs are in the directional
+# WATCHLIST (SPY/QQQ, SPY/IWM, GLD/SLV, QQQ/XLK).  ETF pairs are structurally
+# more cointegrated than individual equities, carry no M&A risk, and are liquid
+# enough for the minimum order sizes MQC runs.
 #
-# The agent will generate BUY/SELL signals the moment a robust pair appears.
-# Until then it emits HOLD legitimately. Trading a single fragile pair would
-# not constitute genuine market-neutral diversification.
+# Legacy equity pairs (XOM/CVX, SO/DUK …) retained as Tier-2 farm team.
+# They are validated but won't route to execution until their A-leg is added
+# to the directional WATCHLIST.
+#
+# The agent emits HOLD when no pair passes the multi-criteria filter.
 #
 from __future__ import annotations
 
@@ -69,28 +71,48 @@ class PairsTradingConfig:
     min_zero_crossings: int = 12   # minimum crossings of spread mean in 252j
 
 
-# ── Candidate pairs — genuine economic substitutes by sector ───────────────────
-# These pairs exist ONLY for PairsTradingAgent validation.
-# They are NOT added to the directional-agent WATCHLIST.
+# ── Candidate pairs — ETF sector pairs + equity substitutes ───────────────────
+#
+# Two tiers:
+#
+# Tier 1 — ETF pairs (A-leg IN directional WATCHLIST)
+#   These pairs will generate live signals the moment they pass validation.
+#   Structurally more cointegrated than single stocks: diversified, no M&A risk,
+#   liquid enough for the minimum order sizes MQC runs.
+#
+# Tier 2 — Equity pairs (A-leg NOT in WATCHLIST)
+#   Validated but signals never routed to execution until their A-leg is added
+#   to the directional WATCHLIST. Kept here as the farm team.
+#
+# Note: ETF tickers used only as pair legs (SLV, IWM, XLK, XLF, XLE, XLU, XLV,
+# XLP) are NOT added to the directional WATCHLIST — directional agents would
+# produce noisy signals on them.
 
 CANDIDATE_PAIRS: List[Tuple[str, str]] = [
+    # ── Tier 1: ETF pairs — A-leg in WATCHLIST ────────────────────────────────
+    # Broad market: large-cap vs Nasdaq (SPY, QQQ both in WATCHLIST)
+    ("SPY",  "QQQ"),
+    # Large-cap vs small-cap risk premium (SPY in WATCHLIST)
+    ("SPY",  "IWM"),
+    # Precious metals: gold vs silver (GLD in WATCHLIST)
+    ("GLD",  "SLV"),
+    # Nasdaq vs pure tech sector (QQQ in WATCHLIST)
+    ("QQQ",  "XLK"),
+
+    # ── Tier 2: ETF sector pairs — validation-only (A-leg not in WATCHLIST) ──
+    # Financials vs Technology (sector rotation barometer)
+    ("XLF",  "XLK"),
+    # Energy vs Utilities (risk-on vs defensive)
+    ("XLE",  "XLU"),
+    # Healthcare vs Consumer Staples (defensive quality spread)
+    ("XLV",  "XLP"),
+
+    # ── Tier 2: Equity pairs — kept as farm team ─────────────────────────────
     # Energy majors
     ("XOM",  "CVX"),
-    # E&P vs integrated
-    ("COP",  "XOM"),
-    # Downstream refiners
-    ("PSX",  "VLO"),
     # Regulated utilities
     ("SO",   "DUK"),
     ("AEP",  "EXC"),
-    # Apartment REITs
-    ("EQR",  "AVB"),
-    # Industrial REITs
-    ("PLD",  "REXR"),
-    # Network airlines (M&A risk high)
-    ("DAL",  "UAL"),
-    # Low-cost carriers (M&A risk high)
-    ("LUV",  "JBLU"),
     # Life insurance
     ("MET",  "PRU"),
     # P&C insurance
@@ -105,22 +127,25 @@ _COINT_WINDOWS = [126, 252, 504]
 
 # M&A event risk by pair (affects sizing, not acceptance)
 _MA_RISK: Dict[Tuple[str, str], str] = {
+    # ── ETF pairs: zero M&A risk (ETFs are never acquired) ───────────────────
+    ("SPY",  "QQQ"):   "low",
+    ("SPY",  "IWM"):   "low",
+    ("GLD",  "SLV"):   "low",
+    ("QQQ",  "XLK"):   "low",
+    ("XLF",  "XLK"):   "low",
+    ("XLE",  "XLU"):   "low",
+    ("XLV",  "XLP"):   "low",
+    # ── Equity pairs ─────────────────────────────────────────────────────────
     # High: frequent consolidation in sector
     ("RF",   "FITB"):  "high",
     ("CFG",  "HBAN"):  "high",
-    ("DAL",  "UAL"):   "high",
-    ("LUV",  "JBLU"):  "high",
     # Medium: occasional M&A activity
-    ("PSX",  "VLO"):   "medium",
     ("MET",  "PRU"):   "medium",
     ("CB",   "TRV"):   "medium",
     # Low: stable regulated or capital-light structures
     ("XOM",  "CVX"):   "low",
-    ("COP",  "XOM"):   "low",
     ("SO",   "DUK"):   "low",
     ("AEP",  "EXC"):   "low",
-    ("EQR",  "AVB"):   "low",
-    ("PLD",  "REXR"):  "low",
 }
 
 

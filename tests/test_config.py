@@ -9,7 +9,7 @@ from src.config import WATCHLIST, AGENT_PRIORITY
 ACTIVE_TICKERS = {
     "AAPL", "SPY", "QQQ", "NVDA", "MSFT",
     "GOOGL", "META", "JPM", "GS", "GLD",
-    "BRK-B", "JNJ", "TSLA", "AMD",
+    "TSLA", "AMD", "AMZN", "LLY",
 }
 ARCHIVED_TICKERS = {"TLT"}  # gardés dans AGENT_PRIORITY pour référence, hors watchlist
 
@@ -23,6 +23,7 @@ VALID_AGENTS = {
     "DividendArbitrageAgent",
     "PairsTradingAgent",
     "DummyHoldAgent",
+    "InsiderBuyAgent",
 }
 
 
