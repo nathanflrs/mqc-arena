@@ -1,0 +1,2 @@
+date,plan_id,regime,n_signals,n_buy,n_sell,n_hold,top_agent,netliq,sha256
+2026-07-15,99411ad5,bull,14,14,0,0,BuffettAgent,100000.0,fa02699c6e7ed3ae929ea00021eabd22d4596d56140c9c7b71932dabc0120585
