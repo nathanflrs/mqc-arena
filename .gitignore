@@ -14,7 +14,7 @@ build/
 .env.*
 
 # Logs sensibles
-logs/shadow_signals.csv
+# logs/shadow_signals.csv  # tracked — shadow mode accumulates signals daily
 
 # Comptes dashboard (mots de passe hashés)
 src/dashboard/users.json
