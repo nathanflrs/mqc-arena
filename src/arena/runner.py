@@ -899,17 +899,18 @@ def main() -> None:
 
         log_order_plan(plans, plan_id=plan_id)
 
-        try:
-            from src import track_record
-            digest = track_record.append_daily_entry(
-                plan_id=plan_id,
-                regime=regime,
-                decisions_summary=_decisions_summary,
-                netliq=snap.net_liquidation,
-            )
-            print(f"✅ Track record signed: {digest[:16]}…")
-        except Exception as _tr_err:
-            print(f"⚠️  Track record: {_tr_err}")
+        if not ci_mode:
+            try:
+                from src import track_record
+                digest = track_record.append_daily_entry(
+                    plan_id=plan_id,
+                    regime=regime,
+                    decisions_summary=_decisions_summary,
+                    netliq=snap.net_liquidation,
+                )
+                print(f"✅ Track record signed: {digest[:16]}…")
+            except Exception as _tr_err:
+                print(f"⚠️  Track record: {_tr_err}")
 
         if not plans:
             msg = f"Milan Capital — ORDER PLAN ready\nplan_id={plan_id}\nNo plans."

@@ -167,6 +167,18 @@ def log_decisions(
     out_path = "logs/decisions.csv"
     try:
         df_old = pd.read_csv(out_path)
+        # Migrate old schema (pre-sprint-6): ts→timestamp, winner_agent→agent
+        rename = {}
+        if "ts" in df_old.columns and "timestamp" not in df_old.columns:
+            rename["ts"] = "timestamp"
+        if "winner_agent" in df_old.columns and "agent" not in df_old.columns:
+            rename["winner_agent"] = "agent"
+        if rename:
+            df_old = df_old.rename(columns=rename)
+        if "is_winner" not in df_old.columns:
+            df_old["is_winner"] = True
+        # Keep only current schema, drop legacy columns (meta, etc.)
+        df_old = df_old.reindex(columns=cols)
         df_all = pd.concat([df_old, df_new], ignore_index=True)
     except FileNotFoundError:
         df_all = df_new

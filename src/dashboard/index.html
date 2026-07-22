@@ -1426,9 +1426,11 @@ function _renderSignals(rows) {
     kpiBS.textContent = `${buys}B · ${sells}S · ${rows.length-buys-sells}H`;
   }
   if (first?.ts) {
-    const p = String(first.ts).split(' ');
-    document.getElementById('kpi-lastrun').textContent      = p[1]?.slice(0,5)||'—';
-    document.getElementById('kpi-lastrun-date').textContent = p[0]||'—';
+    const tsStr = String(first.ts||'');
+    const sep   = tsStr.includes('T') ? 'T' : ' ';
+    const [tsDate, tsTime] = tsStr.split(sep);
+    document.getElementById('kpi-lastrun').textContent      = tsTime?.slice(0,5)||'—';
+    document.getElementById('kpi-lastrun-date').textContent = tsDate||'—';
   }
   const tbody = document.getElementById('signals-body');
   if (!tbody) return;

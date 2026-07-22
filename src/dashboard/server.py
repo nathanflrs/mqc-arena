@@ -373,6 +373,21 @@ def get_signals(user: str = Depends(require_auth)):
         return JSONResponse(content=[])
     try:
         df = pd.read_csv(io.StringIO(raw))
+        # New schema (sprint-6+): one row per agent, is_winner flag
+        if "is_winner" in df.columns:
+            df = df[df["is_winner"].astype(str).str.lower().isin(["true","1"])]
+            # ts: fill NaN old-column from new timestamp column
+            if "timestamp" in df.columns:
+                if "ts" not in df.columns:
+                    df = df.rename(columns={"timestamp": "ts"})
+                else:
+                    df["ts"] = df["ts"].fillna(df["timestamp"])
+            # winner_agent: fill NaN old-column from new agent column
+            if "agent" in df.columns:
+                if "winner_agent" not in df.columns:
+                    df = df.rename(columns={"agent": "winner_agent"})
+                else:
+                    df["winner_agent"] = df["winner_agent"].fillna(df["agent"])
         cols = [c for c in ["ts","symbol","regime","winner_agent","action","confidence","reason"]
                 if c in df.columns]
         df = df[cols].drop_duplicates(subset=["symbol"], keep="last").sort_values("symbol")
