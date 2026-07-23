@@ -45,7 +45,7 @@ from src.agents.momentum import CrossSectionalMomentumAgent
 from src.agents.base import MarketState
 from src.broker.ibkr import connect_ibkr
 from src.broker.portfolio import fetch_account_snapshot
-from src.data.market_data import download_ohlcv, get_last_close_1d
+from src.data.market_data import download_ohlcv, get_last_close_1d, normalize_ohlcv
 from src.regime.detector import GMMRegimeDetector
 from src.execution.planner import plan_from_signal, cta_plan_from_signal, pairs_plans_from_signal, OrderPlan
 from src.execution.logger import log_order_plan, log_execution, log_decisions
@@ -484,15 +484,23 @@ def main() -> None:
         if not ci_mode and snap.positions:
             _run_intraday_news_check(snap.positions)
 
-        # Télécharge les 14 tickers en parallèle — réduit 60-90s → ~10-15s.
-        with ThreadPoolExecutor(max_workers=8) as _pool:
-            _futures = {sym: _pool.submit(download_ohlcv, sym) for sym in WATCHLIST}
-            all_data: dict = {}
-            for sym, fut in _futures.items():
-                try:
-                    all_data[sym] = fut.result()
-                except Exception as _e:
-                    print(f"⚠️  download_ohlcv({sym}) failed: {_e}")
+        # Batch download — un seul appel réseau, thread-safe, ~10-15s.
+        import yfinance as _yf
+        _raw_batch = _yf.download(
+            list(WATCHLIST),
+            period="2y",
+            interval="1d",
+            auto_adjust=True,
+            progress=False,
+            group_by="ticker",
+        )
+        all_data: dict = {}
+        for sym in WATCHLIST:
+            try:
+                _df_sym = _raw_batch[sym].copy() if isinstance(_raw_batch.columns, pd.MultiIndex) else _raw_batch.copy()
+                all_data[sym] = normalize_ohlcv(_df_sym)
+            except Exception as _e:
+                print(f"⚠️  {sym}: données manquantes ({_e})")
 
         # Arena créée APRÈS all_data — MacroAgent reçoit SPY/GLD pré-chargés
         # pour éviter 2 appels réseau redondants par run.
@@ -603,6 +611,9 @@ def main() -> None:
         print("\n" + alloc_result.telegram_summary())
 
         for sym in WATCHLIST:
+            if sym not in all_data:
+                print(f"⚠️  {sym} ignoré — données manquantes")
+                continue
             df = all_data[sym]
 
             # Priority dynamique (remplace AGENT_PRIORITY statique, fallback si symbole absent)
