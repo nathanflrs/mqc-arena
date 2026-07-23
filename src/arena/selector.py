@@ -8,13 +8,15 @@ from src.agents.base import AgentSignal
 def score_signal(sig: AgentSignal) -> float:
     """
     Convertit un signal en score numérique cohérent.
-    BUY  : confidence * target_weight
-    SELL : confidence * target_weight (symétrique)
-    HOLD : 0.0 (jamais sélectionné)
+    BUY / SELL : confidence × max(target_weight, 0.05)
+    HOLD       : confidence × 0.05
+
+    HOLD n'est pas une abstention — c'est un avis de ne pas agir.
+    Son score est structurellement plus faible qu'un BUY/SELL typique
+    (×0.05 vs ×0.10+), mais peut l'emporter si l'agent est prioritaire
+    (bonus +0.15 dans select_best).
     """
-    if sig.action in ("BUY", "SELL"):
-        return sig.confidence * max(sig.target_weight, 0.05)
-    return 0.0
+    return sig.confidence * max(sig.target_weight, 0.05)
 
 
 def select_best(
