@@ -26,6 +26,7 @@ from src.config import (
     STOP_LOSS_PCT,
 )
 from src.arena.arena import Arena
+from src.arena.normalizer import ConfidenceNormalizer
 from src.arena.selector import select_best
 from src.agents.buffett import BuffettAgent
 from src.agents.citadel import CitadelAgent
@@ -610,6 +611,12 @@ def main() -> None:
 
         print("\n" + alloc_result.telegram_summary())
 
+        # P0(b) : normalisation intra-agent (min-max sur tout l'historique)
+        # Corrige les biais d'échelle entre agents — pas une calibration.
+        # Les signaux bruts sont conservés pour le logging ; seule la sélection utilise les valeurs normalisées.
+        _decisions_csv = str(Path("logs/decisions.csv"))
+        _normalizer = ConfidenceNormalizer.from_csv(_decisions_csv)
+
         for sym in WATCHLIST:
             if sym not in all_data:
                 print(f"⚠️  {sym} ignoré — données manquantes")
@@ -620,7 +627,15 @@ def main() -> None:
             priority = alloc_result.best_agent.get(sym) or AGENT_PRIORITY.get(sym)
 
             signals = arena.run(sym, df, portfolio=snap.positions, regime=regime)
-            winner = select_best(signals, priority_agent=priority)
+
+            # Normalisation P0(b) : on sélectionne sur confidences normalisées,
+            # mais winner est récupéré depuis les signaux bruts (pour circuit breaker, logs).
+            _signals_norm = _normalizer.normalize_all(signals)
+            _winner_norm = select_best(_signals_norm, priority_agent=priority)
+            winner = (
+                next((s for s in signals if s.agent_name == _winner_norm.agent_name), None)
+                if _winner_norm else None
+            )
 
             print(f"\n=== RUN {sym} | regime={regime} | priority={priority} ===")
             for s in signals:
