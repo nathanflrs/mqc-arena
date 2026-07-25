@@ -14,7 +14,7 @@ def score_signal(sig: AgentSignal) -> float:
     HOLD n'est pas une abstention — c'est un avis de ne pas agir.
     Son score est structurellement plus faible qu'un BUY/SELL typique
     (×0.05 vs ×0.10+), mais peut l'emporter si l'agent est prioritaire
-    (bonus +0.15 dans select_best).
+    (bonus conf×priority_bonus dans select_best, proportionnel à la conviction).
     """
     return sig.confidence * max(sig.target_weight, 0.05)
 
@@ -48,9 +48,11 @@ def select_best(
     for s in signals:
         score = score_signal(s)
 
-        # Bonus si c'est l'agent prioritaire pour ce symbole
+        # Bonus proportionnel si c'est l'agent prioritaire pour ce symbole.
+        # Proportionnel à la conviction : un HOLD à 10% n'écrase pas un BUY solide,
+        # un HOLD à 70%+ le fait légitimement.
         if priority_agent and s.agent_name == priority_agent and score > 0:
-            score += priority_bonus
+            score += s.confidence * priority_bonus
 
         scored.append((score, s))
 
