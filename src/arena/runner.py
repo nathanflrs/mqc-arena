@@ -614,8 +614,7 @@ def main() -> None:
         # P0(b) : normalisation intra-agent (min-max sur tout l'historique)
         # Corrige les biais d'échelle entre agents — pas une calibration.
         # Les signaux bruts sont conservés pour le logging ; seule la sélection utilise les valeurs normalisées.
-        _decisions_csv = str(Path("logs/decisions.csv"))
-        _normalizer = ConfidenceNormalizer.from_csv(_decisions_csv)
+        _normalizer = ConfidenceNormalizer.from_frozen_json()
 
         for sym in WATCHLIST:
             if sym not in all_data:

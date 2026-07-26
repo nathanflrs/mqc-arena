@@ -104,17 +104,28 @@ def test_normalization_preserves_raw_signal_immutable():
     assert normalized.confidence == pytest.approx(0.50, abs=1e-6)
 
 
-def test_from_csv_skips_constant_agents(tmp_path):
-    """from_csv() ignore les agents avec std=0 (VolatilityAgent, DividendArbitrageAgent)."""
-    import pandas as pd
+def test_from_frozen_json_skips_constant_agents(tmp_path):
+    """from_frozen_json() ignore les agents avec hi==lo (signal constant)."""
+    import json
 
-    csv = tmp_path / "decisions.csv"
-    pd.DataFrame({
-        "agent":      ["VolAgent", "VolAgent", "VarAgent", "VarAgent"],
-        "confidence": [0.30,        0.30,        0.40,        0.80],
-    }).to_csv(csv, index=False)
+    stats_file = tmp_path / "normalizer_stats.json"
+    stats_file.write_text(json.dumps({
+        "version": "test",
+        "method": "min_max",
+        "agents": {
+            "VolAgent": {"lo": 0.30, "hi": 0.30},   # constant → exclu
+            "VarAgent": {"lo": 0.40, "hi": 0.80},   # valide
+        }
+    }))
 
-    norm = ConfidenceNormalizer.from_csv(str(csv))
+    norm = ConfidenceNormalizer.from_frozen_json(str(stats_file))
     assert "VolAgent" not in norm._stats
     assert "VarAgent" in norm._stats
     assert norm._stats["VarAgent"] == (0.40, 0.80)
+
+
+def test_from_frozen_json_missing_file_returns_passthrough():
+    """Sans fichier gelé, le normalizer est en mode passthrough (ne crash pas)."""
+    norm = ConfidenceNormalizer.from_frozen_json("/nonexistent/path.json")
+    sig = AgentSignal("AnyAgent", "SPY", "BUY", 0.60, 0.10)
+    assert norm.normalize(sig).confidence == 0.60

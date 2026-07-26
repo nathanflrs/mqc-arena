@@ -1,0 +1,39 @@
+{
+  "version": "2026-07-26",
+  "method": "min_max",
+  "note": "frozen on 164 decisions (13 runs, 2026-07-15 to 2026-07-23). Recalibrate manually by updating this file.",
+  "agents": {
+    "BuffettAgent": {
+      "lo": 0.35,
+      "hi": 0.9
+    },
+    "CitadelAgent": {
+      "lo": 0.1,
+      "hi": 0.9
+    },
+    "CrossSectionalMomentumAgent": {
+      "lo": 0.0,
+      "hi": 0.8
+    },
+    "EarningsSentimentAgent": {
+      "lo": 0.1,
+      "hi": 0.75
+    },
+    "MacroAgent": {
+      "lo": 0.4,
+      "hi": 0.6
+    },
+    "MeanReversionAgent": {
+      "lo": 0.3,
+      "hi": 0.9
+    },
+    "PairsTradingAgent": {
+      "lo": 0.0,
+      "hi": 0.77695
+    },
+    "TrendFollowingAgent": {
+      "lo": 0.3,
+      "hi": 0.9
+    }
+  }
+}

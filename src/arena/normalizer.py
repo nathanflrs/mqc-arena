@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import os
 from typing import Dict, Optional, Tuple
 
-import pandas as pd
-
 from src.agents.base import AgentSignal
+
+# Chemin par défaut du fichier de stats gelées.
+# Ce fichier est calculé UNE FOIS sur une fenêtre de référence et committé.
+# Il ne change pas au fil des runs — un recalibrage est un acte explicite.
+DEFAULT_STATS_PATH = "logs/normalizer_stats.json"
 
 
 class ConfidenceNormalizer:
@@ -15,40 +19,36 @@ class ConfidenceNormalizer:
     Normalise la confidence de chaque agent dans son propre intervalle historique
     via min-max scaling → [0, 1].
 
-    Objectif : corriger les biais d'échelle inter-agents.
-    Un agent qui émet naturellement 0.80-0.90 n'est pas structurellement
-    "plus convaincu" qu'un agent qui émet 0.30-0.50 — il a juste une échelle plus haute.
+    STATIONNARITÉ : les bornes (lo, hi) sont lues depuis un fichier JSON gelé,
+    pas recalculées depuis decisions.csv à chaque run. Un signal conf=0.60 de
+    BuffettAgent produit le même score normalisé quel que soit le moment du replay.
 
     Ce que ça ne fait PAS : calibrer (conf=0.8 ne signifie pas 80% de taux de succès).
     Ce que ça fait : ramener tous les agents à la même échelle relative.
 
-    Agents à signal constant (std=0) sont laissés inchangés — impossible de normaliser
-    un intervalle dégénéré [x, x].
+    Agents à signal constant (range=0) sont laissés inchangés.
     """
 
     def __init__(self, stats: Optional[Dict[str, Tuple[float, float]]] = None):
-        # stats: agent_name → (min_conf, max_conf) observés historiquement
+        # stats: agent_name → (lo, hi)
         self._stats: Dict[str, Tuple[float, float]] = stats or {}
 
     @classmethod
-    def from_csv(cls, path: str) -> "ConfidenceNormalizer":
+    def from_frozen_json(cls, path: str = DEFAULT_STATS_PATH) -> "ConfidenceNormalizer":
+        """Charge les stats depuis le fichier gelé. Ne lit jamais decisions.csv."""
         if not os.path.exists(path):
             return cls()
         try:
-            df = pd.read_csv(path)
+            with open(path) as f:
+                data = json.load(f)
         except Exception:
             return cls()
-
-        if "confidence" not in df.columns or "agent" not in df.columns:
-            return cls()
-
-        df["confidence"] = pd.to_numeric(df["confidence"], errors="coerce")
-        stats: Dict[str, Tuple[float, float]] = {}
-        for agent, grp in df.groupby("agent"):
-            lo = float(grp["confidence"].min())
-            hi = float(grp["confidence"].max())
-            if hi > lo:
-                stats[str(agent)] = (lo, hi)
+        agents = data.get("agents", {})
+        stats: Dict[str, Tuple[float, float]] = {
+            agent: (float(v["lo"]), float(v["hi"]))
+            for agent, v in agents.items()
+            if float(v["hi"]) > float(v["lo"])
+        }
         return cls(stats)
 
     def normalize(self, sig: AgentSignal) -> AgentSignal:
