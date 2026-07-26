@@ -616,6 +616,17 @@ def main() -> None:
         # Les signaux bruts sont conservés pour le logging ; seule la sélection utilise les valeurs normalisées.
         _normalizer = ConfidenceNormalizer.from_frozen_json()
 
+        # P0(c) : règle de corroboration — charger la liste des votants qualifiés
+        _voters_cfg: dict = {}
+        _qv_path = Path("logs/qualified_voters.json")
+        if _qv_path.exists():
+            import json as _json
+            _voters_cfg = _json.loads(_qv_path.read_text())
+        _qualified_voters: set[str] = set(_voters_cfg.get("qualified", []))
+        _rule = _voters_cfg.get("rule", {})
+        _abstain_threshold = float(_rule.get("abstain_threshold_normalized", 0.25))
+        _min_quorum        = int(_rule.get("min_quorum", 2))
+
         for sym in WATCHLIST:
             if sym not in all_data:
                 print(f"⚠️  {sym} ignoré — données manquantes")
@@ -630,7 +641,13 @@ def main() -> None:
             # Normalisation P0(b) : on sélectionne sur confidences normalisées,
             # mais winner est récupéré depuis les signaux bruts (pour circuit breaker, logs).
             _signals_norm = _normalizer.normalize_all(signals)
-            _winner_norm = select_best(_signals_norm, priority_agent=priority)
+            _winner_norm = select_best(
+                _signals_norm,
+                priority_agent=priority,
+                qualified_voters=_qualified_voters,
+                abstain_threshold=_abstain_threshold,
+                min_quorum=_min_quorum,
+            )
             winner = (
                 next((s for s in signals if s.agent_name == _winner_norm.agent_name), None)
                 if _winner_norm else None
