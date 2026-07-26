@@ -1,0 +1,26 @@
+{
+  "version": "v1-2026-07-26",
+  "valid_from": "2026-07-26",
+  "note": "Agents éligibles à former un quorum de corroboration. Modifier ce fichier change qui peut bloquer une décision — la version doit figurer dans le track record signé.",
+  "qualified": [
+    "BuffettAgent",
+    "CitadelAgent",
+    "MeanReversionAgent",
+    "TrendFollowingAgent",
+    "PairsTradingAgent",
+    "EarningsSentimentAgent",
+    "CrossSectionalMomentumAgent"
+  ],
+  "excluded": {
+    "DummyHoldAgent":        "Signal constant conf=0.0 — placeholder, aucun contenu informationnel.",
+    "VolatilityAgent":       "Signal constant conf=0.300 — recopie le VIX global sans analyse symbole-spécifique. Classifié agent dégénéré (P6).",
+    "InsiderBuyAgent":       "Signal constant conf=0.0 — agent inactif, données insider non connectées.",
+    "MacroAgent":            "Miroir d'un signal macro global (FRED) : 87% des émissions à 0.600 (une seule valeur). Non indépendant des conditions macro déjà capturées par les autres agents. Exclusion motivée, pas un cas limite. Reclassification architecturale prévue en P6.",
+    "DividendArbitrageAgent":"Opère via override absolu (div_arb_priority) avant le mécanisme de quorum. Sa logique est hors périmètre du vote corroboratoire."
+  },
+  "rule": {
+    "abstain_threshold_normalized": 0.25,
+    "min_quorum": 2,
+    "description": "Un gagnant est bloqué si : (1) il a au plus 1 vote qualifié actif en sa faveur, ET (2) au moins min_quorum agents qualifiés actifs existent, ET (3) la majorité stricte de ces agents actifs s'y oppose. Un agent qualifié est 'actif' si sa confidence normalisée > abstain_threshold_normalized."
+  }
+}
