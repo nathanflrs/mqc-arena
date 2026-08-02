@@ -9,9 +9,14 @@ env/
 dist/
 build/
 
-# Env
-.env
-.env.*
+# Env — glob large: attrape .env, .env.local, .envtTe, .env.save…
+# Ne PAS restreindre à `.env.*` : un fichier comme `.envtTe` échappe au motif
+# et se retrouve trackable (incident 2026-08-02).
+.env*
+!.env.example
+
+# Sauvegardes locales (ex. logs/decisions.csv.bak)
+*.bak
 
 # Logs sensibles
 # logs/shadow_signals.csv  # tracked — shadow mode accumulates signals daily
