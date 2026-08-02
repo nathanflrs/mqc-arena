@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 
 from src.risk.var_engine import HistoricalVaREngine, VaRConfig, VaRResult
+from tests.conftest import bdate_index
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -28,7 +29,7 @@ def _price_series(
     rng = np.random.default_rng(seed)
     returns = rng.normal(0, daily_vol, n)
     prices  = start * np.cumprod(1 + returns)
-    idx = pd.date_range(end=date.today(), periods=n, freq="B")
+    idx = bdate_index(n)
     return pd.Series(prices, index=idx, name="Close")
 
 

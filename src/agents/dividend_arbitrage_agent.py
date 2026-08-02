@@ -683,16 +683,20 @@ class DividendArbitrageAgent(BaseAgent):
             div_info.ex_date + timedelta(days=self.cfg.exit_days_after)
         ).isoformat()
 
-        # Optimistic position record (cleaned if buy rejected by RiskManager)
-        self._tracker.open_position(DivPosition(
-            ticker          = ticker,
-            entry_date      = today.isoformat(),
-            entry_price     = price,
-            ex_date         = div_info.ex_date.isoformat(),
-            dividend_amount = div_info.dividend_amount,
-            target_exit_date= target_exit,
-            shares          = shares,
-        ))
+        # Un agent n'écrit JAMAIS dans le tracker : il propose, il ne trade pas.
+        #
+        # L'écriture appartient à runner.py, APRÈS validation par le RiskManager et
+        # le CorrelationGuard, et avec la taille réellement approuvée (delta_qty).
+        # L'ancien "optimistic position record" écrit ici n'était nettoyé par
+        # personne malgré son commentaire : un BUY rejeté laissait une position
+        # fantôme, que l'agent relisait au run suivant pour émettre un SELL de
+        # sortie sur une position jamais achetée.
+        #
+        # On expose à la place les champs dont runner.py a besoin pour construire
+        # le DivPosition lui-même. Préfixe `_divpos_` = contrat runner, pas donnée
+        # analytique.
+        meta["_divpos_target_exit"] = target_exit
+        meta["_divpos_shares"]      = shares
 
         conviction = "fort" if confidence > 0.75 else "modéré"
         return AgentSignal(

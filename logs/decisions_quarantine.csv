@@ -1,0 +1,4 @@
+plan_id,timestamp,symbol,regime,agent,action,confidence,target_weight,reason,is_winner
+,,bull,BuffettAgent,,0.7,0.1,Buffett screen passed (stable + trend + near-high),,
+,,bull,NONE,,0.0,0.0,No signal above threshold,,
+,,bull,BuffettAgent,,0.9,0.1,Buffett screen passed (stable + trend + near-high),,

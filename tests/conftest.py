@@ -1,11 +1,34 @@
 # tests/conftest.py
 from __future__ import annotations
 
+from datetime import date as _date
+
 import numpy as np
 import pandas as pd
 import pytest
 
 from src.agents.base import MarketState
+
+
+def bdate_index(n: int, end=None) -> pd.DatetimeIndex:
+    """
+    Exactement `n` jours ouvrés se terminant à `end` (défaut : aujourd'hui).
+
+    Pourquoi ce helper existe
+    -------------------------
+    `pd.date_range(end=X, periods=n, freq="B")` renvoie **n-1** dates quand X
+    n'est pas un jour ouvré (pandas 3.0). Les fixtures qui utilisaient
+    `end=date.today()` produisaient donc un index de n-1 dates pour n valeurs,
+    et levaient `ValueError: Length of values (300) does not match length of
+    index (299)` — mais **uniquement le samedi et le dimanche**. 47 tests
+    passaient du lundi au vendredi et échouaient le week-end.
+
+    On ramène `end` au jour ouvré précédent avant de générer l'intervalle :
+    le compte est exact tous les jours, et la sémantique « série se terminant
+    aujourd'hui » est préservée.
+    """
+    end_ts = pd.offsets.BDay().rollback(pd.Timestamp(end or _date.today()).normalize())
+    return pd.date_range(end=end_ts, periods=n, freq="B")
 
 
 def _make_ohlcv(closes: np.ndarray) -> pd.DataFrame:

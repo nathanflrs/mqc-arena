@@ -2,9 +2,6 @@ plan_id,timestamp,symbol,regime,agent,action,confidence,target_weight,reason,is_
 ,,AAPL,bull,,BUY,0.7,0.1,Buffett screen passed (stable + trend + near-high),
 ,,MSFT,bull,,HOLD,0.0,0.0,No agent passed min_score,
 ,,NVDA,bull,,BUY,0.7,0.1,Buffett screen passed (stable + trend + near-high),
-,,bull,BuffettAgent,,0.7,0.1,Buffett screen passed (stable + trend + near-high),,
-,,bull,NONE,,0.0,0.0,No signal above threshold,,
-,,bull,BuffettAgent,,0.9,0.1,Buffett screen passed (stable + trend + near-high),,
 eaabb6be,2026-03-15T14:58:39+00:00,AAPL,choppy,DummyHoldAgent,HOLD,0.0,0.0,Baseline hold,
 eaabb6be,2026-03-15T14:58:39+00:00,AAPL,choppy,BuffettAgent,BUY,0.7,0.1,Buffett screen passed (stable + trend + near-high),
 eaabb6be,2026-03-15T14:58:39+00:00,AAPL,choppy,CitadelAgent,HOLD,0.3,0.0,No Citadel momentum setup,
@@ -1576,3 +1573,171 @@ a44394e9,2026-06-24T12:58:01+00:00,LLY,bull,EarningsSentimentAgent,HOLD,0.1,0.0,
 8b9c1634,2026-07-23T17:52:02+00:00,JPM,choppy,EarningsSentimentAgent,BUY,0.72,0.1,Earnings beat with AI-powered growth narrative and stock entering buy zone post-earnings; Google capex supercycle benefits financial intermediaries,False
 8b9c1634,2026-07-23T17:52:02+00:00,JPM,choppy,InsiderBuyAgent,HOLD,0.0,0.0,InsiderBuy: 0/2 insiders ($0) — threshold not met,False
 8b9c1634,2026-07-23T17:52:02+00:00,JPM,choppy,CrossSectionalMomentumAgent,HOLD,0.0,0.0,Momentum: rang 8/13 (score=+24.15%) — hors top 4,False
+08e321a5,2026-07-23T17:57:51+00:00,AAPL,bull,DummyHoldAgent,HOLD,0.0,0.0,Baseline hold,False
+08e321a5,2026-07-23T17:57:51+00:00,AAPL,bull,BuffettAgent,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),True
+08e321a5,2026-07-23T17:57:51+00:00,AAPL,bull,CitadelAgent,HOLD,0.3,0.0,No Citadel momentum setup,False
+08e321a5,2026-07-23T17:57:51+00:00,AAPL,bull,MeanReversionAgent,SELL,0.82,0.0,MeanRev EXIT: prix revenu à SMA20=311.44 (target atteint),False
+08e321a5,2026-07-23T17:57:51+00:00,AAPL,bull,MacroAgent,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,False
+08e321a5,2026-07-23T17:57:51+00:00,AAPL,bull,TrendFollowingAgent,BUY,0.9,0.1,TrendFollow BUY: MAs alignées + ADX=36.3 + mom20=9.41%,False
+08e321a5,2026-07-23T17:57:51+00:00,AAPL,bull,DividendArbitrageAgent,HOLD,0.2,0.0,"DivArb: position ouverte, en attente ex-date",False
+08e321a5,2026-07-23T17:57:51+00:00,AAPL,bull,PairsTradingAgent,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",False
+08e321a5,2026-07-23T17:57:51+00:00,AAPL,bull,VolatilityAgent,HOLD,0.3,0.0,Vol HOLD: VIX=19.54 | z=0.43 | mom5=16.8%,False
+08e321a5,2026-07-23T17:57:51+00:00,AAPL,bull,EarningsSentimentAgent,HOLD,0.58,0.0,Mixed signals with earnings growth expectation offset by lack of specific positive catalysts or concrete news items,False
+08e321a5,2026-07-23T17:57:51+00:00,AAPL,bull,InsiderBuyAgent,HOLD,0.0,0.0,InsiderBuy: 0/2 insiders ($0) — threshold not met,False
+08e321a5,2026-07-23T17:57:51+00:00,AAPL,bull,CrossSectionalMomentumAgent,HOLD,0.0,0.0,Momentum: rang 6/14 (score=+24.15%) — hors top 4,False
+08e321a5,2026-07-23T17:57:53+00:00,SPY,bull,DummyHoldAgent,HOLD,0.0,0.0,Baseline hold,False
+08e321a5,2026-07-23T17:57:53+00:00,SPY,bull,BuffettAgent,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),True
+08e321a5,2026-07-23T17:57:53+00:00,SPY,bull,CitadelAgent,HOLD,0.3,0.0,No Citadel momentum setup,False
+08e321a5,2026-07-23T17:57:53+00:00,SPY,bull,MeanReversionAgent,HOLD,0.3,0.0,No mean reversion setup (RSI=44.1),False
+08e321a5,2026-07-23T17:57:53+00:00,SPY,bull,MacroAgent,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,False
+08e321a5,2026-07-23T17:57:53+00:00,SPY,bull,TrendFollowingAgent,HOLD,0.3,0.0,"No trend setup (ADX=16.9, bull=False)",False
+08e321a5,2026-07-23T17:57:53+00:00,SPY,bull,DividendArbitrageAgent,HOLD,0.2,0.0,No dividend data available,False
+08e321a5,2026-07-23T17:57:53+00:00,SPY,bull,PairsTradingAgent,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",False
+08e321a5,2026-07-23T17:57:53+00:00,SPY,bull,VolatilityAgent,HOLD,0.3,0.0,Vol HOLD: VIX=19.54 | z=0.43 | mom5=16.8%,False
+08e321a5,2026-07-23T17:57:53+00:00,SPY,bull,EarningsSentimentAgent,HOLD,0.62,0.0,Mixed signals with tech sector weakness offsetting bullish regime; AI spending concerns weigh against equity futures decline,False
+08e321a5,2026-07-23T17:57:53+00:00,SPY,bull,InsiderBuyAgent,HOLD,0.0,0.0,InsiderBuy: 0/2 insiders ($0) — threshold not met,False
+08e321a5,2026-07-23T17:57:53+00:00,SPY,bull,CrossSectionalMomentumAgent,HOLD,0.0,0.0,Momentum: rang 9/14 (score=+15.46%) — hors top 4,False
+08e321a5,2026-07-23T17:57:56+00:00,QQQ,bull,DummyHoldAgent,HOLD,0.0,0.0,Baseline hold,False
+08e321a5,2026-07-23T17:57:56+00:00,QQQ,bull,BuffettAgent,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),True
+08e321a5,2026-07-23T17:57:56+00:00,QQQ,bull,CitadelAgent,HOLD,0.3,0.0,No Citadel momentum setup,False
+08e321a5,2026-07-23T17:57:56+00:00,QQQ,bull,MeanReversionAgent,HOLD,0.3,0.0,No mean reversion setup (RSI=40.9),False
+08e321a5,2026-07-23T17:57:56+00:00,QQQ,bull,MacroAgent,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,False
+08e321a5,2026-07-23T17:57:56+00:00,QQQ,bull,TrendFollowingAgent,HOLD,0.3,0.0,"No trend setup (ADX=23.6, bull=False)",False
+08e321a5,2026-07-23T17:57:56+00:00,QQQ,bull,DividendArbitrageAgent,HOLD,0.2,0.0,No dividend data available,False
+08e321a5,2026-07-23T17:57:56+00:00,QQQ,bull,PairsTradingAgent,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",False
+08e321a5,2026-07-23T17:57:56+00:00,QQQ,bull,VolatilityAgent,HOLD,0.3,0.0,Vol HOLD: VIX=19.54 | z=0.43 | mom5=16.8%,False
+08e321a5,2026-07-23T17:57:56+00:00,QQQ,bull,EarningsSentimentAgent,SELL,0.72,0.0,"Mounting concerns over unsustainable AI capex burn, insider selling pressure, and rising treasury yields creating headwinds for high-multiple tech",False
+08e321a5,2026-07-23T17:57:56+00:00,QQQ,bull,InsiderBuyAgent,HOLD,0.0,0.0,InsiderBuy: 0/2 insiders ($0) — threshold not met,False
+08e321a5,2026-07-23T17:57:56+00:00,QQQ,bull,CrossSectionalMomentumAgent,BUY,0.65,0.07,"Momentum JT: rang 4/14 (score=+25.12%, top 4)",False
+08e321a5,2026-07-23T17:58:03+00:00,NVDA,bull,DummyHoldAgent,HOLD,0.0,0.0,Baseline hold,False
+08e321a5,2026-07-23T17:58:03+00:00,NVDA,bull,BuffettAgent,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),True
+08e321a5,2026-07-23T17:58:03+00:00,NVDA,bull,CitadelAgent,HOLD,0.3,0.0,No Citadel momentum setup,False
+08e321a5,2026-07-23T17:58:03+00:00,NVDA,bull,MeanReversionAgent,HOLD,0.3,0.0,No mean reversion setup (RSI=62.6),False
+08e321a5,2026-07-23T17:58:03+00:00,NVDA,bull,MacroAgent,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,False
+08e321a5,2026-07-23T17:58:03+00:00,NVDA,bull,TrendFollowingAgent,HOLD,0.3,0.0,"No trend setup (ADX=24.8, bull=False)",False
+08e321a5,2026-07-23T17:58:03+00:00,NVDA,bull,DividendArbitrageAgent,HOLD,0.2,0.0,No dividend data available,False
+08e321a5,2026-07-23T17:58:03+00:00,NVDA,bull,PairsTradingAgent,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",False
+08e321a5,2026-07-23T17:58:03+00:00,NVDA,bull,VolatilityAgent,HOLD,0.3,0.0,Vol HOLD: VIX=19.54 | z=0.43 | mom5=16.8%,False
+08e321a5,2026-07-23T17:58:03+00:00,NVDA,bull,EarningsSentimentAgent,HOLD,0.58,0.0,No NVDA-specific catalyst present; mixed tech sentiment with AI moat discussion offset by earnings disappointment pattern elsewhere,False
+08e321a5,2026-07-23T17:58:03+00:00,NVDA,bull,InsiderBuyAgent,HOLD,0.0,0.0,InsiderBuy: 0/2 insiders ($0) — threshold not met,False
+08e321a5,2026-07-23T17:58:03+00:00,NVDA,bull,CrossSectionalMomentumAgent,HOLD,0.0,0.0,Momentum: rang 7/14 (score=+22.76%) — hors top 4,False
+08e321a5,2026-07-23T17:58:08+00:00,MSFT,bull,DummyHoldAgent,HOLD,0.0,0.0,Baseline hold,False
+08e321a5,2026-07-23T17:58:08+00:00,MSFT,bull,BuffettAgent,HOLD,0.55,0.0,Buffett screen not strong enough,False
+08e321a5,2026-07-23T17:58:08+00:00,MSFT,bull,CitadelAgent,HOLD,0.1,0.0,No Citadel momentum setup,False
+08e321a5,2026-07-23T17:58:08+00:00,MSFT,bull,MeanReversionAgent,HOLD,0.3,0.0,No mean reversion setup (RSI=44.1),False
+08e321a5,2026-07-23T17:58:08+00:00,MSFT,bull,MacroAgent,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,False
+08e321a5,2026-07-23T17:58:08+00:00,MSFT,bull,TrendFollowingAgent,HOLD,0.3,0.0,"No trend setup (ADX=18.3, bull=False)",False
+08e321a5,2026-07-23T17:58:08+00:00,MSFT,bull,DividendArbitrageAgent,HOLD,0.2,0.0,J-28: hors fenêtre (max J-7),False
+08e321a5,2026-07-23T17:58:08+00:00,MSFT,bull,PairsTradingAgent,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",False
+08e321a5,2026-07-23T17:58:08+00:00,MSFT,bull,VolatilityAgent,HOLD,0.3,0.0,Vol HOLD: VIX=19.54 | z=0.43 | mom5=16.8%,False
+08e321a5,2026-07-23T17:58:08+00:00,MSFT,bull,EarningsSentimentAgent,BUY,0.68,0.1,AI competitive moat narrative strengthens MSFT's strategic positioning and market dominance in enterprise AI,True
+08e321a5,2026-07-23T17:58:08+00:00,MSFT,bull,InsiderBuyAgent,HOLD,0.0,0.0,InsiderBuy: 0/2 insiders ($0) — threshold not met,False
+08e321a5,2026-07-23T17:58:08+00:00,MSFT,bull,CrossSectionalMomentumAgent,HOLD,0.0,0.0,Momentum: rang 14/14 (score=-15.20%) — hors top 4,False
+08e321a5,2026-07-23T17:58:15+00:00,GOOGL,bull,DummyHoldAgent,HOLD,0.0,0.0,Baseline hold,False
+08e321a5,2026-07-23T17:58:15+00:00,GOOGL,bull,BuffettAgent,HOLD,0.55,0.0,Buffett screen not strong enough,False
+08e321a5,2026-07-23T17:58:15+00:00,GOOGL,bull,CitadelAgent,HOLD,0.1,0.0,No Citadel momentum setup,False
+08e321a5,2026-07-23T17:58:15+00:00,GOOGL,bull,MeanReversionAgent,BUY,0.8,0.08,MeanRev BUY: RSI=30.2 + below Bollinger,True
+08e321a5,2026-07-23T17:58:15+00:00,GOOGL,bull,MacroAgent,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,False
+08e321a5,2026-07-23T17:58:15+00:00,GOOGL,bull,TrendFollowingAgent,HOLD,0.3,0.0,"No trend setup (ADX=13.5, bull=False)",False
+08e321a5,2026-07-23T17:58:15+00:00,GOOGL,bull,DividendArbitrageAgent,HOLD,0.2,0.0,No dividend data available,False
+08e321a5,2026-07-23T17:58:15+00:00,GOOGL,bull,PairsTradingAgent,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",False
+08e321a5,2026-07-23T17:58:15+00:00,GOOGL,bull,VolatilityAgent,HOLD,0.3,0.0,Vol HOLD: VIX=19.54 | z=0.43 | mom5=16.8%,False
+08e321a5,2026-07-23T17:58:15+00:00,GOOGL,bull,EarningsSentimentAgent,HOLD,0.52,0.0,News items lack specific GOOGL catalysts; only generic market movers and vague cash squeeze reference without material details,False
+08e321a5,2026-07-23T17:58:15+00:00,GOOGL,bull,InsiderBuyAgent,HOLD,0.0,0.0,InsiderBuy: 0/2 insiders ($0) — threshold not met,False
+08e321a5,2026-07-23T17:58:15+00:00,GOOGL,bull,CrossSectionalMomentumAgent,BUY,0.75,0.07,"Momentum JT: rang 2/14 (score=+45.85%, top 4)",False
+08e321a5,2026-07-23T17:58:19+00:00,META,bull,DummyHoldAgent,HOLD,0.0,0.0,Baseline hold,False
+08e321a5,2026-07-23T17:58:19+00:00,META,bull,BuffettAgent,HOLD,0.35,0.0,Buffett screen not strong enough,False
+08e321a5,2026-07-23T17:58:19+00:00,META,bull,CitadelAgent,HOLD,0.1,0.0,No Citadel momentum setup,False
+08e321a5,2026-07-23T17:58:19+00:00,META,bull,MeanReversionAgent,HOLD,0.3,0.0,No mean reversion setup (RSI=55.4),False
+08e321a5,2026-07-23T17:58:19+00:00,META,bull,MacroAgent,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,False
+08e321a5,2026-07-23T17:58:19+00:00,META,bull,TrendFollowingAgent,HOLD,0.3,0.0,"No trend setup (ADX=26.8, bull=False)",False
+08e321a5,2026-07-23T17:58:19+00:00,META,bull,DividendArbitrageAgent,HOLD,0.2,0.0,No dividend data available,False
+08e321a5,2026-07-23T17:58:19+00:00,META,bull,PairsTradingAgent,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",False
+08e321a5,2026-07-23T17:58:19+00:00,META,bull,VolatilityAgent,HOLD,0.3,0.0,Vol HOLD: VIX=19.54 | z=0.43 | mom5=16.8%,False
+08e321a5,2026-07-23T17:58:19+00:00,META,bull,EarningsSentimentAgent,BUY,0.72,0.1,META's heavy AI investments strengthening ad platform while competitors face AI capex headwinds and leadership questions,True
+08e321a5,2026-07-23T17:58:19+00:00,META,bull,InsiderBuyAgent,HOLD,0.0,0.0,InsiderBuy: 0/2 insiders ($0) — threshold not met,False
+08e321a5,2026-07-23T17:58:19+00:00,META,bull,CrossSectionalMomentumAgent,HOLD,0.0,0.0,Momentum: rang 13/14 (score=-13.14%) — hors top 4,False
+08e321a5,2026-07-23T17:58:25+00:00,JPM,bull,DummyHoldAgent,HOLD,0.0,0.0,Baseline hold,False
+08e321a5,2026-07-23T17:58:25+00:00,JPM,bull,BuffettAgent,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),True
+08e321a5,2026-07-23T17:58:25+00:00,JPM,bull,CitadelAgent,HOLD,0.3,0.0,No Citadel momentum setup,False
+08e321a5,2026-07-23T17:58:25+00:00,JPM,bull,MeanReversionAgent,HOLD,0.3,0.0,No mean reversion setup (RSI=63.9),False
+08e321a5,2026-07-23T17:58:25+00:00,JPM,bull,MacroAgent,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,False
+08e321a5,2026-07-23T17:58:25+00:00,JPM,bull,TrendFollowingAgent,HOLD,0.3,0.0,"No trend setup (ADX=11.5, bull=True)",False
+08e321a5,2026-07-23T17:58:25+00:00,JPM,bull,DividendArbitrageAgent,HOLD,0.2,0.0,No dividend data available,False
+08e321a5,2026-07-23T17:58:25+00:00,JPM,bull,PairsTradingAgent,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",False
+08e321a5,2026-07-23T17:58:25+00:00,JPM,bull,VolatilityAgent,HOLD,0.3,0.0,Vol HOLD: VIX=19.54 | z=0.43 | mom5=16.8%,False
+08e321a5,2026-07-23T17:58:25+00:00,JPM,bull,EarningsSentimentAgent,BUY,0.72,0.1,Earnings beat with AI-powered growth narrative and stock already moving into buy zone; bullish regime supports continuation,False
+08e321a5,2026-07-23T17:58:25+00:00,JPM,bull,InsiderBuyAgent,HOLD,0.0,0.0,InsiderBuy: 0/2 insiders ($0) — threshold not met,False
+08e321a5,2026-07-23T17:58:25+00:00,JPM,bull,CrossSectionalMomentumAgent,HOLD,0.0,0.0,Momentum: rang 8/14 (score=+15.83%) — hors top 4,False
+08e321a5,2026-07-23T17:58:32+00:00,GS,bull,DummyHoldAgent,HOLD,0.0,0.0,Baseline hold,False
+08e321a5,2026-07-23T17:58:32+00:00,GS,bull,BuffettAgent,BUY,0.7,0.1,Buffett screen passed (stable + trend + near-high),True
+08e321a5,2026-07-23T17:58:32+00:00,GS,bull,CitadelAgent,HOLD,0.3,0.0,No Citadel momentum setup,False
+08e321a5,2026-07-23T17:58:32+00:00,GS,bull,MeanReversionAgent,HOLD,0.3,0.0,No mean reversion setup (RSI=57.4),False
+08e321a5,2026-07-23T17:58:32+00:00,GS,bull,MacroAgent,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,False
+08e321a5,2026-07-23T17:58:32+00:00,GS,bull,TrendFollowingAgent,HOLD,0.3,0.0,"No trend setup (ADX=17.7, bull=True)",False
+08e321a5,2026-07-23T17:58:32+00:00,GS,bull,DividendArbitrageAgent,HOLD,0.2,0.0,J-40: hors fenêtre (max J-7),False
+08e321a5,2026-07-23T17:58:32+00:00,GS,bull,PairsTradingAgent,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",False
+08e321a5,2026-07-23T17:58:32+00:00,GS,bull,VolatilityAgent,HOLD,0.3,0.0,Vol HOLD: VIX=19.54 | z=0.43 | mom5=16.8%,False
+08e321a5,2026-07-23T17:58:32+00:00,GS,bull,EarningsSentimentAgent,BUY,0.72,0.1,Record Q2 earnings with expanded buyback program signals strong capital return and management confidence in valuation,False
+08e321a5,2026-07-23T17:58:32+00:00,GS,bull,InsiderBuyAgent,HOLD,0.0,0.0,InsiderBuy: 0/2 insiders ($0) — threshold not met,False
+08e321a5,2026-07-23T17:58:32+00:00,GS,bull,CrossSectionalMomentumAgent,BUY,0.7,0.07,"Momentum JT: rang 3/14 (score=+44.19%, top 4)",False
+08e321a5,2026-07-23T17:58:35+00:00,GLD,bull,DummyHoldAgent,HOLD,0.0,0.0,Baseline hold,False
+08e321a5,2026-07-23T17:58:35+00:00,GLD,bull,BuffettAgent,HOLD,0.55,0.0,Buffett screen not strong enough,False
+08e321a5,2026-07-23T17:58:35+00:00,GLD,bull,CitadelAgent,HOLD,0.1,0.0,No Citadel momentum setup,False
+08e321a5,2026-07-23T17:58:35+00:00,GLD,bull,MeanReversionAgent,HOLD,0.3,0.0,No mean reversion setup (RSI=44.2),False
+08e321a5,2026-07-23T17:58:35+00:00,GLD,bull,MacroAgent,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,False
+08e321a5,2026-07-23T17:58:35+00:00,GLD,bull,TrendFollowingAgent,HOLD,0.3,0.0,"No trend setup (ADX=20.0, bull=False)",False
+08e321a5,2026-07-23T17:58:35+00:00,GLD,bull,DividendArbitrageAgent,HOLD,0.2,0.0,No dividend data available,False
+08e321a5,2026-07-23T17:58:35+00:00,GLD,bull,PairsTradingAgent,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",False
+08e321a5,2026-07-23T17:58:35+00:00,GLD,bull,VolatilityAgent,HOLD,0.3,0.0,Vol HOLD: VIX=19.54 | z=0.43 | mom5=16.8%,False
+08e321a5,2026-07-23T17:58:35+00:00,GLD,bull,EarningsSentimentAgent,BUY,0.72,0.1,Majority bullish sentiment with significant institutional interest (billionaire $4.2B deal) and capital rotation back into gold as semiconductor trade headwinds ease,True
+08e321a5,2026-07-23T17:58:35+00:00,GLD,bull,InsiderBuyAgent,HOLD,0.0,0.0,InsiderBuy: 0/2 insiders ($0) — threshold not met,False
+08e321a5,2026-07-23T17:58:35+00:00,GLD,bull,CrossSectionalMomentumAgent,HOLD,0.0,0.0,Momentum: rang 11/14 (score=+3.24%) — hors top 4,False
+08e321a5,2026-07-23T17:58:38+00:00,TSLA,bull,DummyHoldAgent,HOLD,0.0,0.0,Baseline hold,False
+08e321a5,2026-07-23T17:58:38+00:00,TSLA,bull,BuffettAgent,HOLD,0.35,0.0,Buffett screen not strong enough,False
+08e321a5,2026-07-23T17:58:38+00:00,TSLA,bull,CitadelAgent,HOLD,0.1,0.0,No Citadel momentum setup,False
+08e321a5,2026-07-23T17:58:38+00:00,TSLA,bull,MeanReversionAgent,BUY,0.8,0.08,MeanRev BUY: RSI=29.2 + below Bollinger,True
+08e321a5,2026-07-23T17:58:38+00:00,TSLA,bull,MacroAgent,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,False
+08e321a5,2026-07-23T17:58:38+00:00,TSLA,bull,TrendFollowingAgent,HOLD,0.3,0.0,"No trend setup (ADX=19.3, bull=False)",False
+08e321a5,2026-07-23T17:58:38+00:00,TSLA,bull,DividendArbitrageAgent,HOLD,0.2,0.0,No dividend data available,False
+08e321a5,2026-07-23T17:58:38+00:00,TSLA,bull,PairsTradingAgent,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",False
+08e321a5,2026-07-23T17:58:38+00:00,TSLA,bull,VolatilityAgent,HOLD,0.3,0.0,Vol HOLD: VIX=19.54 | z=0.43 | mom5=16.8%,False
+08e321a5,2026-07-23T17:58:38+00:00,TSLA,bull,EarningsSentimentAgent,SELL,0.75,0.0,Q2 earnings miss with 14% stock plunge outweighs AI growth narrative; near-term momentum decisively negative,False
+08e321a5,2026-07-23T17:58:38+00:00,TSLA,bull,InsiderBuyAgent,HOLD,0.0,0.0,InsiderBuy: 0/2 insiders ($0) — threshold not met,False
+08e321a5,2026-07-23T17:58:38+00:00,TSLA,bull,CrossSectionalMomentumAgent,HOLD,0.0,0.0,Momentum: rang 12/14 (score=-0.80%) — hors top 4,False
+08e321a5,2026-07-23T17:58:41+00:00,AMD,bull,DummyHoldAgent,HOLD,0.0,0.0,Baseline hold,False
+08e321a5,2026-07-23T17:58:41+00:00,AMD,bull,BuffettAgent,BUY,0.7,0.1,Buffett screen passed (stable + trend + near-high),True
+08e321a5,2026-07-23T17:58:41+00:00,AMD,bull,CitadelAgent,HOLD,0.3,0.0,No Citadel momentum setup,False
+08e321a5,2026-07-23T17:58:41+00:00,AMD,bull,MeanReversionAgent,HOLD,0.3,0.0,No mean reversion setup (RSI=53.1),False
+08e321a5,2026-07-23T17:58:41+00:00,AMD,bull,MacroAgent,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,False
+08e321a5,2026-07-23T17:58:41+00:00,AMD,bull,TrendFollowingAgent,HOLD,0.3,0.0,"No trend setup (ADX=12.6, bull=True)",False
+08e321a5,2026-07-23T17:58:41+00:00,AMD,bull,DividendArbitrageAgent,HOLD,0.2,0.0,No dividend data available,False
+08e321a5,2026-07-23T17:58:41+00:00,AMD,bull,PairsTradingAgent,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",False
+08e321a5,2026-07-23T17:58:41+00:00,AMD,bull,VolatilityAgent,HOLD,0.3,0.0,Vol HOLD: VIX=19.54 | z=0.43 | mom5=16.8%,False
+08e321a5,2026-07-23T17:58:41+00:00,AMD,bull,EarningsSentimentAgent,HOLD,0.58,0.0,Positive narrative validation offset by absence of specific fundamental catalysts in news items,False
+08e321a5,2026-07-23T17:58:41+00:00,AMD,bull,InsiderBuyAgent,HOLD,0.0,0.0,InsiderBuy: 0/2 insiders ($0) — threshold not met,False
+08e321a5,2026-07-23T17:58:41+00:00,AMD,bull,CrossSectionalMomentumAgent,BUY,0.8,0.07,"Momentum JT: rang 1/14 (score=+206.81%, top 4)",False
+08e321a5,2026-07-23T17:58:44+00:00,AMZN,bull,DummyHoldAgent,HOLD,0.0,0.0,Baseline hold,False
+08e321a5,2026-07-23T17:58:44+00:00,AMZN,bull,BuffettAgent,BUY,0.7,0.1,Buffett screen passed (stable + trend + near-high),True
+08e321a5,2026-07-23T17:58:44+00:00,AMZN,bull,CitadelAgent,HOLD,0.1,0.0,No Citadel momentum setup,False
+08e321a5,2026-07-23T17:58:44+00:00,AMZN,bull,MeanReversionAgent,HOLD,0.3,0.0,No mean reversion setup (RSI=41.0),False
+08e321a5,2026-07-23T17:58:44+00:00,AMZN,bull,MacroAgent,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,False
+08e321a5,2026-07-23T17:58:44+00:00,AMZN,bull,TrendFollowingAgent,HOLD,0.3,0.0,"No trend setup (ADX=31.3, bull=False)",False
+08e321a5,2026-07-23T17:58:44+00:00,AMZN,bull,DividendArbitrageAgent,HOLD,0.2,0.0,No dividend data available,False
+08e321a5,2026-07-23T17:58:44+00:00,AMZN,bull,PairsTradingAgent,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",False
+08e321a5,2026-07-23T17:58:44+00:00,AMZN,bull,VolatilityAgent,HOLD,0.3,0.0,Vol HOLD: VIX=19.54 | z=0.43 | mom5=16.8%,False
+08e321a5,2026-07-23T17:58:44+00:00,AMZN,bull,EarningsSentimentAgent,HOLD,0.58,0.0,"ControlMonkey partnership is minor positive for AWS, but offset by sector-wide AI spending concerns and lack of company-specific catalysts",False
+08e321a5,2026-07-23T17:58:44+00:00,AMZN,bull,InsiderBuyAgent,HOLD,0.0,0.0,InsiderBuy: 0/2 insiders ($0) — threshold not met,False
+08e321a5,2026-07-23T17:58:44+00:00,AMZN,bull,CrossSectionalMomentumAgent,HOLD,0.0,0.0,Momentum: rang 10/14 (score=+8.77%) — hors top 4,False
+08e321a5,2026-07-23T17:58:50+00:00,LLY,bull,DummyHoldAgent,HOLD,0.0,0.0,Baseline hold,False
+08e321a5,2026-07-23T17:58:50+00:00,LLY,bull,BuffettAgent,BUY,0.9,0.1,Buffett screen passed (stable + trend + near-high),True
+08e321a5,2026-07-23T17:58:50+00:00,LLY,bull,CitadelAgent,HOLD,0.3,0.0,No Citadel momentum setup,False
+08e321a5,2026-07-23T17:58:50+00:00,LLY,bull,MeanReversionAgent,HOLD,0.3,0.0,No mean reversion setup (RSI=44.0),False
+08e321a5,2026-07-23T17:58:50+00:00,LLY,bull,MacroAgent,HOLD,0.4,0.0,Macro MIXED: risk_on=1 risk_off=0,False
+08e321a5,2026-07-23T17:58:50+00:00,LLY,bull,TrendFollowingAgent,HOLD,0.3,0.0,"No trend setup (ADX=22.9, bull=False)",False
+08e321a5,2026-07-23T17:58:50+00:00,LLY,bull,DividendArbitrageAgent,HOLD,0.2,0.0,J-22: hors fenêtre (max J-7),False
+08e321a5,2026-07-23T17:58:50+00:00,LLY,bull,PairsTradingAgent,HOLD,0.0,0.0,"PairsTrading: 0 robust cointegrated pairs (multi_window_check=True, min_score=2) — armed but at rest",False
+08e321a5,2026-07-23T17:58:50+00:00,LLY,bull,VolatilityAgent,HOLD,0.3,0.0,Vol HOLD: VIX=19.54 | z=0.43 | mom5=16.8%,False
+08e321a5,2026-07-23T17:58:50+00:00,LLY,bull,EarningsSentimentAgent,BUY,0.72,0.1,Multiple phase III wins for triple-g agonist obesity drug with 2027 approval filing and strong GLP-1 portfolio momentum offsetting litigation headwind,False
+08e321a5,2026-07-23T17:58:50+00:00,LLY,bull,InsiderBuyAgent,HOLD,0.0,0.0,InsiderBuy: 0/2 insiders ($0) — threshold not met,False
+08e321a5,2026-07-23T17:58:50+00:00,LLY,bull,CrossSectionalMomentumAgent,HOLD,0.0,0.0,Momentum: rang 5/14 (score=+24.36%) — hors top 4,False

@@ -179,6 +179,33 @@ def log_decisions(
             df_old["is_winner"] = True
         # Keep only current schema, drop legacy columns (meta, etc.)
         df_old = df_old.reindex(columns=cols)
+
+        # Garde-fou anti-décalage de colonnes.
+        # Trois lignes d'un schéma pré-migration à 7 colonnes ont été relues dans
+        # un cadre à 10 : les valeurs se sont décalées de deux crans (symbol="bull",
+        # target_weight="Buffett screen passed…"), rendant `decisions.csv` non
+        # typable et polluant silencieusement edge_audit, live_scorer, monte_carlo
+        # et factor_analysis. Elles ont été mises en quarantaine le 2026-08-02.
+        # On refuse désormais de réécrire des lignes dont les colonnes numériques
+        # ne le sont pas : mieux vaut perdre l'historique douteux que le propager.
+        _numeric = ["confidence", "target_weight"]
+        _corrupt = pd.Series(False, index=df_old.index)
+        for _c in _numeric:
+            _corrupt |= pd.to_numeric(df_old[_c], errors="coerce").isna() & df_old[_c].notna()
+        if _corrupt.any():
+            Path("logs").mkdir(parents=True, exist_ok=True)
+            df_old[_corrupt].to_csv(
+                "logs/decisions_quarantine.csv",
+                mode="a",
+                header=not Path("logs/decisions_quarantine.csv").exists(),
+                index=False,
+            )
+            print(
+                f"⚠️  log_decisions: {int(_corrupt.sum())} ligne(s) historique(s) "
+                f"malformée(s) écartée(s) → logs/decisions_quarantine.csv"
+            )
+            df_old = df_old[~_corrupt]
+
         df_all = pd.concat([df_old, df_new], ignore_index=True)
     except FileNotFoundError:
         df_all = df_new
