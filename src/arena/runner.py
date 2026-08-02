@@ -658,6 +658,18 @@ def main() -> None:
 
             signals = arena.run(sym, df, portfolio=snap.positions, regime=regime)
 
+            # Trop peu d'agents ont répondu : on n'arbitre pas entre les rares
+            # survivants, on s'abstient. Un vote à 3 agents sur 12 n'est pas le
+            # même mécanisme que celui qu'on a validé.
+            if arena.is_degraded(signals):
+                msg = (
+                    f"{sym} ignoré — arène dégradée : {len(signals)}/{len(arena.agents)} "
+                    f"agents ont répondu (minimum {arena.min_healthy_agents})"
+                )
+                print(f"🚨 {msg}")
+                _decisions_summary.append({"symbol": sym, "agent": "DEGRADED", "action": "HOLD"})
+                continue
+
             # Normalisation P0(b) : on sélectionne sur confidences normalisées,
             # mais winner est récupéré depuis les signaux bruts (pour circuit breaker, logs).
             _signals_norm = _normalizer.normalize_all(signals)
@@ -794,6 +806,41 @@ def main() -> None:
                 if winner.agent_name == "DividendArbitrageAgent" and winner.action == "BUY":
                     _pending_divArb[sym] = winner.meta or {}
             _decisions_summary.append({"symbol": sym, "agent": winner.agent_name, "action": winner.action})
+
+        # ====== SANTÉ DES AGENTS ======
+        # Une panne d'agent ne doit jamais rester dans les logs sans remonter :
+        # le système continuerait à produire des décisions d'apparence normale
+        # sur une information amputée. C'est le mode de défaillance dangereux.
+        if arena.failures:
+            _fail_lines = arena.failure_summary()
+            print(f"\n🚨 {len(arena.failures)} panne(s) d'agent sur ce run :")
+            for _line in _fail_lines:
+                print(f"   • {_line}")
+            _dead = {f.agent_name for f in arena.failures
+                     if sum(1 for g in arena.failures if g.agent_name == f.agent_name)
+                     >= len(WATCHLIST)}
+            if not ci_mode:
+                try:
+                    from src.events.bus import get_bus, Event
+                    get_bus().emit(Event(
+                        type="system",
+                        # Un agent muet sur TOUS les symboles est hors service,
+                        # pas simplement instable : ça mérite une alerte critique.
+                        severity="critical" if _dead else "warning",
+                        title=(
+                            f"Agent(s) hors service : {', '.join(sorted(_dead))}"
+                            if _dead else
+                            f"{len(arena.failures)} panne(s) d'agent"
+                        ),
+                        body="\n".join(_fail_lines)[:2000],
+                        meta={
+                            "plan_id": plan_id,
+                            "n_failures": len(arena.failures),
+                            "agents_down": sorted(_dead),
+                        },
+                    ))
+                except Exception:
+                    pass
 
         # ====== STOP-LOSS PAR POSITION ======
         entry_prices = _load_entry_prices(avg_costs=snap.avg_costs)
