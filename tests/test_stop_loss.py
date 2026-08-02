@@ -124,14 +124,38 @@ class TestLoadEntryPrices:
         )
         assert result["AAPL"] == pytest.approx(191.25)
 
-    def test_executions_csv_fill_zero_falls_back_to_limit(self, tmp_path):
-        """avg_fill_price = 0 → use limit_price from executions."""
+    def test_executions_csv_fill_zero_yields_no_entry_price(self, tmp_path):
+        """
+        avg_fill_price = 0 → l'ordre n'a pas été rempli, donc il n'existe pas
+        de prix de revient. Le test précédent affirmait le contraire (repli sur
+        limit_price), et ce contrat était faux : le stop-loss raisonnait alors
+        sur une base de coût fantôme.
+
+        Constaté en production le 2026-08-02 — les trois lignes historiques
+        d'executions.csv étaient en 'PendingSubmit', et AAPL en héritait d'un
+        prix d'entrée de 255,79 $ pour un ordre jamais exécuté. Un stop-loss à
+        7 % sur une base fausse déclenche une vente au mauvais moment, ou ne la
+        déclenche pas quand il le faudrait.
+        """
         ex = _executions_csv(tmp_path, [
             {"timestamp": "2026-07-15T09:31:00Z", "symbol": "AAPL",
              "side": "BUY", "limit_price": 191.0, "avg_fill_price": 0.0},
         ])
-        result = _load_entry_prices(exec_path=ex)
-        assert result["AAPL"] == pytest.approx(191.0)
+        result = _load_entry_prices(
+            exec_path=ex, plan_prices_path=tmp_path / "absent.json"
+        )
+        assert "AAPL" not in result
+
+    def test_partial_fill_still_provides_an_entry_price(self, tmp_path):
+        """Un remplissage partiel est un vrai trade : son prix compte."""
+        ex = _executions_csv(tmp_path, [
+            {"timestamp": "2026-07-15T09:31:00Z", "symbol": "AAPL",
+             "side": "BUY", "limit_price": 191.0, "avg_fill_price": 190.4},
+        ])
+        result = _load_entry_prices(
+            exec_path=ex, plan_prices_path=tmp_path / "absent.json"
+        )
+        assert result["AAPL"] == pytest.approx(190.4)
 
     def test_empty_executions_csv_falls_back_to_plan(self, tmp_path):
         """Empty executions.csv doesn't block plan-price fallback."""

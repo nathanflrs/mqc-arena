@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
+import time as _time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timezone
@@ -50,6 +51,11 @@ from src.data.market_data import download_ohlcv, get_last_close_1d, normalize_oh
 from src.regime.detector import GMMRegimeDetector
 from src.execution.planner import plan_from_signal, cta_plan_from_signal, pairs_plans_from_signal, OrderPlan
 from src.execution.guards import build_execution_plan
+from src.execution.reconciliation import (
+    OrderOutcome, expected_positions, is_terminal, reconcile,
+    summarize, to_execution_rows,
+)
+
 from src.execution.logger import log_order_plan, log_execution, log_decisions
 from src.risk.manager import RiskConfig, RiskManager, DrawdownCircuitBreaker
 from src.risk.allocator import AllocatorConfig, DynamicAllocator
@@ -58,6 +64,12 @@ from src.risk.live_scorer import LiveScorer
 from src.risk.earnings_filter import EarningsFilter
 from src.risk.vol_sizing import vol_adjusted_weight
 from src.risk.var_engine import HistoricalVaREngine, VaRConfig
+
+# Fenêtre d'attente du remplissage. 90 s couvre largement le paper IBKR (qui
+# remplit en quelques secondes) sans immobiliser un run si le marché ne prend
+# pas l'ordre. Au-delà, le reliquat est annulé plutôt que laissé courir.
+FILL_TIMEOUT_SECONDS = 90.0
+FILL_POLL_SECONDS = 2.0
 
 
 def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
@@ -179,47 +191,84 @@ def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
             pass
         placed.append((p, side, qty, float(order.lmtPrice), trade))
 
-    # ── 2. Wait for IBKR paper fills (fills almost instantly on paper) ───────
-    ib.sleep(10)
+    # ── 2. Attendre l'état terminal de chaque ordre ──────────────────────────
+    # Un `sleep(10)` fixe suivi d'une lecture de statut n'était pas une attente :
+    # il journalisait ce qui se trouvait là au bout de 10 s, souvent
+    # 'PendingSubmit'. On interroge jusqu'à ce que tous les ordres soient
+    # terminés, ou jusqu'au délai maximal.
+    deadline = _time.monotonic() + FILL_TIMEOUT_SECONDS
+    while _time.monotonic() < deadline:
+        if all(is_terminal(t.orderStatus.status) for *_r, t in placed):
+            break
+        ib.sleep(FILL_POLL_SECONDS)
 
-    # ── 3. Log real fill prices instead of theoretical limit prices ──────────
-    ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    exec_rows = []
+    # ── 3. Annuler ce qui n'est pas terminé ──────────────────────────────────
+    # Un ordre DAY laissé ouvert peut se remplir plus tard dans la séance, à un
+    # prix sans rapport avec le signal, et sans que le système en sache rien.
     for p, side, qty, limit_price, trade in placed:
-        fill_px = trade.orderStatus.avgFillPrice
-        fill_qty = trade.orderStatus.filled
-        status = trade.orderStatus.status
+        if not is_terminal(trade.orderStatus.status):
+            try:
+                ib.cancelOrder(trade.order)
+                print(f"🚫 {p.symbol}: annulation du reliquat ({trade.orderStatus.status})")
+            except Exception as exc:
+                print(f"⚠️  {p.symbol}: annulation impossible — {exc}")
+    if placed:
+        ib.sleep(FILL_POLL_SECONDS)   # laisse les annulations se propager
 
-        avg_fill = float(fill_px) if fill_px and float(fill_px) > 0 else 0.0
-        actual_qty = int(fill_qty) if fill_qty and int(fill_qty) > 0 else qty
-        last_px = float(p.last_price)
+    # ── 4. Collecter le devenir réel de chaque ordre ─────────────────────────
+    outcomes: list[OrderOutcome] = []
+    for p, side, qty, limit_price, trade in placed:
+        st = trade.orderStatus
+        filled = float(st.filled or 0.0)
+        avg_px = float(st.avgFillPrice or 0.0)
+        outcomes.append(OrderOutcome(
+            symbol=p.symbol, side=side, requested_qty=int(qty),
+            filled_qty=filled, avg_fill_price=avg_px,
+            limit_price=float(limit_price), signal_price=float(p.last_price),
+            status=str(st.status), reason=str(p.reason),
+            cancelled_remainder=0 < filled < qty - 1e-9,
+        ))
 
-        # Slippage vs signal price (positive = unfavourable)
-        if avg_fill > 0 and last_px > 0:
-            if side == "BUY":
-                slippage_bps = (avg_fill - last_px) / last_px * 10_000
-            else:
-                slippage_bps = (last_px - avg_fill) / last_px * 10_000
-        else:
-            slippage_bps = 0.0
+    print("\n" + summarize(outcomes))
 
-        exec_rows.append({
-            "plan_id": plan_id,
-            "timestamp": ts,
-            "symbol": p.symbol,
-            "side": side,
-            "qty": actual_qty,
-            "limit_price": round(limit_price, 4),   # original limit order price
-            "avg_fill_price": round(avg_fill, 4),    # actual IBKR fill (0 = not filled yet)
-            "slippage_bps": round(slippage_bps, 2),  # vs signal price
-            "last_price": round(last_px, 4),
-            "est_notional": float(p.est_notional),
-            "target_weight": float(p.target_weight),
-            "reason": str(p.reason),
-            "status": status,
-        })
+    # On ne journalise que les remplissages réels : un ordre non rempli n'est
+    # pas un trade à zéro, et l'écrire ferait croire au stop-loss qu'une
+    # position existe au prix limite de l'ordre.
+    ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    log_execution(to_execution_rows(outcomes, plan_id=plan_id, timestamp=ts))
 
-    log_execution(exec_rows)
+    # ── 5. Réconciliation avec le portefeuille réel ──────────────────────────
+    expected = expected_positions(snap.positions, outcomes)
+    try:
+        after = fetch_account_snapshot(ib)
+        report = reconcile(expected, after.positions)
+    except Exception as exc:
+        print(f"⚠️  Réconciliation impossible — snapshot indisponible : {exc}")
+        report = None
+
+    if report is not None:
+        print("\n" + report.render())
+        try:
+            from src.events.bus import get_bus, Event
+            get_bus().emit(Event(
+                type="execution",
+                severity="info" if report.is_clean else "critical",
+                title=(
+                    "Réconciliation OK"
+                    if report.is_clean else
+                    f"🚨 Divergence broker — {len(report.drifts)} position(s)"
+                ),
+                body=(summarize(outcomes) + "\n\n" + report.render())[:2000],
+                meta={
+                    "plan_id": plan_id,
+                    "n_drifts": len(report.drifts),
+                    "drifts": {d.symbol: d.delta for d in report.drifts},
+                },
+            ))
+        except Exception:
+            pass
+
+    return outcomes
 
 
 def _load_entry_prices(
@@ -254,21 +303,32 @@ def _load_entry_prices(
     if avg_costs:
         result.update({k: v for k, v in avg_costs.items() if v > 0})
 
-    # Tier 1: executions.csv actual fill price (highest priority)
+    # Tier 1: executions.csv — prix de remplissage RÉEL, priorité maximale.
+    #
+    # On n'accepte qu'un avg_fill_price strictement positif. Le repli sur
+    # limit_price a été retiré : un ordre non rempli porte une limite mais
+    # aucun prix de revient, et l'utiliser donnait au stop-loss une base de
+    # coût fantôme. Constaté en production — les trois lignes historiques
+    # d'executions.csv sont en 'PendingSubmit', et AAPL en héritait d'un prix
+    # d'entrée de 255,79 $ pour un ordre jamais exécuté.
+    #
+    # Depuis la réconciliation (src/execution/reconciliation.py), un ordre non
+    # rempli n'est plus journalisé du tout ; ce filtre protège l'historique
+    # existant et tout format antérieur.
     ex = Path(exec_path)
     if ex.exists():
         try:
             df = pd.read_csv(ex)
             buys = df[df["side"] == "BUY"].sort_values("timestamp")
             if "avg_fill_price" in buys.columns:
-                price_col = buys["avg_fill_price"].where(
-                    buys["avg_fill_price"] > 0, buys["limit_price"]
-                )
-                buys = buys.copy()
-                buys["_price"] = price_col
-                result.update(buys.groupby("symbol")["_price"].last().to_dict())
-            else:
-                result.update(buys.groupby("symbol")["limit_price"].last().to_dict())
+                filled = buys[pd.to_numeric(buys["avg_fill_price"],
+                                            errors="coerce").fillna(0.0) > 0]
+                if not filled.empty:
+                    result.update(
+                        filled.groupby("symbol")["avg_fill_price"].last().to_dict()
+                    )
+            # Pas de colonne avg_fill_price → format antérieur à la
+            # réconciliation : aucun prix de remplissage n'y est fiable.
         except Exception:
             pass
 
