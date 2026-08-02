@@ -32,3 +32,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Cache de données du backtest système (volumineux, régénérable)
+logs/backtest_cache/
