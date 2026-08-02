@@ -39,3 +39,6 @@ Thumbs.db
 # produit sur les mêmes données.
 logs/backtest_cache/*
 !logs/backtest_cache/manifest.json
+
+# Signaux du replay (volumineux, régénérable via scripts/measure_agent_edge.py)
+logs/agent_signals.parquet
