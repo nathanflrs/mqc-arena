@@ -33,5 +33,9 @@ Thumbs.db
 .idea/
 *.swp
 
-# Cache de données du backtest système (volumineux, régénérable)
-logs/backtest_cache/
+# Cache de données du backtest système : les parquet sont volumineux et
+# régénérables (--refresh), mais le manifeste identifie le snapshot et doit
+# être versionné — c'est lui qui permet de dire si un résultat publié a été
+# produit sur les mêmes données.
+logs/backtest_cache/*
+!logs/backtest_cache/manifest.json

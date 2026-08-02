@@ -30,28 +30,58 @@ warnings.filterwarnings("ignore")
 
 from src.backtest.system_backtest import SystemBacktestConfig, run_system_backtest  # noqa: E402
 from src.config import WATCHLIST  # noqa: E402
+from src.data.snapshot import (  # noqa: E402
+    MANIFEST_NAME, diff_snapshots, load_snapshot, write_snapshot,
+)
 from src.risk.manager import RiskConfig  # noqa: E402
 
 CTA_EXTRA = ["TLT", "UUP", "DBC"]
 CACHE = Path("logs/backtest_cache")
 
 
-def load_data(refresh: bool) -> dict:
-    syms = list(WATCHLIST) + CTA_EXTRA
-    if not refresh and CACHE.exists() and len(list(CACHE.glob("*.parquet"))) >= len(syms):
-        return {p.stem: pd.read_parquet(p) for p in CACHE.glob("*.parquet")}
-
+def _download(syms: list[str]) -> dict:
     import yfinance as yf
     from src.data.market_data import normalize_ohlcv
 
     print("⬇️  Téléchargement 5 ans…")
     raw = yf.download(syms, period="5y", interval="1d", auto_adjust=True,
                       progress=False, group_by="ticker")
-    data = {s: normalize_ohlcv(raw[s].copy()) for s in syms}
-    CACHE.mkdir(parents=True, exist_ok=True)
-    for s, df in data.items():
-        df.to_parquet(CACHE / f"{s}.parquet")
-    return data
+    return {s: normalize_ohlcv(raw[s].copy()) for s in syms}
+
+
+def load_data(refresh: bool) -> dict:
+    """
+    Charge le snapshot figé. Le réseau n'est sollicité que sur --refresh.
+
+    Un backtest doit produire le même chiffre aujourd'hui et dans six mois.
+    Avec `auto_adjust=True`, yfinance réécrit rétroactivement tout l'historique
+    à chaque dividende — mesuré sur 3 ans : −6.79 % sur la plus ancienne barre
+    de GS. C'est ce qui a fait basculer l'alpha de portfolio_backtest.py de
+    +10.7 pts à −12.5 pts entre deux exécutions distantes de dix jours.
+    """
+    syms = list(WATCHLIST) + CTA_EXTRA
+
+    if not refresh and (CACHE / MANIFEST_NAME).exists():
+        data, manifest, tampered = load_snapshot(CACHE)
+        if tampered:
+            print(f"⚠️  Snapshot altéré depuis son écriture : {', '.join(tampered)}")
+            print("   Relancer avec --refresh pour repartir d'une base saine.")
+        print(f"📦 Snapshot du {manifest.created_at[:16]} "
+              f"({len(data)} séries, période {manifest.period})")
+        return data
+
+    fresh = _download(syms)
+
+    # Si un snapshot existait, on mesure ce que le nouveau téléchargement a
+    # réécrit avant de l'écraser. C'est la seule façon de transformer une
+    # source d'irreproductibilité silencieuse en quantité observable.
+    if (CACHE / MANIFEST_NAME).exists():
+        old, _, _ = load_snapshot(CACHE, verify=False)
+        print("\n" + diff_snapshots(old, fresh).render() + "\n")
+
+    write_snapshot(fresh, CACHE, period="5y", auto_adjust=True)
+    print(f"📦 Snapshot écrit → {CACHE}")
+    return fresh
 
 
 def beta_matched_excess(result) -> tuple[float, float, float]:
