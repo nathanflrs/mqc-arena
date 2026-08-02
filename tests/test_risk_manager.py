@@ -92,12 +92,18 @@ def test_sell_only_mode_lets_sell_through():
 
 # ─── Règle 1 : taille unitaire ────────────────────────────────────────────────
 
-def test_single_position_too_large_rejected(mgr):
-    # 25 000 / 100 000 = 25% > 20%
+def test_single_position_too_large_is_trimmed_to_the_cap(mgr):
+    # 25 000 / 100 000 = 25% > 20% → rogné à 20 000, pas rejeté.
+    # Ce qui compte n'est pas que le plan soit refusé, c'est que le plafond
+    # ne soit jamais franchi.
     plans = [_plan("AAPL", "BUY", est_notional=25_000)]
     report = mgr.check(plans, _snap())
-    assert len(report.rejected) == 1
-    assert "unitaire" in report.rejected[0].reason
+    assert len(report.rejected) == 0
+    assert len(report.approved) == 1
+    assert report.approved[0].est_notional <= 0.20 * 100_000 + 1e-6
+    assert len(report.trimmed) == 1
+    assert "unitaire" in report.trimmed[0].reason
+    assert "rogné" in report.approved[0].reason
 
 
 def test_single_position_at_exact_limit_approved(mgr):
@@ -118,9 +124,13 @@ def test_net_long_cap_blocks_second_buy():
         _plan("SPY",  "BUY", est_notional=25_000),
     ]
     report = mgr.check(plans, _snap(cash=80_000))
-    assert len(report.approved) == 1
-    assert len(report.rejected) == 1
-    assert "net long" in report.rejected[0].reason
+    # Les deux passent : le second est rogné à la capacité restante (15k).
+    assert len(report.approved) == 2
+    assert len(report.rejected) == 0
+    total = sum(p.est_notional for p in report.approved)
+    assert total <= 0.40 * 100_000 + 1e-6, "le plafond net long doit tenir"
+    assert len(report.trimmed) == 1
+    assert "net long" in report.trimmed[0].reason
 
 
 def test_existing_position_counts_toward_net_long():
@@ -131,8 +141,10 @@ def test_existing_position_counts_toward_net_long():
         _plan("AAPL", "BUY", est_notional=15_000, current_qty=200, last_price=150),
     ]
     report = mgr.check(plans, _snap(netliq=100_000, cash=70_000))
-    assert len(report.rejected) == 1
-    assert "net long" in report.rejected[0].reason
+    # Position existante 30k + capacité restante 10k = plafond 40k respecté.
+    assert len(report.rejected) == 0
+    assert report.post_trade_long_pct <= 0.40 + 1e-6
+    assert len(report.trimmed) == 1
 
 
 # ─── Règle 3 : floor de cash ──────────────────────────────────────────────────
@@ -143,8 +155,11 @@ def test_cash_floor_blocks_buy():
     mgr = RiskManager(RiskConfig(max_net_long_pct=1.0, max_single_position_pct=1.0, min_cash_pct=0.30))
     plans = [_plan("AAPL", "BUY", est_notional=10_000)]
     report = mgr.check(plans, _snap(netliq=100_000, cash=35_000))
-    assert len(report.rejected) == 1
-    assert "cash" in report.rejected[0].reason
+    # Capacité = 35k - 30k = 5k → rogné à 5k, cash résiduel = floor exact.
+    assert len(report.rejected) == 0
+    spent = sum(p.est_notional for p in report.approved)
+    assert 35_000 - spent >= 0.30 * 100_000 - 1e-6, "le floor de cash doit tenir"
+    assert "cash" in report.trimmed[0].reason
 
 
 def test_cash_floor_sell_replenishes_cash():
@@ -203,10 +218,11 @@ def test_regime_bear_tightens_limit():
     # 25% notional > 21% effective limit → rejected
     plans = [_plan("AAPL", "BUY", est_notional=25_000)]
     report = mgr.check(plans, _snap(cash=100_000), gmm_regime="bear")
-    assert len(report.rejected) == 1
-    assert "régime bear" in report.rejected[0].reason
     assert report.regime_scale == pytest.approx(0.35)
     assert report.effective_max_net_long == pytest.approx(0.21)
+    # 25% > 21% → rogné au plafond régime, pas rejeté
+    assert report.post_trade_long_pct <= 0.21 + 1e-6
+    assert "régime bear" in report.trimmed[0].reason
 
 
 def test_regime_bear_small_position_passes():
@@ -220,19 +236,19 @@ def test_regime_bear_small_position_passes():
 def test_regime_bull_volatile_scale():
     """bull_volatile → scale 0.75 → effective max = 0.60 * 0.75 = 0.45."""
     mgr = RiskManager(RiskConfig(max_net_long_pct=0.60, max_single_position_pct=0.30, min_cash_pct=0.0))
-    plans = [_plan("AAPL", "BUY", est_notional=50_000)]  # 50% > 45% → rejected
+    plans = [_plan("AAPL", "BUY", est_notional=50_000)]  # 50% > 45% → rogné
     report = mgr.check(plans, _snap(cash=100_000), gmm_regime="bull_volatile")
-    assert len(report.rejected) == 1
     assert report.effective_max_net_long == pytest.approx(0.45)
+    assert report.post_trade_long_pct <= 0.45 + 1e-6
 
 
 def test_regime_sideways_scale():
     """sideways → scale 0.60 → effective max = 0.60 * 0.60 = 0.36."""
     mgr = RiskManager(RiskConfig(max_net_long_pct=0.60, max_single_position_pct=0.30, min_cash_pct=0.0))
-    plans = [_plan("AAPL", "BUY", est_notional=40_000)]  # 40% > 36% → rejected
+    plans = [_plan("AAPL", "BUY", est_notional=40_000)]  # 40% > 36% → rogné
     report = mgr.check(plans, _snap(cash=100_000), gmm_regime="sideways")
-    assert len(report.rejected) == 1
     assert report.effective_max_net_long == pytest.approx(0.36)
+    assert report.post_trade_long_pct <= 0.36 + 1e-6
 
 
 def test_no_regime_uses_full_limit():
@@ -263,8 +279,12 @@ def test_adv_filter_blocks_illiquid_buy():
     plans   = [_plan("AAPL", "BUY", est_notional=150_000, last_price=150.0)]
     adv_map = {"AAPL": 50_000}
     report  = mgr.check(plans, _snap(netliq=1_000_000, cash=900_000), adv_map=adv_map)
-    assert len(report.rejected) == 1
-    assert "ADV" in report.rejected[0].reason
+    # Rogné à 1 % de l'ADV = 500 actions × $150 = $75 000, au lieu d'être rejeté :
+    # une limite de participation borne la taille, elle n'interdit pas le trade.
+    assert len(report.rejected) == 0
+    approved = report.approved[0]
+    assert approved.delta_qty <= 0.01 * 50_000 + 1e-6
+    assert "ADV" in report.trimmed[0].reason
 
 
 def test_adv_filter_approves_liquid_buy():

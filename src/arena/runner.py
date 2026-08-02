@@ -49,6 +49,7 @@ from src.broker.portfolio import fetch_account_snapshot
 from src.data.market_data import download_ohlcv, get_last_close_1d, normalize_ohlcv
 from src.regime.detector import GMMRegimeDetector
 from src.execution.planner import plan_from_signal, cta_plan_from_signal, pairs_plans_from_signal, OrderPlan
+from src.execution.guards import build_execution_plan
 from src.execution.logger import log_order_plan, log_execution, log_decisions
 from src.risk.manager import RiskConfig, RiskManager, DrawdownCircuitBreaker
 from src.risk.allocator import AllocatorConfig, DynamicAllocator
@@ -79,50 +80,69 @@ def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
                     pass
                 return
 
-    max_notional = snap.net_liquidation * MAX_NOTIONAL_PCT
-    buff = LIMIT_BUFFER_BPS / 10000.0
+    # Garde d'exécution : redimensionne au lieu de jeter, ordonne par conviction,
+    # n'applique jamais de quota à une réduction de risque. Voir src/execution/guards.py.
+    exec_plan = build_execution_plan(
+        plans,
+        net_liquidation=snap.net_liquidation,
+        max_notional_pct=MAX_NOTIONAL_PCT,
+        max_orders=MAX_ORDERS_PER_RUN,
+        limit_buffer_bps=LIMIT_BUFFER_BPS,
+    )
+    max_notional = exec_plan.max_notional
 
-    candidates: list[tuple[object, str, int, float]] = []
-    for p in plans:
-        dq = int(round(p.delta_qty))
-        if dq == 0:
-            continue
+    _guard_report = exec_plan.render()
+    print(_guard_report)
 
-        side = "BUY" if dq > 0 else "SELL"
-        qty = abs(dq)
-
-        if side == "SELL" and getattr(p, "strategy", "directional") != "market_neutral":
-            # Directional SELL: cap at current holdings to prevent accidental shorts.
-            qty = min(qty, int(round(p.current_qty)))
-        # Market-neutral SELL (strategy='market_neutral'): no cap.
-        # IBKR paper trading handles SELL on a non-held position as a short sale.
-        # The RiskManager's gross pairs cap enforces position limits upstream.
-        if qty <= 0:
-            continue
-
-        if float(p.est_notional) > max_notional:
-            continue
-
-        if side == "BUY":
-            limit_price = float(p.last_price) * (1.0 + buff)
-        else:
-            limit_price = float(p.last_price) * (1.0 - buff)
-
-        candidates.append((p, side, qty, limit_price))
-
-    candidates = candidates[:MAX_ORDERS_PER_RUN]
+    candidates = [(c.plan, c.side, c.qty, c.limit_price) for c in exec_plan.candidates]
 
     if not candidates:
+        # Rapport honnête : on dit pourquoi rien ne part, avec les chiffres.
+        _body = (
+            "Milan Capital — aucun ordre envoyé.\n\n" + _guard_report
+            if exec_plan.adjustments
+            else "Milan Capital — aucun ordre : tous les plans sont des HOLD (delta nul)."
+        )
         print("No orders after guards.")
         try:
             from src.events.bus import get_bus, Event
-            get_bus().emit(Event(type="execution", severity="info",
-                                title="Aucun ordre — filtrés / HOLD",
-                                body="Milan Capital — Execution: no orders after guards (filtered / HOLD).",
-                                meta={"plan_id": plan_id}))
+            get_bus().emit(Event(
+                type="execution", severity="warning" if exec_plan.n_dropped else "info",
+                title=(
+                    f"Aucun ordre — {exec_plan.n_dropped} écarté(s) par la garde"
+                    if exec_plan.n_dropped else "Aucun ordre — tous les plans en HOLD"
+                ),
+                body=_body[:2000],
+                meta={
+                    "plan_id": plan_id,
+                    "n_dropped": exec_plan.n_dropped,
+                    "n_resized": exec_plan.n_resized,
+                    "max_notional": max_notional,
+                },
+            ))
         except Exception:
             pass
         return
+
+    if exec_plan.adjustments:
+        try:
+            from src.events.bus import get_bus, Event
+            get_bus().emit(Event(
+                type="execution", severity="info",
+                title=(
+                    f"Garde d'exécution — {exec_plan.n_resized} rogné(s), "
+                    f"{exec_plan.n_dropped} écarté(s)"
+                ),
+                body=_guard_report[:2000],
+                meta={
+                    "plan_id": plan_id,
+                    "n_dropped": exec_plan.n_dropped,
+                    "n_resized": exec_plan.n_resized,
+                    "max_notional": max_notional,
+                },
+            ))
+        except Exception:
+            pass
 
     _exec_start = (
         "🚀 AUTO-EXEC — sending PAPER orders (LIMIT)\n"
@@ -799,6 +819,12 @@ def main() -> None:
                     delta_qty=-float(qty),
                     est_notional=float(qty) * current_px,
                     reason=f"STOP-LOSS: {pnl_pct:.1%} < -{STOP_LOSS_PCT:.0%}",
+                    # Conviction maximale : un stop-loss est mécanique, il ne
+                    # doit jamais céder sa place dans la file à un signal d'agent.
+                    # (Il est de toute façon classé « réduction de risque » et
+                    # donc exempté du quota — la conviction n'est qu'une ceinture
+                    # de sécurité supplémentaire.)
+                    confidence=1.0,
                 ))
                 msg = f"🛑 STOP-LOSS {sym}: {pnl_pct:.1%} (entrée ${entry_px:.2f} → ${current_px:.2f})"
                 print(msg)
@@ -881,13 +907,34 @@ def main() -> None:
             min_cash_pct=RISK_MIN_CASH_PCT,
             sell_only_mode=RISK_SELL_ONLY_MODE or cb.is_triggered,
         )
+        # Prix de référence pour valoriser les positions détenues qui ne
+        # produisent aucun plan ce run (données manquantes, aucun gagnant
+        # d'arène) — sans quoi leur exposition est invisible au net long.
+        _price_map: dict[str, float] = {}
+        for _sym, _df_px in all_data.items():
+            try:
+                _price_map[_sym] = get_last_close_1d(_df_px)
+            except Exception:
+                pass
+
         risk_report = RiskManager(risk_cfg).check(
             plans,
             snap,
             gmm_regime=gmm_regime_for_risk,
             adv_map=adv_map,
             cb_level=cb.level,
+            price_map=_price_map,
         )
+
+        if risk_report.trimmed:
+            print(f"✂️  Risk manager: {len(risk_report.trimmed)} plan(s) rogné(s)")
+            for _t in risk_report.trimmed:
+                print(_t.render())
+        if risk_report.unpriced_positions:
+            print(
+                "⚠️  Positions détenues non valorisables (exclues du net long) : "
+                + ", ".join(risk_report.unpriced_positions)
+            )
 
         if risk_report.rejected:
             print(f"⚠️  Risk manager: {len(risk_report.rejected)} plan(s) rejeté(s)")
@@ -927,17 +974,42 @@ def main() -> None:
                 if _plan.symbol in _pending_divArb and _plan.action == "BUY":
                     _dmeta = _pending_divArb[_plan.symbol]
                     try:
+                        _target_exit = _dmeta.get("_divpos_target_exit", "")
+                        if not _target_exit:
+                            # Sans date de sortie cible, la position n'a pas de règle
+                            # de clôture : on refuse d'ouvrir plutôt que de créer une
+                            # position orpheline que personne ne fermera.
+                            raise KeyError(
+                                "_divpos_target_exit absent du meta — "
+                                "contrat agent→runner rompu"
+                            )
                         _divArb_tracker.open_position(DivPosition(
                             ticker           = _plan.symbol,
                             entry_date       = date.today().isoformat(),
                             entry_price      = _plan.last_price,
                             ex_date          = _dmeta["ex_date"],
                             dividend_amount  = _dmeta["dividend_amount"],
-                            target_exit_date = _dmeta.get("_divpos_target_exit", ""),
+                            target_exit_date = _target_exit,
                             shares           = float(_plan.delta_qty),
                         ))
                     except Exception as _de:
-                        print(f"⚠️  DivArb tracker write failed for {_plan.symbol}: {_de}")
+                        # Échec bruyant : une position DivArb non enregistrée ne sera
+                        # jamais sortie par l'agent. Ce n'est pas un warning cosmétique.
+                        print(f"🚨 DivArb tracker write FAILED for {_plan.symbol}: {_de}")
+                        try:
+                            from src.events.bus import get_bus, Event
+                            get_bus().emit(Event(
+                                type="alert", severity="critical",
+                                title=f"DivArb — position non enregistrée : {_plan.symbol}",
+                                body=(
+                                    f"Le plan {_plan.symbol} a été approuvé mais son "
+                                    f"enregistrement tracker a échoué ({_de}). "
+                                    f"La position ne sera pas sortie automatiquement."
+                                ),
+                                meta={"symbol": _plan.symbol, "plan_id": plan_id},
+                            ))
+                        except Exception:
+                            pass
 
         log_order_plan(plans, plan_id=plan_id)
 
