@@ -17,7 +17,7 @@ import pytest
 
 from src.analysis.agent_edge import (
     MATERIALITY, base_rates, calibration_curve, compute_agent_edge,
-    forward_log_returns, label_success,
+    forward_log_returns, label_success, signed_return_edge,
 )
 
 DATES = pd.date_range("2024-01-01", periods=400, freq="B")
@@ -196,3 +196,102 @@ class TestCalibration:
     def test_unknown_agent_yields_empty_curve(self):
         assert calibration_curve(_signals("A", "BUY"), _data(), SYMS,
                                  "Absent", horizon=5).empty
+
+
+# ── Rendement signé : la forme du gain, pas seulement sa fréquence ────────────
+
+class TestSignedReturnEdge:
+    """
+    `signed_return_edge` existe parce que le taux de réussite suppose que tous
+    les succès se valent. C'est faux dès qu'une stratégie est asymétrique.
+    Ces tests vérifient qu'elle voit ce que le taux de réussite manque.
+    """
+
+    def test_short_signal_gains_when_price_falls(self):
+        """Convention de signe : un SELL correct doit compter POSITIVEMENT."""
+        data = _data(drift=-0.004)          # marché baissier franc
+        sig = _signals("Bear", "SELL")
+        e = signed_return_edge(sig, data, SYMS, horizons={"H5": 5})[0]
+        assert e.mean_signed > 0, \
+            "un short sur un marché qui baisse doit afficher un rendement positif"
+        assert e.ci_lo > 0
+
+    def test_rare_big_wins_are_detected_where_hit_rate_fails(self):
+        """
+        Le profil exact d'un suiveur de tendance : rarement raison, mais des
+        gains bien plus grands que les pertes. Le taux de réussite le condamne,
+        le rendement signé le sauve — c'est toute la raison d'être du module.
+        """
+        dates = pd.date_range("2024-01-01", periods=300, freq="B")
+        # 20 % de hausses de +10 %, 80 % de baisses de −1 % → espérance positive
+        rng = np.random.default_rng(7)
+        steps = np.where(rng.random(len(dates)) < 0.20, 0.10, -0.01)
+        close = 100 * np.cumprod(1 + steps)
+        data = {"AAA": pd.DataFrame({"Close": close}, index=dates)}
+        sig = pd.DataFrame(
+            [(d, "AAA", "Trend", "BUY", 0.8, 0.1) for d in dates[:250]],
+            columns=["date", "symbol", "agent", "action", "confidence",
+                     "target_weight"])
+
+        hit = compute_agent_edge(sig, data, ["AAA"], horizons={"H1": 1})[0]
+        ret = signed_return_edge(sig, data, ["AAA"], horizons={"H1": 1})[0]
+
+        assert hit.hit_rate < 0.35, "l'agent a rarement raison"
+        assert ret.mean_signed > 0, "et gagne pourtant de l'argent"
+        assert ret.win_loss_ratio > 5, "parce que ses gains écrasent ses pertes"
+        assert ret.skew > 0, "profil convexe attendu"
+
+    def test_flags_positive_expectancy_that_trails_passive(self):
+        """
+        Le verdict le plus utile du module : une espérance positive n'est pas
+        une création de valeur si un dollar simplement investi long fait mieux.
+        """
+        data = _data(drift=0.004)          # marché haussier
+        # Profil du CTA réel : majoritairement long, mais short une fois sur
+        # quatre. Sur un marché qui monte, ces shorts rognent l'espérance par
+        # signal sans la faire passer sous zéro — exactement le cas que le
+        # verdict doit savoir nommer. (Alterner BUY/HOLD ne marcherait pas :
+        # émettre moins de signaux ne change pas le rendement de chacun.)
+        rows = [(d, s, "Mixte", "SELL" if i % 4 == 0 else "BUY", 0.8, 0.1)
+                for i, d in enumerate(DATES[:300]) for s in SYMS]
+        sig = pd.DataFrame(rows, columns=[
+            "date", "symbol", "agent", "action", "confidence", "target_weight"])
+
+        e = signed_return_edge(sig, data, SYMS, horizons={"H5": 5})[0]
+        assert e.mean_signed > 0
+        assert e.passive_mean > 0
+        assert "inférieure au passif" in e.verdict
+
+    def test_bootstrap_groups_by_date_not_by_signal(self):
+        """
+        Même correction statistique que pour le taux de réussite : trois actifs
+        d'une même journée valent une observation, pas trois. Ajouter des actifs
+        corrélés ne doit pas resserrer artificiellement l'intervalle.
+        """
+        dates = pd.date_range("2024-01-01", periods=250, freq="B")
+        rng = np.random.default_rng(3)
+        base = rng.normal(0.0005, 0.01, len(dates))
+
+        def build(n_sym):
+            data, rows = {}, []
+            for k in range(n_sym):
+                # Actifs parfaitement corrélés : aucune information nouvelle.
+                data[f"S{k}"] = pd.DataFrame(
+                    {"Close": 100 * np.cumprod(1 + base)}, index=dates)
+                rows += [(d, f"S{k}", "A", "BUY", 0.8, 0.1) for d in dates[:200]]
+            sig = pd.DataFrame(rows, columns=[
+                "date", "symbol", "agent", "action", "confidence",
+                "target_weight"])
+            e = signed_return_edge(sig, data, list(data), horizons={"H5": 5})[0]
+            return e.ci_hi - e.ci_lo
+
+        width_1, width_5 = build(1), build(5)
+        assert width_5 == pytest.approx(width_1, rel=0.10), \
+            "cinq actifs identiques ne doivent pas diviser l'intervalle par √5"
+
+    def test_insufficient_sample_refuses_to_conclude(self):
+        data = _data(drift=0.003)
+        sig = _signals("Court", "BUY", n_dates=20)
+        e = signed_return_edge(sig, data, SYMS, horizons={"H5": 5})[0]
+        assert "échantillon insuffisant" in e.verdict
+        assert not e.is_significant

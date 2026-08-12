@@ -119,8 +119,18 @@ class AgentEdge:
 
     @property
     def is_significant(self) -> bool:
-        """L'intervalle exclut zéro : l'excès n'est pas attribuable au hasard."""
-        return np.isfinite(self.ci_lo) and (self.ci_lo > 0 or self.ci_hi < 0)
+        """
+        L'intervalle exclut zéro **et** l'échantillon autorise une conclusion.
+
+        La condition sur `n_dates` n'est pas décorative : sans elle, un résultat
+        dont le verdict dit « échantillon insuffisant » pouvait quand même
+        s'afficher ✅ dans `render_table`, puisque l'intervalle et le verdict
+        étaient calculés indépendamment. Un IC étroit sur 20 séances corrélées
+        n'est pas une preuve — c'est l'artefact que MIN_DATES sert à écarter.
+        """
+        return (np.isfinite(self.ci_lo)
+                and self.n_dates >= MIN_DATES
+                and (self.ci_lo > 0 or self.ci_hi < 0))
 
 
 def _bootstrap_excess(
@@ -226,6 +236,145 @@ def compute_agent_edge(
                 ci_lo=lo, ci_hi=hi, verdict=verdict, n_buy=n_buy, n_sell=n_sell))
 
     return results
+
+
+@dataclass
+class SignedReturnEdge:
+    """Rendement moyen par signal, et forme du gain — pas seulement sa fréquence."""
+    agent: str
+    horizon: str
+    n_signals: int
+    n_dates: int
+    mean_signed: float        # rendement log moyen dans le sens annoncé
+    ci_lo: float              # IC 95 %, bootstrap par date
+    ci_hi: float
+    passive_mean: float       # référence : être long en permanence sur le même univers
+    skew: float               # asymétrie des rendements signés
+    win_loss_ratio: float     # |gain moyen| / |perte moyenne|
+    verdict: str
+
+    @property
+    def is_significant(self) -> bool:
+        """Voir AgentEdge.is_significant — même exigence de puissance."""
+        return (np.isfinite(self.ci_lo)
+                and self.n_dates >= MIN_DATES
+                and (self.ci_lo > 0 or self.ci_hi < 0))
+
+
+def signed_return_edge(
+    signals: pd.DataFrame,
+    data: Dict[str, pd.DataFrame],
+    symbols: Sequence[str],
+    horizons: Dict[str, int] = HORIZONS,
+) -> List[SignedReturnEdge]:
+    """
+    Mesure un agent sur le **rendement** de ses signaux, pas sur leur taux de réussite.
+
+    Pourquoi ce test existe à côté de `compute_agent_edge`
+    ------------------------------------------------------
+    Le taux de réussite suppose implicitement que tous les succès se valent. C'est
+    faux pour une stratégie à skew positif : un suiveur de tendance classique a
+    raison 35-40 % du temps et gagne quand même, parce que ses gains sont bien
+    plus grands que ses pertes. Juger un CTA au seul taux de réussite peut donc
+    conclure « pas d'edge » alors que l'espérance est positive.
+
+    L'inverse est vrai aussi, et c'est le cas le plus dangereux : un agent peut
+    afficher un bon taux de réussite en encaissant beaucoup de petits gains et
+    quelques pertes énormes. `win_loss_ratio` et `skew` rendent cette forme
+    visible plutôt que de la laisser dans l'angle mort.
+
+    `passive_mean` est la référence honnête : le rendement d'un dollar simplement
+    investi long sur le même univers et la même période. Un agent directionnel
+    dont le rendement par signal est positif mais **inférieur** à cette référence
+    ne crée pas de valeur par unité d'exposition — il fait juste moins bien que
+    ne rien décider.
+    """
+    out: List[SignedReturnEdge] = []
+    all_dates = pd.DatetimeIndex(sorted(signals["date"].unique()))
+
+    for tag, h in horizons.items():
+        fwd_map = {
+            sym: forward_log_returns(
+                pd.to_numeric(data[sym]["Close"], errors="coerce"), h)
+            for sym in symbols if sym in data
+        }
+        # Référence passive : rendement forward inconditionnel sur l'univers.
+        passive = [fwd_map[s].reindex(all_dates).dropna().to_numpy()
+                   for s in fwd_map]
+        passive_mean = (float(np.concatenate(passive).mean())
+                        if passive else float("nan"))
+
+        s = signals[signals["action"].isin(["BUY", "SELL"])].copy()
+        s["fwd"] = [fwd_map.get(sym, pd.Series(dtype=float)).get(dt, np.nan)
+                    for sym, dt in zip(s["symbol"], s["date"])]
+        s = s.dropna(subset=["fwd"])
+        # Sens annoncé : long → +fwd, short → −fwd.
+        s["signed"] = np.where(s["action"] == "BUY", s["fwd"], -s["fwd"])
+
+        for agent in sorted(s["agent"].unique()):
+            g = s[s["agent"] == agent]
+            if g.empty:
+                continue
+
+            per_date = g.groupby("date", sort=False)["signed"].agg(["sum", "size"])
+            if len(per_date) < 2:
+                lo = hi = float("nan")
+            else:
+                tot = per_date["sum"].to_numpy(dtype=float)
+                cnt = per_date["size"].to_numpy(dtype=float)
+                rng = np.random.default_rng(SEED)
+                idx = rng.integers(0, len(per_date), size=(N_BOOTSTRAP, len(per_date)))
+                boot = tot[idx].sum(axis=1) / cnt[idx].sum(axis=1)
+                lo, hi = (float(np.nanpercentile(boot, 2.5)),
+                          float(np.nanpercentile(boot, 97.5)))
+
+            wins, losses = g["signed"][g["signed"] > 0], g["signed"][g["signed"] < 0]
+            ratio = (float(abs(wins.mean() / losses.mean()))
+                     if len(wins) and len(losses) and losses.mean() != 0
+                     else float("nan"))
+            mean_signed = float(g["signed"].mean())
+            n_dates = int(g["date"].nunique())
+
+            if n_dates < MIN_DATES:
+                verdict = f"échantillon insuffisant ({n_dates}/{MIN_DATES} dates)"
+            elif not np.isfinite(lo):
+                verdict = "IC non calculable"
+            elif lo > 0 and mean_signed < passive_mean:
+                verdict = ("espérance positive mais inférieure au passif long "
+                           f"({mean_signed:+.2%} vs {passive_mean:+.2%} par signal)")
+            elif lo > 0:
+                verdict = f"espérance positive ({mean_signed:+.2%}, IC exclut 0)"
+            elif hi < 0:
+                verdict = f"espérance négative ({mean_signed:+.2%}, IC exclut 0)"
+            else:
+                verdict = "espérance indistinguable de zéro"
+
+            out.append(SignedReturnEdge(
+                agent=agent, horizon=tag, n_signals=len(g), n_dates=n_dates,
+                mean_signed=mean_signed, ci_lo=lo, ci_hi=hi,
+                passive_mean=passive_mean, skew=float(g["signed"].skew()),
+                win_loss_ratio=ratio, verdict=verdict))
+
+    return out
+
+
+def render_signed_table(edges: List[SignedReturnEdge], horizon: str) -> str:
+    rows = [e for e in edges if e.horizon == horizon]
+    rows.sort(key=lambda e: -e.mean_signed if np.isfinite(e.mean_signed) else 1)
+    lines = [
+        f"── Rendement par signal — horizon {horizon} (log, sens annoncé) ──",
+        f"{'Agent':<30}{'N':>6}{'dates':>7}{'moyen':>9}{'passif':>9}"
+        f"{'IC 95%':>22}{'skew':>7}{'G/P':>6}",
+    ]
+    for e in rows:
+        ci = f"[{e.ci_lo:+.3%}, {e.ci_hi:+.3%}]"
+        mark = " ✅" if e.is_significant and e.mean_signed > 0 else (
+               " ❌" if e.is_significant else "")
+        lines.append(
+            f"{e.agent:<30}{e.n_signals:>6}{e.n_dates:>7}{e.mean_signed:>+9.3%}"
+            f"{e.passive_mean:>+9.3%}{ci:>22}{e.skew:>+7.2f}"
+            f"{e.win_loss_ratio:>6.2f}{mark}")
+    return "\n".join(lines)
 
 
 def calibration_curve(

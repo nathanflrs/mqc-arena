@@ -1,6 +1,6 @@
 # Edge par agent — Milan Capital
 
-*Généré le 2026-08-02 — snapshot du 2026-08-02.*
+*Généré le 2026-08-12 — snapshot du 2026-08-02.*
 
 ## Méthode
 
@@ -55,6 +55,62 @@ CrossSectionalMomentumAgent     3740    935   58.5%   61.5%    -3.0%    [-5.0%, 
 DummyHoldAgent                     —      —       —       —        —                 —
 ```
 
+## CTATrendAgent — univers séparé
+
+CTA ne passe pas par l'arène : le runner l'appelle sur un chemin parallèle. Il était pour cette seule raison absent de toute mesure d'edge, alors qu'il porte la plus grosse allocation de risque du fonds — `max_gross_cta_pct = 60 %` du NAV, dans une catégorie explicitement exclue du budget net-long.
+
+**Les tableaux ci-dessous ne sont pas comparables à ceux de l'arène.** Le taux de base est calculé sur l'univers CTA (SPY, QQQ, TLT, GLD, UUP, DBC), dont la dérive inconditionnelle n'a rien à voir avec celle des mégacaps. Replay sur 955 séances, portefeuille vide à chaque date : on mesure le signal directionnel émis, pas la gestion de position.
+
+### Horizon H1
+
+```
+── Edge par agent — horizon H1 (succès = |rendement| > 0.30%) ──
+Agent                              N  dates    taux    base    excès            IC 95%
+CTATrendAgent                   3222    953   36.2%   36.0%    +0.2%    [-1.7%, +2.0%]
+
+── Rendement par signal — horizon H1 (log, sens annoncé) ──
+Agent                              N  dates    moyen   passif                IC 95%   skew   G/P
+CTATrendAgent                   3222    953  +0.008%  +0.051%    [-0.039%, +0.055%]  -1.00  0.91
+```
+
+### Horizon H5
+
+```
+── Edge par agent — horizon H5 (succès = |rendement| > 0.30%) ──
+Agent                              N  dates    taux    base    excès            IC 95%
+CTATrendAgent                   3213    949   46.4%   46.1%    +0.3%    [-1.6%, +2.1%]
+
+── Rendement par signal — horizon H5 (log, sens annoncé) ──
+Agent                              N  dates    moyen   passif                IC 95%   skew   G/P
+CTATrendAgent                   3213    949  +0.083%  +0.258%    [-0.003%, +0.174%]  -0.10  0.94
+```
+
+### Horizon H20
+
+```
+── Edge par agent — horizon H20 (succès = |rendement| > 0.30%) ──
+Agent                              N  dates    taux    base    excès            IC 95%
+CTATrendAgent                   3149    934   53.2%   52.4%    +0.8%    [-1.0%, +2.5%]
+
+── Rendement par signal — horizon H20 (log, sens annoncé) ──
+Agent                              N  dates    moyen   passif                IC 95%   skew   G/P
+CTATrendAgent                   3149    934  +0.453%  +1.056%    [+0.284%, +0.628%]  -0.21  1.04 ✅
+```
+
+### Pourquoi deux tableaux
+
+Le taux de réussite suppose que tous les succès se valent. C'est faux pour un suiveur de tendance, qui a classiquement raison 35-40 % du temps et gagne quand même parce que ses gains dépassent largement ses pertes. Juger un CTA au seul taux de réussite reviendrait à le condamner sur le mauvais critère — d'où la mesure du rendement par signal, avec le skew et le ratio gain/perte qui rendent la forme du gain visible.
+
+La colonne `passif` est la référence honnête : le rendement d'un dollar simplement investi long sur le même univers et la même période. Une espérance positive mais inférieure à cette référence ne crée pas de valeur par unité d'exposition.
+
+### Le vol targeting ne s'est jamais déclenché
+
+Sur les 3,224 signaux directionnels du replay, **100 % sortent exactement au plafond de 15 %** (écart-type des poids : `2.8e-17`, la constante machine).
+
+La cause est arithmétique. Le poids vaut `min(vol_target / vol, max_position)` = `min(0.10 / vol, 0.15)` : le plafond ne cède que si la volatilité annualisée dépasse **66.7 %**. Le maximum jamais observé sur les six ETF en cinq ans est 61.1 % (QQQ), et UUP plafonne à 15.1 %.
+
+Conséquence : UUP (vol médiane 6.5 %) reçoit le même poids que QQQ (18.6 %), soit environ trois fois plus de risque sur le second — l'inverse exact de ce que le vol targeting est censé produire. La fonctionnalité annoncée dans le docstring de l'agent (« vol targeting, style Winton / Man AHL ») est inerte.
+
 ## Calibration de la confiance
 
 Un agent calibré a un taux de succès croissant avec la confiance qu'il émet. Une courbe plate signifie que sa confiance ne porte aucune information : l'agent peut avoir un edge global tout en étant incapable de dire *quand* il est fiable — ce qui rend toute pondération par la confiance illusoire (le blending Kelly, notamment).
@@ -102,5 +158,5 @@ Un agent calibré a un taux de succès croissant avec la confiance qu'il émet. 
 ## Limites
 
 - Les seuils des agents (RSI, ADX, fenêtres) ont été choisis en regardant ces mêmes marchés. Un edge mesuré ici est une **borne haute**, pas une promesse hors échantillon.
-- Six agents sont exclus du replay (DividendArbitrageAgent, EarningsSentimentAgent, InsiderBuyAgent, MacroAgent, PairsTradingAgent, VolatilityAgent) : leurs données ne sont pas reconstituables point-in-time.
+- 6 agents sont exclus du replay de l'arène (DividendArbitrageAgent, EarningsSentimentAgent, InsiderBuyAgent, MacroAgent, PairsTradingAgent, VolatilityAgent) : leurs données ne sont pas reconstituables point-in-time. CTATrendAgent, lui, ne lit que des prix d'ETF — son absence des mesures antérieures était un oubli, pas une impossibilité ; il est désormais mesuré ci-dessus.
 - Prix ajustés : l'historique est réécrit rétroactivement à chaque dividende. Le snapshot fige les données, mais un `--refresh` change la base de mesure.

@@ -42,3 +42,4 @@ logs/backtest_cache/*
 
 # Signaux du replay (volumineux, régénérable via scripts/measure_agent_edge.py)
 logs/agent_signals.parquet
+logs/cta_signals.parquet
