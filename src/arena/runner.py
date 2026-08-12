@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
+import time as _time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timezone
@@ -49,6 +50,12 @@ from src.broker.portfolio import fetch_account_snapshot
 from src.data.market_data import download_ohlcv, get_last_close_1d, normalize_ohlcv
 from src.regime.detector import GMMRegimeDetector
 from src.execution.planner import plan_from_signal, cta_plan_from_signal, pairs_plans_from_signal, OrderPlan
+from src.execution.guards import build_execution_plan
+from src.execution.reconciliation import (
+    OrderOutcome, expected_positions, is_terminal, reconcile,
+    summarize, to_execution_rows,
+)
+
 from src.execution.logger import log_order_plan, log_execution, log_decisions
 from src.risk.manager import RiskConfig, RiskManager, DrawdownCircuitBreaker
 from src.risk.allocator import AllocatorConfig, DynamicAllocator
@@ -57,6 +64,12 @@ from src.risk.live_scorer import LiveScorer
 from src.risk.earnings_filter import EarningsFilter
 from src.risk.vol_sizing import vol_adjusted_weight
 from src.risk.var_engine import HistoricalVaREngine, VaRConfig
+
+# Fenêtre d'attente du remplissage. 90 s couvre largement le paper IBKR (qui
+# remplit en quelques secondes) sans immobiliser un run si le marché ne prend
+# pas l'ordre. Au-delà, le reliquat est annulé plutôt que laissé courir.
+FILL_TIMEOUT_SECONDS = 90.0
+FILL_POLL_SECONDS = 2.0
 
 
 def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
@@ -79,50 +92,69 @@ def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
                     pass
                 return
 
-    max_notional = snap.net_liquidation * MAX_NOTIONAL_PCT
-    buff = LIMIT_BUFFER_BPS / 10000.0
+    # Garde d'exécution : redimensionne au lieu de jeter, ordonne par conviction,
+    # n'applique jamais de quota à une réduction de risque. Voir src/execution/guards.py.
+    exec_plan = build_execution_plan(
+        plans,
+        net_liquidation=snap.net_liquidation,
+        max_notional_pct=MAX_NOTIONAL_PCT,
+        max_orders=MAX_ORDERS_PER_RUN,
+        limit_buffer_bps=LIMIT_BUFFER_BPS,
+    )
+    max_notional = exec_plan.max_notional
 
-    candidates: list[tuple[object, str, int, float]] = []
-    for p in plans:
-        dq = int(round(p.delta_qty))
-        if dq == 0:
-            continue
+    _guard_report = exec_plan.render()
+    print(_guard_report)
 
-        side = "BUY" if dq > 0 else "SELL"
-        qty = abs(dq)
-
-        if side == "SELL" and getattr(p, "strategy", "directional") != "market_neutral":
-            # Directional SELL: cap at current holdings to prevent accidental shorts.
-            qty = min(qty, int(round(p.current_qty)))
-        # Market-neutral SELL (strategy='market_neutral'): no cap.
-        # IBKR paper trading handles SELL on a non-held position as a short sale.
-        # The RiskManager's gross pairs cap enforces position limits upstream.
-        if qty <= 0:
-            continue
-
-        if float(p.est_notional) > max_notional:
-            continue
-
-        if side == "BUY":
-            limit_price = float(p.last_price) * (1.0 + buff)
-        else:
-            limit_price = float(p.last_price) * (1.0 - buff)
-
-        candidates.append((p, side, qty, limit_price))
-
-    candidates = candidates[:MAX_ORDERS_PER_RUN]
+    candidates = [(c.plan, c.side, c.qty, c.limit_price) for c in exec_plan.candidates]
 
     if not candidates:
+        # Rapport honnête : on dit pourquoi rien ne part, avec les chiffres.
+        _body = (
+            "Milan Capital — aucun ordre envoyé.\n\n" + _guard_report
+            if exec_plan.adjustments
+            else "Milan Capital — aucun ordre : tous les plans sont des HOLD (delta nul)."
+        )
         print("No orders after guards.")
         try:
             from src.events.bus import get_bus, Event
-            get_bus().emit(Event(type="execution", severity="info",
-                                title="Aucun ordre — filtrés / HOLD",
-                                body="Milan Capital — Execution: no orders after guards (filtered / HOLD).",
-                                meta={"plan_id": plan_id}))
+            get_bus().emit(Event(
+                type="execution", severity="warning" if exec_plan.n_dropped else "info",
+                title=(
+                    f"Aucun ordre — {exec_plan.n_dropped} écarté(s) par la garde"
+                    if exec_plan.n_dropped else "Aucun ordre — tous les plans en HOLD"
+                ),
+                body=_body[:2000],
+                meta={
+                    "plan_id": plan_id,
+                    "n_dropped": exec_plan.n_dropped,
+                    "n_resized": exec_plan.n_resized,
+                    "max_notional": max_notional,
+                },
+            ))
         except Exception:
             pass
         return
+
+    if exec_plan.adjustments:
+        try:
+            from src.events.bus import get_bus, Event
+            get_bus().emit(Event(
+                type="execution", severity="info",
+                title=(
+                    f"Garde d'exécution — {exec_plan.n_resized} rogné(s), "
+                    f"{exec_plan.n_dropped} écarté(s)"
+                ),
+                body=_guard_report[:2000],
+                meta={
+                    "plan_id": plan_id,
+                    "n_dropped": exec_plan.n_dropped,
+                    "n_resized": exec_plan.n_resized,
+                    "max_notional": max_notional,
+                },
+            ))
+        except Exception:
+            pass
 
     _exec_start = (
         "🚀 AUTO-EXEC — sending PAPER orders (LIMIT)\n"
@@ -159,47 +191,84 @@ def execute_plans_paper_ibkr(ib, snap, plans, plan_id: str) -> None:
             pass
         placed.append((p, side, qty, float(order.lmtPrice), trade))
 
-    # ── 2. Wait for IBKR paper fills (fills almost instantly on paper) ───────
-    ib.sleep(10)
+    # ── 2. Attendre l'état terminal de chaque ordre ──────────────────────────
+    # Un `sleep(10)` fixe suivi d'une lecture de statut n'était pas une attente :
+    # il journalisait ce qui se trouvait là au bout de 10 s, souvent
+    # 'PendingSubmit'. On interroge jusqu'à ce que tous les ordres soient
+    # terminés, ou jusqu'au délai maximal.
+    deadline = _time.monotonic() + FILL_TIMEOUT_SECONDS
+    while _time.monotonic() < deadline:
+        if all(is_terminal(t.orderStatus.status) for *_r, t in placed):
+            break
+        ib.sleep(FILL_POLL_SECONDS)
 
-    # ── 3. Log real fill prices instead of theoretical limit prices ──────────
-    ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    exec_rows = []
+    # ── 3. Annuler ce qui n'est pas terminé ──────────────────────────────────
+    # Un ordre DAY laissé ouvert peut se remplir plus tard dans la séance, à un
+    # prix sans rapport avec le signal, et sans que le système en sache rien.
     for p, side, qty, limit_price, trade in placed:
-        fill_px = trade.orderStatus.avgFillPrice
-        fill_qty = trade.orderStatus.filled
-        status = trade.orderStatus.status
+        if not is_terminal(trade.orderStatus.status):
+            try:
+                ib.cancelOrder(trade.order)
+                print(f"🚫 {p.symbol}: annulation du reliquat ({trade.orderStatus.status})")
+            except Exception as exc:
+                print(f"⚠️  {p.symbol}: annulation impossible — {exc}")
+    if placed:
+        ib.sleep(FILL_POLL_SECONDS)   # laisse les annulations se propager
 
-        avg_fill = float(fill_px) if fill_px and float(fill_px) > 0 else 0.0
-        actual_qty = int(fill_qty) if fill_qty and int(fill_qty) > 0 else qty
-        last_px = float(p.last_price)
+    # ── 4. Collecter le devenir réel de chaque ordre ─────────────────────────
+    outcomes: list[OrderOutcome] = []
+    for p, side, qty, limit_price, trade in placed:
+        st = trade.orderStatus
+        filled = float(st.filled or 0.0)
+        avg_px = float(st.avgFillPrice or 0.0)
+        outcomes.append(OrderOutcome(
+            symbol=p.symbol, side=side, requested_qty=int(qty),
+            filled_qty=filled, avg_fill_price=avg_px,
+            limit_price=float(limit_price), signal_price=float(p.last_price),
+            status=str(st.status), reason=str(p.reason),
+            cancelled_remainder=0 < filled < qty - 1e-9,
+        ))
 
-        # Slippage vs signal price (positive = unfavourable)
-        if avg_fill > 0 and last_px > 0:
-            if side == "BUY":
-                slippage_bps = (avg_fill - last_px) / last_px * 10_000
-            else:
-                slippage_bps = (last_px - avg_fill) / last_px * 10_000
-        else:
-            slippage_bps = 0.0
+    print("\n" + summarize(outcomes))
 
-        exec_rows.append({
-            "plan_id": plan_id,
-            "timestamp": ts,
-            "symbol": p.symbol,
-            "side": side,
-            "qty": actual_qty,
-            "limit_price": round(limit_price, 4),   # original limit order price
-            "avg_fill_price": round(avg_fill, 4),    # actual IBKR fill (0 = not filled yet)
-            "slippage_bps": round(slippage_bps, 2),  # vs signal price
-            "last_price": round(last_px, 4),
-            "est_notional": float(p.est_notional),
-            "target_weight": float(p.target_weight),
-            "reason": str(p.reason),
-            "status": status,
-        })
+    # On ne journalise que les remplissages réels : un ordre non rempli n'est
+    # pas un trade à zéro, et l'écrire ferait croire au stop-loss qu'une
+    # position existe au prix limite de l'ordre.
+    ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    log_execution(to_execution_rows(outcomes, plan_id=plan_id, timestamp=ts))
 
-    log_execution(exec_rows)
+    # ── 5. Réconciliation avec le portefeuille réel ──────────────────────────
+    expected = expected_positions(snap.positions, outcomes)
+    try:
+        after = fetch_account_snapshot(ib)
+        report = reconcile(expected, after.positions)
+    except Exception as exc:
+        print(f"⚠️  Réconciliation impossible — snapshot indisponible : {exc}")
+        report = None
+
+    if report is not None:
+        print("\n" + report.render())
+        try:
+            from src.events.bus import get_bus, Event
+            get_bus().emit(Event(
+                type="execution",
+                severity="info" if report.is_clean else "critical",
+                title=(
+                    "Réconciliation OK"
+                    if report.is_clean else
+                    f"🚨 Divergence broker — {len(report.drifts)} position(s)"
+                ),
+                body=(summarize(outcomes) + "\n\n" + report.render())[:2000],
+                meta={
+                    "plan_id": plan_id,
+                    "n_drifts": len(report.drifts),
+                    "drifts": {d.symbol: d.delta for d in report.drifts},
+                },
+            ))
+        except Exception:
+            pass
+
+    return outcomes
 
 
 def _load_entry_prices(
@@ -234,21 +303,32 @@ def _load_entry_prices(
     if avg_costs:
         result.update({k: v for k, v in avg_costs.items() if v > 0})
 
-    # Tier 1: executions.csv actual fill price (highest priority)
+    # Tier 1: executions.csv — prix de remplissage RÉEL, priorité maximale.
+    #
+    # On n'accepte qu'un avg_fill_price strictement positif. Le repli sur
+    # limit_price a été retiré : un ordre non rempli porte une limite mais
+    # aucun prix de revient, et l'utiliser donnait au stop-loss une base de
+    # coût fantôme. Constaté en production — les trois lignes historiques
+    # d'executions.csv sont en 'PendingSubmit', et AAPL en héritait d'un prix
+    # d'entrée de 255,79 $ pour un ordre jamais exécuté.
+    #
+    # Depuis la réconciliation (src/execution/reconciliation.py), un ordre non
+    # rempli n'est plus journalisé du tout ; ce filtre protège l'historique
+    # existant et tout format antérieur.
     ex = Path(exec_path)
     if ex.exists():
         try:
             df = pd.read_csv(ex)
             buys = df[df["side"] == "BUY"].sort_values("timestamp")
             if "avg_fill_price" in buys.columns:
-                price_col = buys["avg_fill_price"].where(
-                    buys["avg_fill_price"] > 0, buys["limit_price"]
-                )
-                buys = buys.copy()
-                buys["_price"] = price_col
-                result.update(buys.groupby("symbol")["_price"].last().to_dict())
-            else:
-                result.update(buys.groupby("symbol")["limit_price"].last().to_dict())
+                filled = buys[pd.to_numeric(buys["avg_fill_price"],
+                                            errors="coerce").fillna(0.0) > 0]
+                if not filled.empty:
+                    result.update(
+                        filled.groupby("symbol")["avg_fill_price"].last().to_dict()
+                    )
+            # Pas de colonne avg_fill_price → format antérieur à la
+            # réconciliation : aucun prix de remplissage n'y est fiable.
         except Exception:
             pass
 
@@ -638,6 +718,18 @@ def main() -> None:
 
             signals = arena.run(sym, df, portfolio=snap.positions, regime=regime)
 
+            # Trop peu d'agents ont répondu : on n'arbitre pas entre les rares
+            # survivants, on s'abstient. Un vote à 3 agents sur 12 n'est pas le
+            # même mécanisme que celui qu'on a validé.
+            if arena.is_degraded(signals):
+                msg = (
+                    f"{sym} ignoré — arène dégradée : {len(signals)}/{len(arena.agents)} "
+                    f"agents ont répondu (minimum {arena.min_healthy_agents})"
+                )
+                print(f"🚨 {msg}")
+                _decisions_summary.append({"symbol": sym, "agent": "DEGRADED", "action": "HOLD"})
+                continue
+
             # Normalisation P0(b) : on sélectionne sur confidences normalisées,
             # mais winner est récupéré depuis les signaux bruts (pour circuit breaker, logs).
             _signals_norm = _normalizer.normalize_all(signals)
@@ -775,6 +867,41 @@ def main() -> None:
                     _pending_divArb[sym] = winner.meta or {}
             _decisions_summary.append({"symbol": sym, "agent": winner.agent_name, "action": winner.action})
 
+        # ====== SANTÉ DES AGENTS ======
+        # Une panne d'agent ne doit jamais rester dans les logs sans remonter :
+        # le système continuerait à produire des décisions d'apparence normale
+        # sur une information amputée. C'est le mode de défaillance dangereux.
+        if arena.failures:
+            _fail_lines = arena.failure_summary()
+            print(f"\n🚨 {len(arena.failures)} panne(s) d'agent sur ce run :")
+            for _line in _fail_lines:
+                print(f"   • {_line}")
+            _dead = {f.agent_name for f in arena.failures
+                     if sum(1 for g in arena.failures if g.agent_name == f.agent_name)
+                     >= len(WATCHLIST)}
+            if not ci_mode:
+                try:
+                    from src.events.bus import get_bus, Event
+                    get_bus().emit(Event(
+                        type="system",
+                        # Un agent muet sur TOUS les symboles est hors service,
+                        # pas simplement instable : ça mérite une alerte critique.
+                        severity="critical" if _dead else "warning",
+                        title=(
+                            f"Agent(s) hors service : {', '.join(sorted(_dead))}"
+                            if _dead else
+                            f"{len(arena.failures)} panne(s) d'agent"
+                        ),
+                        body="\n".join(_fail_lines)[:2000],
+                        meta={
+                            "plan_id": plan_id,
+                            "n_failures": len(arena.failures),
+                            "agents_down": sorted(_dead),
+                        },
+                    ))
+                except Exception:
+                    pass
+
         # ====== STOP-LOSS PAR POSITION ======
         entry_prices = _load_entry_prices(avg_costs=snap.avg_costs)
         for sym, qty in snap.positions.items():
@@ -799,6 +926,12 @@ def main() -> None:
                     delta_qty=-float(qty),
                     est_notional=float(qty) * current_px,
                     reason=f"STOP-LOSS: {pnl_pct:.1%} < -{STOP_LOSS_PCT:.0%}",
+                    # Conviction maximale : un stop-loss est mécanique, il ne
+                    # doit jamais céder sa place dans la file à un signal d'agent.
+                    # (Il est de toute façon classé « réduction de risque » et
+                    # donc exempté du quota — la conviction n'est qu'une ceinture
+                    # de sécurité supplémentaire.)
+                    confidence=1.0,
                 ))
                 msg = f"🛑 STOP-LOSS {sym}: {pnl_pct:.1%} (entrée ${entry_px:.2f} → ${current_px:.2f})"
                 print(msg)
@@ -881,13 +1014,34 @@ def main() -> None:
             min_cash_pct=RISK_MIN_CASH_PCT,
             sell_only_mode=RISK_SELL_ONLY_MODE or cb.is_triggered,
         )
+        # Prix de référence pour valoriser les positions détenues qui ne
+        # produisent aucun plan ce run (données manquantes, aucun gagnant
+        # d'arène) — sans quoi leur exposition est invisible au net long.
+        _price_map: dict[str, float] = {}
+        for _sym, _df_px in all_data.items():
+            try:
+                _price_map[_sym] = get_last_close_1d(_df_px)
+            except Exception:
+                pass
+
         risk_report = RiskManager(risk_cfg).check(
             plans,
             snap,
             gmm_regime=gmm_regime_for_risk,
             adv_map=adv_map,
             cb_level=cb.level,
+            price_map=_price_map,
         )
+
+        if risk_report.trimmed:
+            print(f"✂️  Risk manager: {len(risk_report.trimmed)} plan(s) rogné(s)")
+            for _t in risk_report.trimmed:
+                print(_t.render())
+        if risk_report.unpriced_positions:
+            print(
+                "⚠️  Positions détenues non valorisables (exclues du net long) : "
+                + ", ".join(risk_report.unpriced_positions)
+            )
 
         if risk_report.rejected:
             print(f"⚠️  Risk manager: {len(risk_report.rejected)} plan(s) rejeté(s)")
@@ -927,17 +1081,42 @@ def main() -> None:
                 if _plan.symbol in _pending_divArb and _plan.action == "BUY":
                     _dmeta = _pending_divArb[_plan.symbol]
                     try:
+                        _target_exit = _dmeta.get("_divpos_target_exit", "")
+                        if not _target_exit:
+                            # Sans date de sortie cible, la position n'a pas de règle
+                            # de clôture : on refuse d'ouvrir plutôt que de créer une
+                            # position orpheline que personne ne fermera.
+                            raise KeyError(
+                                "_divpos_target_exit absent du meta — "
+                                "contrat agent→runner rompu"
+                            )
                         _divArb_tracker.open_position(DivPosition(
                             ticker           = _plan.symbol,
                             entry_date       = date.today().isoformat(),
                             entry_price      = _plan.last_price,
                             ex_date          = _dmeta["ex_date"],
                             dividend_amount  = _dmeta["dividend_amount"],
-                            target_exit_date = _dmeta.get("_divpos_target_exit", ""),
+                            target_exit_date = _target_exit,
                             shares           = float(_plan.delta_qty),
                         ))
                     except Exception as _de:
-                        print(f"⚠️  DivArb tracker write failed for {_plan.symbol}: {_de}")
+                        # Échec bruyant : une position DivArb non enregistrée ne sera
+                        # jamais sortie par l'agent. Ce n'est pas un warning cosmétique.
+                        print(f"🚨 DivArb tracker write FAILED for {_plan.symbol}: {_de}")
+                        try:
+                            from src.events.bus import get_bus, Event
+                            get_bus().emit(Event(
+                                type="alert", severity="critical",
+                                title=f"DivArb — position non enregistrée : {_plan.symbol}",
+                                body=(
+                                    f"Le plan {_plan.symbol} a été approuvé mais son "
+                                    f"enregistrement tracker a échoué ({_de}). "
+                                    f"La position ne sera pas sortie automatiquement."
+                                ),
+                                meta={"symbol": _plan.symbol, "plan_id": plan_id},
+                            ))
+                        except Exception:
+                            pass
 
         log_order_plan(plans, plan_id=plan_id)
 

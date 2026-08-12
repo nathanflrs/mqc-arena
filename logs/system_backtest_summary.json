@@ -1,0 +1,30 @@
+{
+  "start": "2022-10-10",
+  "end": "2026-07-31",
+  "config": {
+    "max_net_long_pct": 0.6,
+    "min_cash_pct": 0.3,
+    "max_notional_pct": 0.05
+  },
+  "total_return": 0.692706761702319,
+  "cagr": 0.1489916012661383,
+  "sharpe": 1.055281653824808,
+  "max_drawdown": -0.1236693382470172,
+  "benchmark_return": 1.1800163652536524,
+  "benchmark_cagr": 0.2283180846029531,
+  "benchmark_sharpe": 1.1306621902445895,
+  "benchmark_max_drawdown": -0.18755226260622693,
+  "alpha_vs_spy": -0.48730960355133335,
+  "beta": 0.42124905148524844,
+  "excess_vs_beta_matched": 0.15952338004901878,
+  "information_ratio": 0.39630181931339564,
+  "orders_sent": 2635,
+  "orders_filled": 1468,
+  "fill_rate": 0.5571157495256167,
+  "transaction_costs_usd": 35282.2402592666,
+  "caveats": [
+    "6 agents sur 13 exclus du replay (données non reconstituables point-in-time) — les agents rejouables représentent 78 % des victoires d'arène historiques.",
+    "Prix ajustés yfinance : historique réajusté rétroactivement, résultat non strictement reproductible à une autre date.",
+    "Bornes du normaliseur gelées sur une fenêtre de juillet 2026."
+  ]
+}

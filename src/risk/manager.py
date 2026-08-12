@@ -1,14 +1,20 @@
 # src/risk/manager.py
 from __future__ import annotations
 
+import dataclasses
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from src.broker.portfolio import PortfolioSnapshot
-from src.execution.planner import OrderPlan
+from src.execution.planner import OrderPlan, _compute_tx_cost
+
+# Un BUY rogné en dessous de cette fraction de sa taille initiale n'est plus
+# le trade que l'agent a proposé : on préfère le rejeter proprement plutôt
+# que d'envoyer un résidu qui paiera la commission sans porter la thèse.
+MIN_TRIM_FRACTION: float = 0.25
 
 # ── Regime scaling factors for max_net_long_pct ───────────────────────────────
 _REGIME_SCALE: Dict[str, float] = {
@@ -54,6 +60,72 @@ class RejectedPlan:
 
 
 @dataclass
+class TrimmedPlan:
+    """Un BUY réduit pour tenir dans le budget restant, au lieu d'être rejeté."""
+    symbol: str
+    reason: str            # contrainte qui a mordu
+    original_notional: float
+    final_notional: float
+
+    def render(self) -> str:
+        return (
+            f"  ✂️  {self.symbol}: ${self.original_notional:,.0f} → "
+            f"${self.final_notional:,.0f} — {self.reason}"
+        )
+
+
+def _is_risk_reducing(current_qty: float, delta_qty: float) -> bool:
+    """Un ordre réduit le risque s'il rapproche la position de zéro."""
+    return abs(current_qty + delta_qty) < abs(current_qty) - 1e-9
+
+
+def _order_key(p: OrderPlan) -> Tuple:
+    """
+    Ordre d'évaluation par le RiskManager.
+
+    1. Ce qui libère du budget passe en premier (SELL, HOLD, réductions).
+       Auparavant les plans étaient évalués dans l'ordre de la WATCHLIST : un
+       SELL sur LLY évalué après les BUY ne libérait sa capacité qu'une fois
+       les BUY déjà rejetés faute de place. Le budget était sous-estimé.
+    2. Puis par conviction décroissante. Auparavant, premier arrivé premier
+       servi : NVDA (Sharpe 1.50) était rejeté parce qu'il apparaît tard dans
+       la WATCHLIST, au profit de plans plus faibles évalués avant lui.
+    3. Notionnel puis symbole pour un ordre totalement déterministe.
+    """
+    frees_budget = (
+        p.action in ("SELL", "HOLD")
+        or _is_risk_reducing(p.current_qty, p.delta_qty)
+    )
+    return (0 if frees_budget else 1, -float(p.confidence), -float(p.est_notional), p.symbol)
+
+
+def _trim_to(plan: OrderPlan, allowed_notional: float) -> Optional[OrderPlan]:
+    """
+    Réduit un BUY pour qu'il tienne dans `allowed_notional`.
+    Retourne None si le résidu n'a plus de sens (< 1 action, ou < MIN_TRIM_FRACTION
+    de la taille initiale).
+    """
+    px = float(plan.last_price)
+    if px <= 0 or allowed_notional <= 0:
+        return None
+
+    new_qty = int(allowed_notional // px)
+    if new_qty < 1:
+        return None
+    if (new_qty * px) < MIN_TRIM_FRACTION * float(plan.est_notional):
+        return None
+
+    return dataclasses.replace(
+        plan,
+        target_qty=float(plan.current_qty) + new_qty,
+        delta_qty=float(new_qty),
+        est_notional=float(new_qty * px),
+        est_cost_usd=_compute_tx_cost(new_qty, px),
+        reason=f"{plan.reason} [rogné par risk manager]",
+    )
+
+
+@dataclass
 class RiskReport:
     approved: List[OrderPlan]
     rejected: List[RejectedPlan]
@@ -76,6 +148,11 @@ class RiskReport:
     # Excluded from net_long. Both long and short entries checked against max_gross_cta_pct.
     cta_gross_pre: float = 0.0
     cta_gross_post: float = 0.0
+    # BUY réduits pour tenir dans le budget, au lieu d'être rejetés en bloc.
+    trimmed: List["TrimmedPlan"] = field(default_factory=list)
+    # Positions détenues sans plan ni prix connu : exposition non valorisable,
+    # donc absente du net long calculé. À surveiller, jamais à ignorer.
+    unpriced_positions: List[str] = field(default_factory=list)
 
     def telegram_summary(self) -> str:
         lines = ["🛡 Risk Manager"]
@@ -105,6 +182,14 @@ class RiskReport:
             f"  Approuvés       : {len(self.approved)}",
             f"  Rejetés         : {len(self.rejected)}",
         ]
+        if self.trimmed:
+            lines.append(f"  Rognés          : {len(self.trimmed)}")
+            lines.extend(t.render() for t in self.trimmed)
+        if self.unpriced_positions:
+            lines.append(
+                "  ⚠️  Positions non valorisées (hors net long) : "
+                + ", ".join(self.unpriced_positions)
+            )
         if self.sell_only_triggered:
             lines.append("  ⚠️  SELL-ONLY MODE actif")
         for r in self.rejected:
@@ -124,6 +209,7 @@ class RiskManager:
         gmm_regime: Optional[str] = None,
         adv_map: Optional[Dict[str, float]] = None,
         cb_level: int = 0,
+        price_map: Optional[Dict[str, float]] = None,
     ) -> RiskReport:
         """
         Filtre les plans selon les règles de risque portefeuille.
@@ -154,6 +240,7 @@ class RiskManager:
 
         approved: List[OrderPlan] = []
         rejected: List[RejectedPlan] = []
+        trimmed: List[TrimmedPlan] = []
 
         # Directional net-long (excludes market-neutral and CTA legs)
         current_long_notional = sum(
@@ -161,8 +248,36 @@ class RiskManager:
             for p in plans
             if p.current_qty > 0 and p.strategy not in ("market_neutral", "cta_trend")
         )
+
+        # ── Positions détenues mais SANS plan ce run ──────────────────────────
+        # La somme ci-dessus itère sur `plans`, pas sur le portefeuille. Or un
+        # symbole ne produit aucun plan quand ses données manquent, ou quand
+        # l'arène ne désigne aucun gagnant (cas devenu plus fréquent depuis la
+        # règle de corroboration P0(c)). Son exposition devenait alors invisible :
+        # le net long était **sous-estimé**, donc les plafonds trop permissifs.
+        # C'est le sens dangereux de l'erreur.
+        _planned = {p.symbol for p in plans}
+        _non_directional = {
+            p.symbol for p in plans if p.strategy in ("market_neutral", "cta_trend")
+        }
+        unpriced_positions: List[str] = []
+        for _sym, _qty in (snap.positions or {}).items():
+            if _qty <= 0 or _sym in _planned or _sym in _non_directional:
+                continue
+            _px = (price_map or {}).get(_sym, 0.0)
+            if _px > 0:
+                current_long_notional += float(_qty) * float(_px)
+            else:
+                # Sans prix, impossible de valoriser : on le signale plutôt que
+                # de faire silencieusement comme si l'exposition n'existait pas.
+                unpriced_positions.append(_sym)
+
         projected_long_notional = current_long_notional
         projected_cash = snap.cash
+
+        # Évaluation ordonnée : ce qui libère du budget d'abord, puis par
+        # conviction décroissante. Voir _order_key().
+        plans = sorted(plans, key=_order_key)
 
         # Gross pairs exposure: |long leg| + |short leg| for all market-neutral positions
         current_pairs_gross = sum(
@@ -263,50 +378,66 @@ class RiskManager:
                 projected_pairs_gross += p.est_notional
                 continue
 
-            # ── Directional path (existing rules) ─────────────────────────────
-
-            # Règle 1 — Taille unitaire maximale
-            single_pct = p.est_notional / netliq if netliq > 0 else 1.0
-            if single_pct > self.cfg.max_single_position_pct:
-                rejected.append(RejectedPlan(
-                    p,
-                    f"position unitaire {single_pct:.1%} > max {self.cfg.max_single_position_pct:.0%}",
-                ))
-                continue
-
-            # Règle 2 — Exposition nette longue (régime-ajustée)
-            new_long_pct = (projected_long_notional + p.est_notional) / netliq if netliq > 0 else 1.0
-            if new_long_pct > effective_max_long:
-                rejected.append(RejectedPlan(
-                    p,
-                    f"net long post-trade {new_long_pct:.1%} > max {effective_max_long:.0%}"
+            # ── Directional path ──────────────────────────────────────────────
+            #
+            # Les quatre règles historiques deviennent quatre plafonds de notionnel
+            # évalués ensemble. On prend le plus contraignant, on nomme celui qui
+            # mord, et on **rogne** le plan au lieu de le rejeter en bloc.
+            #
+            # Le rejet binaire faisait sauter NVDA (conviction 0.90) pour un
+            # dépassement marginal du plafond net long, alors qu'une position
+            # réduite tenait parfaitement dans le budget restant.
+            budgets: List[Tuple[float, str]] = [
+                (
+                    self.cfg.max_single_position_pct * netliq,
+                    f"taille unitaire max {self.cfg.max_single_position_pct:.0%} NAV",
+                ),
+                (
+                    effective_max_long * netliq - projected_long_notional,
+                    f"plafond net long {effective_max_long:.0%}"
                     + (f" (régime {gmm_regime})" if gmm_regime else ""),
-                ))
-                continue
+                ),
+                (
+                    projected_cash - self.cfg.min_cash_pct * netliq,
+                    f"floor de cash {self.cfg.min_cash_pct:.0%}",
+                ),
+            ]
 
-            # Règle 3 — Floor de cash
-            new_cash_pct = (projected_cash - p.est_notional) / netliq if netliq > 0 else 0.0
-            if new_cash_pct < self.cfg.min_cash_pct:
-                rejected.append(RejectedPlan(
-                    p,
-                    f"cash résiduel {new_cash_pct:.1%} < floor {self.cfg.min_cash_pct:.0%}",
-                ))
-                continue
-
-            # Règle 4 — Liquidité ADV (< 1 % du volume journalier moyen)
+            # Liquidité : max 1 % de l'ADV, exprimé en notionnel
             if adv_map:
                 adv = adv_map.get(p.symbol, 0.0)
                 if adv > 0 and p.last_price > 0:
-                    target_shares = p.est_notional / p.last_price
-                    adv_pct = target_shares / adv
-                    if adv_pct > 0.01:
-                        rejected.append(RejectedPlan(
-                            p,
-                            f"liquidité ADV: {adv_pct:.1%} du volume journalier (max 1%)",
-                        ))
-                        continue
+                    budgets.append((
+                        0.01 * adv * p.last_price,
+                        "liquidité — max 1 % de l'ADV",
+                    ))
 
-            # Plan approuvé
+            allowed, binding = min(budgets, key=lambda b: b[0])
+
+            if allowed <= 0:
+                rejected.append(RejectedPlan(
+                    p, f"budget saturé — {binding} (capacité restante nulle)"
+                ))
+                continue
+
+            if p.est_notional > allowed:
+                trimmed_plan = _trim_to(p, allowed)
+                if trimmed_plan is None:
+                    rejected.append(RejectedPlan(
+                        p,
+                        f"{binding} — capacité restante ${allowed:,.0f} "
+                        f"< {MIN_TRIM_FRACTION:.0%} de la taille demandée "
+                        f"(${p.est_notional:,.0f})",
+                    ))
+                    continue
+                trimmed.append(TrimmedPlan(
+                    symbol=p.symbol, reason=binding,
+                    original_notional=float(p.est_notional),
+                    final_notional=float(trimmed_plan.est_notional),
+                ))
+                p = trimmed_plan
+
+            # Plan approuvé (éventuellement rogné)
             approved.append(p)
             projected_long_notional += p.est_notional
             projected_cash -= p.est_notional
@@ -331,6 +462,8 @@ class RiskManager:
             pairs_gross_post=pairs_gross_post,
             cta_gross_pre=cta_gross_pre,
             cta_gross_post=cta_gross_post,
+            trimmed=trimmed,
+            unpriced_positions=unpriced_positions,
         )
 
 

@@ -5,18 +5,32 @@ from typing import List, Optional, Set
 from src.agents.base import AgentSignal
 
 
+# Poids plancher : ce que « vaut » une conviction qui ne demande aucune taille.
+# Sert de plancher aux BUY/SELL sans target_weight, et de poids fixe aux HOLD.
+FLOOR_WEIGHT = 0.05
+
+
 def score_signal(sig: AgentSignal) -> float:
     """
     Convertit un signal en score numérique cohérent.
-    BUY / SELL : confidence × max(target_weight, 0.05)
-    HOLD       : confidence × 0.05
+    BUY / SELL : confidence × max(target_weight, FLOOR_WEIGHT)
+    HOLD       : confidence × FLOOR_WEIGHT
 
     HOLD n'est pas une abstention — c'est un avis de ne pas agir.
     Son score est structurellement plus faible qu'un BUY/SELL typique
     (×0.05 vs ×0.10+), mais peut l'emporter si l'agent est prioritaire
     (bonus conf×priority_bonus dans select_best, proportionnel à la conviction).
+
+    Le HOLD est scoré sur un poids **fixe**, jamais sur son target_weight :
+    un avis de ne rien faire ne se voit pas créditer d'une taille de position.
+    En pratique tous les agents émettent target_weight=0 sur HOLD, donc ce
+    branchement ne change rien sur données réelles — il empêche simplement
+    qu'un futur agent émettant un HOLD avec un poids résiduel remporte
+    l'arène pour une mauvaise raison.
     """
-    return sig.confidence * max(sig.target_weight, 0.05)
+    if sig.action == "HOLD":
+        return sig.confidence * FLOOR_WEIGHT
+    return sig.confidence * max(sig.target_weight, FLOOR_WEIGHT)
 
 
 def _corroboration_ok(

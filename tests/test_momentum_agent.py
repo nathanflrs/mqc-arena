@@ -18,6 +18,7 @@ from src.agents.momentum import (
     MomentumConfig,
     _momentum_score,
 )
+from tests.conftest import bdate_index
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -25,7 +26,7 @@ from src.agents.momentum import (
 def _close(n: int = 320, start: float = 100.0, total_return: float = 0.20) -> pd.Series:
     """Linear ramp producing a known total return over n days."""
     prices = np.linspace(start, start * (1 + total_return), n)
-    idx = pd.date_range(end=date.today(), periods=n, freq="B")
+    idx = bdate_index(n)
     return pd.Series(prices, index=idx)
 
 
@@ -220,7 +221,7 @@ class TestMomentumEdgeCases:
         uni = _universe(0.40, 0.20, 0.10, -0.05, 0.01, symbols=["A","B","C","D","E"])
         # Replace C with a very short series (50 days)
         short = pd.Series(np.linspace(100, 105, 50),
-                          index=pd.date_range(end=date.today(), periods=50, freq="B"))
+                          index=bdate_index(50))
         uni["C"] = _df(short)
         agent = CrossSectionalMomentumAgent(universe=uni)
         assert "C" not in agent._rankings

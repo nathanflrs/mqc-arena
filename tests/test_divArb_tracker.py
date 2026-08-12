@@ -22,6 +22,7 @@ from src.agents.dividend_arbitrage_agent import (
     DivPosition,
 )
 from src.agents.base import MarketState
+from tests.conftest import bdate_index
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -68,7 +69,7 @@ class TestGenerateSignalDoesNotWriteTracker:
 
         import pandas as pd
         import numpy as np
-        idx = pd.date_range(end=date.today(), periods=100, freq="B")
+        idx = bdate_index(100)
         df  = pd.DataFrame({"Close": np.linspace(400, 420, 100),
                             "Volume": [1e6]*100}, index=idx)
 
@@ -95,7 +96,7 @@ class TestGenerateSignalDoesNotWriteTracker:
         state = MarketState(symbol="MSFT", price=200.0,
                             timestamp=date.today().isoformat())
         import pandas as pd, numpy as np
-        idx = pd.date_range(end=date.today(), periods=100, freq="B")
+        idx = bdate_index(100)
         df  = pd.DataFrame({"Close": np.linspace(400, 420, 100),
                             "Volume": [1e6]*100}, index=idx)
 
@@ -127,7 +128,7 @@ class TestRejectionLeavesNoPhantom:
         state = MarketState(symbol="MSFT", price=200.0,
                             timestamp=date.today().isoformat())
         import pandas as pd, numpy as np
-        idx = pd.date_range(end=date.today(), periods=100, freq="B")
+        idx = bdate_index(100)
         df  = pd.DataFrame({"Close": np.linspace(400, 420, 100),
                             "Volume": [1e6]*100}, index=idx)
 
@@ -164,7 +165,7 @@ class TestRejectionLeavesNoPhantom:
         state2 = MarketState(symbol="MSFT", price=419.0,
                              timestamp=(date.today() + timedelta(days=1)).isoformat())
         import pandas as pd, numpy as np
-        idx = pd.date_range(end=date.today() + timedelta(days=1), periods=100, freq="B")
+        idx = bdate_index(100, date.today() + timedelta(days=1))
         df2 = pd.DataFrame({"Close": np.linspace(400, 419, 100),
                             "Volume": [1e6]*100}, index=idx)
 

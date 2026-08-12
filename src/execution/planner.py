@@ -10,6 +10,39 @@ logger = logging.getLogger(__name__)
 
 _STRATEGY_CTA = "cta_trend"
 
+# ── Modèle de coûts de transaction (IBKR Tiered, actions US) ──────────────────
+# Commission : 0,005 $/action, minimum 1 $ par ordre.
+# Spread     : 5 bps du notionnel — proxy demi-spread + impact marché pour des
+#              large caps US. Volontairement conservateur : mieux vaut
+#              sur-estimer le coût que découvrir l'edge négatif en live.
+#
+# Ces valeurs décrivent **un côté** (un ordre). Un aller-retour coûte donc
+# environ deux fois ce montant. Le backtest applique séparément 7,5 bps par côté
+# (src/backtest/engine.py) — les deux modèles doivent rester cohérents ; tout
+# écart entre eux est une divergence backtest/live à surveiller.
+_IB_COMMISSION_PER_SHARE: float = 0.005
+_IB_COMMISSION_MIN:       float = 1.00
+_SPREAD_PCT:              float = 0.0005   # 5 bps
+
+
+def _compute_tx_cost(qty: float, price: float) -> float:
+    """
+    Coût estimé, en dollars, d'un ordre de `qty` actions à `price`.
+
+        commission = max(1 $, |qty| × 0,005 $)
+        spread     = |qty| × price × 5 bps
+
+    Le signe de `qty` est ignoré : un SELL coûte autant qu'un BUY.
+    Retourne 0.0 pour un ordre vide (qty=0), sans appliquer le minimum —
+    on ne facture pas un ordre qui n'existe pas.
+    """
+    shares = abs(float(qty))
+    if shares == 0 or price <= 0:
+        return 0.0
+    commission = max(_IB_COMMISSION_MIN, shares * _IB_COMMISSION_PER_SHARE)
+    spread     = shares * float(price) * _SPREAD_PCT
+    return commission + spread
+
 
 @dataclass
 class OrderPlan:
@@ -26,6 +59,22 @@ class OrderPlan:
     # to route market-neutral pairs trades through the gross-exposure cap
     # instead of the net-long cap.
     strategy: str = "directional"
+    # Conviction du signal gagnant (0.0 → 1.0), propagée depuis AgentSignal.
+    # Utilisée par la couche d'exécution pour ordonner les ordres quand
+    # MAX_ORDERS_PER_RUN force une troncature : sans elle, la troncature se
+    # ferait dans l'ordre de la WATCHLIST, ce qui est arbitraire.
+    # 1.0 pour les ordres mécaniques prioritaires (stop-loss).
+    confidence: float = 0.0
+    # Coût de transaction estimé en $ pour CE côté (commission IBKR + spread).
+    # Défaut 0.0 : un OrderPlan construit à la main n'est pas facturé tant que
+    # l'appelant ne renseigne pas le champ. Les plans issus de plan_from_signal /
+    # cta_plan_from_signal / pairs_plans_from_signal le remplissent toujours.
+    est_cost_usd: float = 0.0
+
+    @property
+    def cost_bps(self) -> float:
+        """Coût de transaction en bps du notionnel — comparable au seuil de matérialité."""
+        return (self.est_cost_usd / self.est_notional * 10_000.0) if self.est_notional > 0 else 0.0
 
 
 def plan_from_signal(
@@ -54,6 +103,7 @@ def plan_from_signal(
                 delta_qty=0.0,
                 est_notional=0.0,
                 reason="Already flat",
+                confidence=float(signal.confidence),
             )
         return OrderPlan(
             symbol=signal.symbol,
@@ -65,6 +115,8 @@ def plan_from_signal(
             delta_qty=delta,
             est_notional=abs(delta) * float(last_price),
             reason=signal.reason,
+            confidence=float(signal.confidence),
+            est_cost_usd=_compute_tx_cost(delta, last_price),
         )
 
     if signal.action == "HOLD" or signal.target_weight <= 0:
@@ -78,6 +130,7 @@ def plan_from_signal(
             delta_qty=0.0,
             est_notional=0.0,
             reason=signal.reason,
+            confidence=float(signal.confidence),
         )
 
     target_dollars = (net_liquidation * max_leverage) * float(signal.target_weight)
@@ -99,6 +152,7 @@ def plan_from_signal(
             delta_qty=0.0,
             est_notional=0.0,
             reason="Already at target",
+            confidence=float(signal.confidence),
         )
 
     action = "BUY" if delta > 0 else "SELL"
@@ -114,6 +168,8 @@ def plan_from_signal(
         delta_qty=float(delta),
         est_notional=float(est_notional),
         reason=signal.reason,
+        confidence=float(signal.confidence),
+        est_cost_usd=_compute_tx_cost(delta, last_price),
     )
 
 
@@ -146,6 +202,7 @@ def cta_plan_from_signal(
             last_price=px, current_qty=cq, target_qty=cq,
             delta_qty=0.0, est_notional=0.0,
             reason=signal.reason, strategy=_STRATEGY_CTA,
+            confidence=float(signal.confidence),
         )
 
     if px <= 0:
@@ -156,6 +213,7 @@ def cta_plan_from_signal(
             current_qty=cq, target_qty=cq,
             delta_qty=0.0, est_notional=0.0,
             reason="price=0 — impossible de sizer", strategy=_STRATEGY_CTA,
+            confidence=float(signal.confidence),
         )
 
     # ── Qty cible signée (positive=long, négative=short) ──────────────────────
@@ -170,6 +228,7 @@ def cta_plan_from_signal(
             last_price=px, current_qty=cq, target_qty=target_qty,
             delta_qty=0.0, est_notional=0.0,
             reason="Already at target", strategy=_STRATEGY_CTA,
+            confidence=float(signal.confidence),
         )
 
     action = "BUY" if delta > 0 else "SELL"
@@ -185,6 +244,8 @@ def cta_plan_from_signal(
         est_notional=abs(float(delta)) * px,
         reason=signal.reason,
         strategy=_STRATEGY_CTA,
+        confidence=float(signal.confidence),
+        est_cost_usd=_compute_tx_cost(delta, px),
     )
 
 
@@ -284,6 +345,8 @@ def pairs_plans_from_signal(
             est_notional=float(long_qty * long_px),
             reason=signal.reason,
             strategy="market_neutral",
+            confidence=float(signal.confidence),
+            est_cost_usd=_compute_tx_cost(long_qty, long_px),
         )
         # Short leg: SELL with delta_qty < 0, current_qty may be 0 (opening fresh short).
         # The IBKR executor must NOT clip qty to current_qty for market_neutral SELL —
@@ -299,6 +362,8 @@ def pairs_plans_from_signal(
             est_notional=float(short_qty * short_px),
             reason=short_reason,
             strategy="market_neutral",
+            confidence=float(signal.confidence),
+            est_cost_usd=_compute_tx_cost(short_qty, short_px),
         )
         return [long_plan, short_plan]
 
@@ -337,6 +402,8 @@ def pairs_plans_from_signal(
                 est_notional=long_current * float(long_px),
                 reason=signal.reason,
                 strategy="market_neutral",
+                confidence=float(signal.confidence),
+                est_cost_usd=_compute_tx_cost(long_current, long_px),
             ))
 
         # Cover short leg: BUY to cover (short_current < 0 when short)
@@ -353,6 +420,8 @@ def pairs_plans_from_signal(
                 est_notional=cover_qty * float(short_px),
                 reason=f"{signal.reason} [cover short]",
                 strategy="market_neutral",
+                confidence=float(signal.confidence),
+                est_cost_usd=_compute_tx_cost(cover_qty, short_px),
             ))
 
         return plans
