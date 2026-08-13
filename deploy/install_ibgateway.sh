@@ -30,8 +30,22 @@ warn() { printf '\033[1;33m  ! %s\033[0m\n' "$*"; }
 
 [[ $EUID -eq 0 ]] || { echo "À lancer en root." >&2; exit 1; }
 
+# Emplacement exigé par IBC. Lu dans son propre code (scripts/ibcstart.sh) :
+#
+#     gateway_program_path="${tws_path}/ibgateway/${tws_version}"
+#
+# soit $TWS_PATH/ibgateway/<version sans point>/jars. L'installateur autonome,
+# lui, produit une arborescence PLATE dans ~/ibgateway, sans dossier de
+# version — la version n'apparaît que dans le nom du raccourci « IB Gateway
+# 10.45.desktop ». Les deux conventions ne coïncident pas, et IBC s'arrête
+# alors sur « can't find jars folder ».
+#
+# On installe donc dans un emplacement provisoire, on lit la version dans le
+# nom du raccourci, puis on range à l'endroit attendu. La version n'est
+# connaissable qu'après l'installation : c'est pour ça que l'ordre est
+# installer → détecter → déplacer, et pas l'inverse.
 log "IB Gateway"
-if [[ -d "$GW_DIR" ]]; then
+if compgen -G "$GW_DIR/ibgateway/*/jars" >/dev/null; then
   ok "déjà installé"
 else
   # Dossier temporaire créé PAR milan : `mktemp -d` lancé en root produit un
@@ -44,12 +58,29 @@ else
     https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh
   chown "$APP_USER:$APP_USER" "$TMP/gw.sh"
   chmod +x "$TMP/gw.sh"
-  # -q seulement, PAS -dir. Forcer le répertoire installait tout à plat dans
-  # ~/Jts, alors qu'IBC attend l'arborescence versionnée ~/Jts/ibgateway/<ver>
-  # qu'il produit par défaut — et sans elle, il ne trouve pas quoi lancer.
-  sudo -u "$APP_USER" HOME="$HOME_DIR" "$TMP/gw.sh" -q
+
+  STAGING="$HOME_DIR/.gw-staging"
+  rm -rf "$STAGING"
+  sudo -u "$APP_USER" HOME="$HOME_DIR" "$TMP/gw.sh" -q -dir "$STAGING"
   rm -rf "$TMP"
-  ok "installé dans $GW_DIR"
+
+  # « IB Gateway 10.45.desktop » → 10.45 → 1045, la forme attendue par IBC
+  # (son propre exemple utilise 1019).
+  DESKTOP=$(find "$STAGING" -maxdepth 1 -name 'IB Gateway *.desktop' | head -1)
+  DOTTED=$(basename "$DESKTOP" .desktop | sed -E 's/^IB Gateway //')
+  if [[ -z "$DOTTED" ]]; then
+    echo "Version illisible : aucun raccourci 'IB Gateway *.desktop' dans $STAGING" >&2
+    ls -la "$STAGING" >&2
+    exit 1
+  fi
+  VER="${DOTTED//./}"
+
+  TARGET="$GW_DIR/ibgateway/$VER"
+  sudo -u "$APP_USER" mkdir -p "$GW_DIR/ibgateway"
+  rm -rf "$TARGET"
+  mv "$STAGING" "$TARGET"
+  chown -R "$APP_USER:$APP_USER" "$GW_DIR"
+  ok "installé — version $DOTTED dans $TARGET"
 fi
 
 log "IBC $IBC_VERSION"
@@ -139,19 +170,17 @@ log "Service systemd"
 # dur serait faux dès la prochaine mise à jour d'IBKR, et l'échec serait
 # obscur : IBC démarrerait puis ne trouverait rien. On lit donc la version
 # réellement installée.
-GW_VERSION=$(find "$GW_DIR/ibgateway" -maxdepth 1 -mindepth 1 -type d \
-             -printf '%f\n' 2>/dev/null | sort -V | tail -1)
-if [[ -z "$GW_VERSION" ]]; then
-  echo "Version du Gateway introuvable sous $GW_DIR/ibgateway." >&2
-  echo "Contenu de $GW_DIR :" >&2
-  ls -la "$GW_DIR" >&2 || true
-  echo "L'installation a-t-elle abouti ? Si le Gateway est installé à plat," >&2
-  echo "supprime $GW_DIR et relance ce script." >&2
+# Le dossier de version EST la valeur attendue par IBC : c'est ainsi qu'il
+# reconstruit le chemin du programme.
+IBC_MAJOR=$(find "$GW_DIR/ibgateway" -maxdepth 1 -mindepth 1 -type d \
+            -printf '%f\n' 2>/dev/null | sort -V | tail -1)
+if [[ -z "$IBC_MAJOR" || ! -d "$GW_DIR/ibgateway/$IBC_MAJOR/jars" ]]; then
+  echo "Installation incomplète : $GW_DIR/ibgateway/<version>/jars introuvable." >&2
+  find "$GW_DIR" -maxdepth 3 2>/dev/null | head -30 >&2
+  echo "Supprime $GW_DIR et relance ce script." >&2
   exit 1
 fi
-# IBC attend la version majeure sans point : 10.45 → 1045.
-IBC_MAJOR="${GW_VERSION//./}"
-ok "version détectée : $GW_VERSION (IBC : $IBC_MAJOR)"
+ok "version détectée : $IBC_MAJOR (jars présents)"
 
 cat > /etc/systemd/system/ibgateway.service <<EOF
 [Unit]
