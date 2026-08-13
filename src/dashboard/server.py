@@ -356,6 +356,38 @@ async def ask_assistant(request: Request, user: str = Depends(require_auth)):
 
 
 # ── Data routes ───────────────────────────────────────────────────────────────
+# Au-delà de ce délai, les données affichées ne décrivent plus le marché
+# d'aujourd'hui. Deux séances de bourse de marge : un week-end ou un jour férié
+# ne doit pas déclencher l'alerte, trois jours de silence si.
+FRESH_MAX_HOURS = 72.0
+
+
+def _last_run_info() -> dict:
+    """
+    Âge réel des données affichées.
+
+    Le badge « LIVE » du bandeau était une constante écrite en dur dans le HTML :
+    il s'affichait vert quoi qu'il arrive. Le 13/08/2026, le dashboard annonçait
+    LIVE avec des décisions du 23/07 — trois semaines de retard, invisibles.
+    C'est le pire mode de défaillance d'un écran de pilotage : il n'affiche pas
+    une erreur, il affiche une santé.
+    """
+    raw = _read_text("logs/decisions.csv")
+    if not raw:
+        return {"timestamp": None, "age_hours": None, "is_fresh": False}
+    try:
+        df = pd.read_csv(io.StringIO(raw))
+        ts = pd.to_datetime(df["timestamp"], format="mixed", utc=True).max()
+        age = (pd.Timestamp.now(tz="UTC") - ts).total_seconds() / 3600.0
+        return {
+            "timestamp": ts.isoformat(),
+            "age_hours": round(age, 1),
+            "is_fresh": bool(age <= FRESH_MAX_HOURS),
+        }
+    except Exception:
+        return {"timestamp": None, "age_hours": None, "is_fresh": False}
+
+
 @app.get("/api/status")
 def get_status(user: str = Depends(require_auth)):
     cb: dict = {}
@@ -363,7 +395,13 @@ def get_status(user: str = Depends(require_auth)):
     if raw:
         cb = json.loads(raw)
     running = [jid for jid, j in JOBS.items() if j.get("status") == "running"]
-    return {"circuit_breaker": cb, "running_jobs": running, "cloud": IS_CLOUD}
+    return {
+        "circuit_breaker": cb,
+        "running_jobs": running,
+        "cloud": IS_CLOUD,
+        "last_run": _last_run_info(),
+        "fresh_max_hours": FRESH_MAX_HOURS,
+    }
 
 
 @app.get("/api/signals")
@@ -398,19 +436,40 @@ def get_signals(user: str = Depends(require_auth)):
 
 @app.get("/api/performance")
 def get_performance(user: str = Depends(require_auth)):
-    # Try legacy portfolio_by_symbol.csv first (backtest output)
+    """
+    Classement des agents, **avec l'origine des chiffres**.
+
+    L'endpoint renvoyait une liste nue, sans dire si elle venait d'un backtest
+    ou de trades réels. L'écran affichait donc « Buffett +196.28 % » sous une
+    pastille LIVE, alors que le chiffre sort de `portfolio_by_symbol.csv`,
+    un résultat de simulation — le commentaire du code le disait déjà, mais
+    l'information s'arrêtait là et n'atteignait jamais l'utilisateur.
+
+    Un rendement simulé et un rendement réalisé ne se lisent pas de la même
+    façon : le premier est une borne haute obtenue en connaissant la période,
+    le second est ce qui est arrivé. Les afficher sans distinction est la
+    manière la plus simple de se mentir à soi-même — et de perdre toute
+    crédibilité le jour où quelqu'un demande d'où sort le chiffre.
+
+    La réponse porte désormais `source` : "backtest" ou "live".
+    """
     raw = _read_text("logs/portfolio_by_symbol.csv")
     if raw:
         try:
-            return _df_json(pd.read_csv(io.StringIO(raw)).sort_values("ret", ascending=False))
+            df = pd.read_csv(io.StringIO(raw)).sort_values("ret", ascending=False)
+            return JSONResponse(content={
+                "source": "backtest",
+                "origin": "logs/portfolio_by_symbol.csv",
+                "rows": json.loads(df.to_json(orient="records")),
+            })
         except Exception:
             pass
-    # Fall back to live agent metrics
+
     try:
         from src.risk.live_scorer import LiveScorer
         metrics = LiveScorer().compute_agent_metrics()
         if not metrics:
-            return JSONResponse(content=[])
+            return JSONResponse(content={"source": "live", "origin": "", "rows": []})
         rows = [
             {
                 "sym":    "ALL",
@@ -421,9 +480,13 @@ def get_performance(user: str = Depends(require_auth)):
             }
             for m in sorted(metrics.values(), key=lambda x: x.sharpe, reverse=True)
         ]
-        return JSONResponse(content=rows)
+        return JSONResponse(content={
+            "source": "live",
+            "origin": "logs/executions.csv (round-trips réels)",
+            "rows": rows,
+        })
     except Exception:
-        return JSONResponse(content=[])
+        return JSONResponse(content={"source": "live", "origin": "", "rows": []})
 
 
 @app.get("/api/portfolio-summary")
@@ -740,8 +803,16 @@ def get_cta_signals(user: str = Depends(require_auth)):
         })
 
 
+# La collecte interroge une vingtaine de tickers en série sur le réseau. Sans
+# borne, la requête du navigateur restait en attente indéfiniment : le bandeau
+# « Chargement des actualités… » de la page d'accueil ne se résolvait jamais.
+# Un écran de pilotage doit toujours rendre la main — quitte à dire qu'il n'a
+# pas l'information.
+NEWS_FETCH_TIMEOUT_SECONDS = 12.0
+
+
 @app.get("/api/news-today")
-def get_news_today(user: str = Depends(require_auth)):
+async def get_news_today(user: str = Depends(require_auth)):
     """Scored top-5 news for today. At most 3 server-side Finnhub fetches per calendar day."""
     import time as _time
     from datetime import date, timezone
@@ -791,8 +862,27 @@ def get_news_today(user: str = Depends(require_auth)):
 
         collector = NewsCollector()
         selector  = NewsSelector()
-        items     = collector.fetch_all(all_tickers, days_back=1)
-        top       = selector.select_daily(items, portfolio=portfolio, watchlist=WATCHLIST)
+
+        # Borne dure sur la collecte réseau. Au-delà, on rend la main avec le
+        # cache s'il existe, sinon un état vide explicite — jamais une attente
+        # sans fin. Le thread sous-jacent peut continuer et remplira le cache
+        # pour la prochaine requête.
+        try:
+            items = await asyncio.wait_for(
+                asyncio.to_thread(collector.fetch_all, all_tickers, 1),
+                timeout=NEWS_FETCH_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            if cached_data and cached_data.get("items") is not None:
+                payload = {k: v for k, v in cached_data.items() if k != "_ts"}
+                payload["stale"] = True
+                return JSONResponse(content=payload)
+            return JSONResponse(content={
+                "date": today_str, "items": [], "timeout": True,
+                "error": f"collecte au-delà de {NEWS_FETCH_TIMEOUT_SECONDS:.0f}s",
+            })
+
+        top = selector.select_daily(items, portfolio=portfolio, watchlist=WATCHLIST)
 
         cat_label = {"earnings": "Earnings", "ma": "M&A", "guidance": "Guidance",
                      "analyst": "Analyst",   "general": "News"}

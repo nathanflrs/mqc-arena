@@ -151,6 +151,12 @@ html,body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size
   100%{box-shadow:0 0 0 0 rgba(22,199,132,0)}
 }
 .live-label{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.18em;color:var(--green);white-space:nowrap}
+/* Données périmées : le point cesse de pulser (une pulsation suggère une
+   activité en cours) et l'ensemble passe en ambre. */
+.live-badge.stale .live-dot{background:var(--amber);animation:none;box-shadow:none}
+.live-badge.stale .live-label{color:var(--amber)}
+.live-badge.unknown .live-dot{background:var(--t3);animation:none;box-shadow:none}
+.live-badge.unknown .live-label{color:var(--t3)}
 .regime-chip{
   font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.07em;
   padding:3px 8px;border-radius:3px;border:1px solid;
@@ -330,6 +336,19 @@ html,body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size
 /* ── Chart ── */
 .chart-card{padding:16px 18px;margin-bottom:10px}
 .chart-wrap{height:210px;position:relative;margin-top:12px}
+
+/* ── Origine des chiffres de performance ── */
+.perf-origin{
+  font-family:var(--mono);font-size:9.5px;line-height:1.6;letter-spacing:.04em;
+  padding:8px 10px;border-radius:4px;border:1px solid;margin-top:12px;
+}
+.perf-origin.sim{background:var(--amber-d);color:var(--amber);border-color:var(--amber-b)}
+.perf-origin.live{background:var(--green-d);color:var(--green);border-color:var(--green-b)}
+.perf-origin-src{display:block;opacity:.65;margin-top:3px;font-size:9px}
+.lb-sym{
+  font-family:var(--mono);font-size:9px;letter-spacing:.08em;color:var(--t3);
+  border:1px solid var(--border);border-radius:3px;padding:1px 5px;margin-right:7px;
+}
 
 /* ── Agent leaderboard ── */
 .leaderboard{display:flex;flex-direction:column;gap:12px;margin-top:12px}
@@ -711,9 +730,13 @@ tr:hover td{background:var(--s2)}
 
     <!-- Center: LIVE pulse · regime · NAV (NAV hidden on mobile) -->
     <div class="cmd-center">
-      <div class="live-badge">
-        <span class="live-dot"></span>
-        <span class="live-label">LIVE</span>
+      <!-- Renseigné par applyFreshness(). Volontairement neutre au chargement :
+           afficher LIVE avant d'avoir vérifié l'âge des données reproduirait le
+           défaut qu'on corrige — un badge vert écrit en dur, allumé même sur des
+           décisions vieilles de trois semaines. -->
+      <div class="live-badge" id="live-badge" title="État des données">
+        <span class="live-dot" id="live-dot"></span>
+        <span class="live-label" id="live-label">—</span>
       </div>
       <div class="regime-chip choppy" id="regime-chip">—</div>
       <span id="cmd-nav" class="cmd-nav-val">—</span>
@@ -1297,10 +1320,47 @@ async function detectMode() {
 }
 
 // ── Overview: Status ───────────────────────────────────────────────────────────
+// Traduit l'âge des données en état visible. Sans ça, le bandeau affichait
+// LIVE en vert sur des décisions du 23/07 consultées le 13/08 : l'écran ne
+// signalait pas une panne, il affichait une bonne santé.
+function applyFreshness(lastRun, maxHours) {
+  const badge = document.getElementById('live-badge');
+  const label = document.getElementById('live-label');
+  const pill  = document.getElementById('status-pill-ov');
+  const text  = document.getElementById('status-text-ov');
+  if (!badge || !label) return;
+
+  const age = lastRun?.age_hours;
+
+  if (age === null || age === undefined) {
+    badge.className = 'live-badge unknown';
+    label.textContent = 'AUCUNE DONNÉE';
+    badge.title = "Aucun run trouvé dans logs/decisions.csv";
+    if (text) { text.textContent = 'INCONNU'; pill.className = 'status-ind'; }
+    return;
+  }
+
+  const days = Math.floor(age / 24);
+  const human = age < 24 ? `${Math.round(age)} h` : `${days} j`;
+
+  if (lastRun.is_fresh) {
+    badge.className = 'live-badge';
+    label.textContent = 'LIVE';
+    badge.title = `Dernier run il y a ${human}`;
+    if (text) { text.textContent = 'ACTIVE'; pill.className = 'status-ind active'; }
+  } else {
+    badge.className = 'live-badge stale';
+    label.textContent = `DONNÉES · ${human}`;
+    badge.title = `Dernier run il y a ${human} (seuil ${maxHours} h) — ces chiffres ne décrivent pas le marché d'aujourd'hui`;
+    if (text) { text.textContent = 'PÉRIMÉ'; pill.className = 'status-ind'; }
+  }
+}
+
 async function loadStatus() {
   try {
     const data = await fetch('/api/status').then(r=>r.json());
     const cb   = data.circuit_breaker || {};
+    applyFreshness(data.last_run, data.fresh_max_hours);
 
     if (cb.peak_netliq) {
       const navStr = '$' + Math.round(cb.peak_netliq).toLocaleString('en-US');
@@ -1368,7 +1428,8 @@ async function loadReturnHero() {
 // ── Overview: Best Sharpe hero ─────────────────────────────────────────────────
 async function loadBestSharpeHero() {
   try {
-    const rows = await fetch('/api/performance').then(r=>r.json());
+    const perf = await fetch('/api/performance').then(r=>r.json());
+    const rows = perf.rows || [];
     const el   = document.getElementById('hero-sharpe');
     const sub  = document.getElementById('hero-sharpe-sub');
     if (!el || !rows.length) return;
@@ -1376,7 +1437,11 @@ async function loadBestSharpeHero() {
     const sharpe = Number(best.sharpe) || 0;
     const str    = sharpe.toFixed(2);
     countUp(el, str, sharpe, 'hc-value '+(sharpe>=1?'pos':sharpe>=0?'':'neg'));
-    if (sub) sub.textContent = (best.agent||'').replace('Agent','');
+    // Le nom de l'agent seul laissait croire à une performance réalisée.
+    if (sub) {
+      const name = (best.agent||'').replace('Agent','');
+      sub.textContent = perf.source === 'backtest' ? `${name} · simulé` : name;
+    }
   } catch(_) {}
 }
 
@@ -1540,18 +1605,36 @@ async function loadPortfolioSummary() {
 // ── Performance: Agent leaderboard ────────────────────────────────────────────
 async function loadPerformance() {
   try {
-    const rows = await fetch('/api/performance').then(r=>r.json());
+    const perf = await fetch('/api/performance').then(r=>r.json());
+    const rows = perf.rows || [];
     const box  = document.getElementById('perf-agents-body');
     if (!rows.length) { box.innerHTML='<div class="empty" style="padding:16px 0">Aucune métrique</div>'; return; }
     const maxSharpe = Math.max(...rows.map(r=>Math.abs(Number(r.sharpe)||0)), 0.01);
-    box.innerHTML = `<div class="leaderboard">${rows.map(row => {
+
+    // Bandeau d'origine. Un rendement simulé et un rendement réalisé ne se
+    // lisent pas de la même façon : le premier est une borne haute obtenue en
+    // connaissant déjà la période, le second est ce qui est arrivé. Les
+    // afficher sans distinction sous une pastille LIVE — « Buffett +196 % » —
+    // était la pire affirmation de tout le dashboard.
+    const isBacktest = perf.source === 'backtest';
+    const banner = isBacktest
+      ? `<div class="perf-origin sim">SIMULÉ — résultats de backtest, pas des trades réels.
+           Les paramètres ont été choisis en connaissant cette période : à lire comme une borne haute.
+           <span class="perf-origin-src">${perf.origin||''}</span></div>`
+      : `<div class="perf-origin live">RÉALISÉ — aller-retours effectivement exécutés.
+           <span class="perf-origin-src">${perf.origin||''}</span></div>`;
+
+    box.innerHTML = banner + `<div class="leaderboard">${rows.map(row => {
       const ret    = Number(row.ret)||0;
       const sharpe = Number(row.sharpe)||0;
       const barW   = Math.min(100,(Math.abs(sharpe)/maxSharpe)*100).toFixed(1);
       const agent  = (row.agent||'').replace('Agent','');
+      // Une ligne par couple (symbole, agent) : sans le symbole, « Buffett »
+      // apparaissait sept fois d'affilée et se lisait comme des doublons.
+      const sym = row.sym && row.sym !== 'ALL' ? row.sym : '';
       return `<div class="lb-row">
         <div class="lb-header">
-          <span class="lb-name">${agent}</span>
+          <span class="lb-name">${sym ? `<span class="lb-sym">${sym}</span>` : ''}${agent}</span>
           <div class="lb-meta">
             <span class="lb-ret ${ret>=0?'pos':'neg'}">${(ret>=0?'+':'')+(ret*100).toFixed(2)}%</span>
             <span class="lb-sharpe">SR ${sharpe.toFixed(3)}</span>
