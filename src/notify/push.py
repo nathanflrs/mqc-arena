@@ -82,7 +82,17 @@ def get_or_create_keys(path: Path = KEYS_PATH) -> Dict[str, str]:
         try:
             d = json.loads(path.read_text())
             if d.get("public_key") and d.get("private_key"):
-                return d
+                # Les clés écrites avant le correctif du 2026-08-13 sont au
+                # format PEM, que pywebpush refuse. On les régénère — les
+                # abonnements existants deviennent caducs et les appareils
+                # doivent se réinscrire, mais ils ne recevaient rien de toute
+                # façon.
+                if d["private_key"].lstrip().startswith("-----BEGIN"):
+                    logger.warning(
+                        "clé VAPID au format PEM (obsolète) — régénération. "
+                        "Les appareils déjà inscrits doivent se réabonner.")
+                else:
+                    return d
         except Exception:
             logger.warning("clés VAPID illisibles, régénération : %s", path)
 
@@ -93,11 +103,16 @@ def get_or_create_keys(path: Path = KEYS_PATH) -> Dict[str, str]:
     v = Vapid02()
     v.generate_keys()
 
-    priv = v.private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    ).decode()
+    # Clé privée au format BRUT encodé en base64url, pas en PEM.
+    #
+    # pywebpush appelle `Vapid.from_string()` dès que la valeur n'est pas un
+    # chemin de fichier existant. Un PEM multi-ligne passé comme chaîne échoue
+    # sur « Could not deserialize key data » — constaté au premier run réel du
+    # 2026-08-13 : la séance s'est terminée normalement, mais la notification
+    # n'est jamais partie.
+    priv = base64.urlsafe_b64encode(
+        v.private_key.private_numbers().private_value.to_bytes(32, "big")
+    ).decode().rstrip("=")
 
     raw_pub = v.public_key.public_bytes(
         encoding=serialization.Encoding.X962,

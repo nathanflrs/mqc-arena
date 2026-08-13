@@ -61,10 +61,43 @@ class TestVapidKeys:
         keys_path.write_text("{ pas du json")
         assert P.get_or_create_keys(keys_path)["public_key"]
 
-    def test_private_key_never_leaves_through_public_key(self, keys_path):
+    def test_public_key_does_not_contain_the_private_one(self, keys_path):
+        """
+        `public_key()` est la seule valeur transmise au navigateur. Elle ne doit
+        rien laisser filtrer de la clé privée, qui signe les notifications.
+        """
         k = P.get_or_create_keys(keys_path)
-        assert "PRIVATE" in k["private_key"]
-        assert "PRIVATE" not in P.public_key(keys_path)
+        pub = P.public_key(keys_path)
+        assert k["private_key"] not in pub
+        assert pub == k["public_key"]
+        # 32 octets encodés en base64url sans remplissage.
+        assert len(k["private_key"]) == 43
+
+
+    def test_private_key_is_loadable_by_pywebpush(self, keys_path):
+        """
+        Régression du 2026-08-13. La clé était écrite en PEM ; pywebpush appelle
+        `Vapid.from_string()` dès que la valeur n'est pas un chemin de fichier,
+        et un PEM multi-ligne y échoue sur « Could not deserialize key data ».
+        Le premier run réel s'est terminé normalement, mais la notification
+        n'est jamais partie — l'échec n'apparaissait que dans les journaux.
+        """
+        from py_vapid import Vapid02 as Vapid
+        k = P.get_or_create_keys(keys_path)
+        assert not k["private_key"].startswith("-----BEGIN"), \
+            "le PEM n'est pas accepté par pywebpush"
+        Vapid.from_string(private_key=k["private_key"])   # ne doit pas lever
+
+    def test_legacy_pem_key_is_migrated(self, keys_path):
+        """Une clé PEM déjà écrite doit être remplacée, pas conservée."""
+        import json
+        keys_path.write_text(json.dumps({
+            "public_key": "ancienne",
+            "private_key": "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
+        }))
+        k = P.get_or_create_keys(keys_path)
+        assert not k["private_key"].startswith("-----BEGIN")
+        assert k["public_key"] != "ancienne"
 
 
 # ── Abonnements ──────────────────────────────────────────────────────────────
@@ -191,3 +224,4 @@ class TestSending:
         P.notify_run_complete(0, 12, 1_000_000, "bear", False)
         assert "aucun ordre" in captured["title"].lower()
         assert "12" in captured["body"]
+
