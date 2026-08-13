@@ -941,7 +941,7 @@ tr:hover td{background:var(--s2)}
           <!-- Equity chart -->
           <div class="card chart-card card-enter mb-10" style="--i:3">
             <div class="card-head">
-              <span class="card-title">Equity curve vs SPY</span>
+              <span class="card-title">Capital — compte réel</span>
             </div>
             <div class="chart-wrap"><canvas id="perfChart"></canvas></div>
           </div>
@@ -1529,84 +1529,100 @@ function _renderSignals(rows) {
   }).join('');
 }
 
-// ── Performance: Portfolio summary ─────────────────────────────────────────────
+// ── Performance : capital réel, jour après jour ───────────────────────────────
+//
+// Le graphique lisait /api/portfolio-summary, qui répond `available:false` :
+// il restait donc vide en permanence, tout comme les cartes PORTEFEUILLE,
+// SPY B&H et ALPHA affichant « n/a ». Il lit désormais /api/equity, c'est-à-dire
+// le NetLiquidation relevé chez le courtier à chaque run.
+//
+// La courbe commence à un point et s'allonge d'une séance par jour. Un seul
+// relevé n'est pas une panne : c'est l'état normal d'un fonds au premier jour,
+// et l'écran doit le dire plutôt que de laisser une zone vide inexpliquée.
 let perfChart = null;
 async function loadPortfolioSummary() {
   try {
-    const data = await fetch('/api/portfolio-summary').then(r=>r.json());
-    // Also update hero return
-    const heroEl = document.getElementById('hero-return');
-    if (heroEl && data.available) {
-      const r   = data.portfolio_return;
-      const str = (r>=0?'+':'')+(r*100).toFixed(2)+'%';
-      countUp(heroEl, str, r*100, 'hc-value '+(r>=0?'pos':'neg'));
-    }
-    if (!data.available) {
-      ['perf-portfolio','perf-spy','perf-alpha'].forEach(id => { document.getElementById(id).textContent='n/a'; });
+    const eq     = await fetch('/api/equity').then(r => r.json());
+    const curve  = eq.value || [];
+    const box    = document.getElementById('perfChart')?.parentElement;
+    const setTxt = (id, v, cls) => {
+      const e = document.getElementById(id);
+      if (e) { e.textContent = v; if (cls) e.className = cls; }
+    };
+
+    if (curve.length < 2) {
+      const n = curve.length;
+      ['perf-portfolio','perf-spy','perf-alpha'].forEach(id => setTxt(id, '—'));
+      setTxt('hero-return', '—');
+      if (box) {
+        const msg = box.querySelector('.equity-empty') || (() => {
+          const d = document.createElement('div');
+          d.className = 'equity-empty';
+          d.style.cssText = 'padding:28px 4px;text-align:center;font-family:var(--mono);font-size:10px;line-height:1.9;color:var(--t3)';
+          box.appendChild(d);
+          return d;
+        })();
+        msg.innerHTML = n === 0
+          ? "Aucun relevé de capital.<br>La courbe démarrera au premier run."
+          : `${n} séance enregistrée — il en faut deux pour tracer une évolution.<br>`
+            + `Capital au ${curve[0].date} : $${Math.round(curve[0].netliq).toLocaleString('en-US')}`;
+      }
       return;
     }
-    const fmt   = v => (v>=0?'+':'')+(v*100).toFixed(2)+'%';
-    const setEl = (id, v) => {
-      const e = document.getElementById(id);
-      if (!e) return;
-      countUp(e, fmt(v), v*100, 'pk-value '+(v>=0?'pos':'neg'));
-    };
-    setEl('perf-portfolio', data.portfolio_return);
-    setEl('perf-spy',       data.spy_return);
-    setEl('perf-alpha',     data.alpha);
-    const curve = data.equity_curve||[];
-    if (!curve.length) return;
-    const labels = curve.map(d=>d.date);
-    const portEq = curve.map(d=>d.portfolio);
-    const spyEq  = curve.map(d=>d.spy??null);
-    const ctx    = document.getElementById('perfChart').getContext('2d');
+
+    box?.querySelector('.equity-empty')?.remove();
+
+    const labels = curve.map(d => d.date);
+    const values = curve.map(d => d.netliq);
+    const ret    = values[values.length - 1] / values[0] - 1;
+    const fmt    = v => (v >= 0 ? '+' : '') + (v * 100).toFixed(2) + '%';
+    setTxt('perf-portfolio', fmt(ret), 'pk-value ' + (ret >= 0 ? 'pos' : 'neg'));
+    // Pas de comparaison au SPY tant qu'on ne l'enregistre pas aux mêmes dates :
+    // inventer un point de repère serait retomber dans le défaut qu'on corrige.
+    setTxt('perf-spy', '—');
+    setTxt('perf-alpha', '—');
+    const heroEl = document.getElementById('hero-return');
+    if (heroEl) countUp(heroEl, fmt(ret), ret * 100, 'hc-value ' + (ret >= 0 ? 'pos' : 'neg'));
+
+    const ctx = document.getElementById('perfChart').getContext('2d');
     if (perfChart) perfChart.destroy();
     Chart.defaults.color = '#515b6b';
     perfChart = new Chart(ctx, {
-      type:'line',
-      data:{
+      type: 'line',
+      data: {
         labels,
-        datasets:[
-          {
-            label:'Milan Capital',
-            data:portEq,
-            borderColor:'#4f86f7',
-            backgroundColor: c => {
-              const g = c.chart.ctx.createLinearGradient(0,0,0,210);
-              g.addColorStop(0,'rgba(79,134,247,0.18)');
-              g.addColorStop(1,'rgba(79,134,247,0)');
-              return g;
-            },
-            borderWidth:1.8,pointRadius:0,fill:true,tension:0.35,
+        datasets: [{
+          label: 'Capital (compte réel)',
+          data: values,
+          borderColor: '#4f86f7',
+          backgroundColor: c => {
+            const g = c.chart.ctx.createLinearGradient(0, 0, 0, 210);
+            g.addColorStop(0, 'rgba(79,134,247,0.18)');
+            g.addColorStop(1, 'rgba(79,134,247,0)');
+            return g;
           },
-          {
-            label:'SPY B&H',
-            data:spyEq,
-            borderColor:'#2a3347',
-            backgroundColor:'transparent',
-            borderWidth:1.2,pointRadius:0,borderDash:[4,4],tension:0.35,
-          },
-        ],
+          borderWidth: 1.8, pointRadius: curve.length < 20 ? 2.5 : 0,
+          fill: true, tension: 0.25,
+        }],
       },
-      options:{
-        responsive:true,maintainAspectRatio:false,
-        animation:{duration:700,easing:'easeOutQuart'},
-        plugins:{
-          legend:{labels:{color:'#515b6b',font:{family:"'IBM Plex Mono'",size:9},boxWidth:12,boxHeight:1,padding:16}},
-          tooltip:{
-            backgroundColor:'#0a1020',borderColor:'rgba(79,134,247,0.20)',borderWidth:1,
-            titleColor:'#e8ebef',bodyColor:'#8a94a6',padding:10,cornerRadius:4,
-            callbacks:{label: c => ` ${c.raw!=null?c.raw.toFixed(2):'—'}`},
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#0a1020', borderColor: 'rgba(79,134,247,0.20)', borderWidth: 1,
+            titleColor: '#e8ebef', bodyColor: '#8a94a6', padding: 10, cornerRadius: 4,
+            callbacks: { label: c => ' $' + Math.round(c.raw).toLocaleString('en-US') },
           },
         },
-        scales:{
-          x:{grid:{color:'rgba(255,255,255,0.03)'},ticks:{color:'#515b6b',font:{size:8},maxTicksLimit:5},border:{color:'rgba(255,255,255,0.04)'}},
-          y:{grid:{color:'rgba(255,255,255,0.03)'},ticks:{color:'#515b6b',font:{size:8},callback:v=>v.toFixed(0)},border:{color:'rgba(255,255,255,0.04)'}},
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#515b6b', font: { size: 8 }, maxTicksLimit: 6 }, border: { color: 'rgba(255,255,255,0.04)' } },
+          y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#515b6b', font: { size: 8 }, callback: v => '$' + (v / 1000).toFixed(0) + 'k' }, border: { color: 'rgba(255,255,255,0.04)' } },
         },
-        interaction:{mode:'index',intersect:false},
+        interaction: { mode: 'index', intersect: false },
       },
     });
-  } catch(e) { console.warn('Portfolio summary:',e); }
+  } catch (e) { console.warn('Equity curve:', e); }
 }
 
 // ── Performance: Agent leaderboard ────────────────────────────────────────────
