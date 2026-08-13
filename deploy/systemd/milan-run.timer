@@ -1,0 +1,31 @@
+[Unit]
+Description=Milan Capital — déclenche le run quotidien
+
+[Timer]
+# 09:35 à New York, du lundi au vendredi : cinq minutes après l'ouverture, le
+# temps que les prix d'ouverture se stabilisent.
+#
+# La zone est indiquée explicitement plutôt que convertie en UTC. Écrire
+# « 13:35 UTC » serait juste six mois par an : les États-Unis changent d'heure
+# à des dates différentes de l'Europe, et le fonds se déclencherait une heure
+# après l'ouverture pendant les périodes de décalage — sans que rien ne le
+# signale, puisque le run réussirait quand même.
+#
+# systemd gère la zone lui-même, y compris ses changements. La machine reste
+# en UTC (voir bootstrap.sh).
+OnCalendar=Mon-Fri 09:35 America/New_York
+
+# Rattrape un déclenchement manqué si la machine était éteinte ou redémarrait.
+Persistent=true
+
+# Désynchronise les démarrages simultanés de quelques secondes. Sans effet ici,
+# mais évite de taper les serveurs de données à la seconde ronde.
+RandomizedDelaySec=30
+
+# Note : les jours fériés boursiers ne sont pas exclus. Le run s'exécutera, ne
+# trouvera pas de données du jour, et produira au pire des ordres qui ne se
+# rempliront pas — la garde d'exécution les annule au bout de 90 s. Filtrer le
+# calendrier des fériés serait une complication pour un gain nul.
+
+[Install]
+WantedBy=timers.target

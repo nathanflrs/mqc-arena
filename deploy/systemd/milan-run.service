@@ -1,0 +1,37 @@
+[Unit]
+Description=Milan Capital — run quotidien du fonds
+# Sans le Gateway, le runner se rabat sur un portefeuille fictif de 100 000 $
+# et produit un plan sans rapport avec le compte réel. On exige donc sa
+# présence, contrairement au dashboard.
+Requires=ibgateway.service
+After=ibgateway.service
+
+[Service]
+Type=oneshot
+User=milan
+Group=milan
+WorkingDirectory=/opt/milan
+EnvironmentFile=/opt/milan/.env
+
+# Origine du run, conservée par le verrou puis lisible dans les journaux.
+# Distingue une séance produite par le planificateur d'une séance forcée
+# depuis le dashboard — un run manuel est une décision discrétionnaire, qui
+# n'a pas le même statut dans un track record.
+Environment=RUN_TRIGGER=scheduled
+
+ExecStart=/opt/milan/.venv/bin/python -m src.arena.runner
+
+# Le runner sort en 75 (EX_TEMPFAIL) quand un autre run tient le verrou. Ce
+# n'est pas une panne mais un renoncement volontaire : on ne veut pas d'alerte,
+# ni de tentative de relance.
+SuccessExitStatus=75
+
+# Une séance qui dépasse une heure est bloquée, pas lente : la fenêtre
+# d'exécution est passée et les prix ne valent plus rien.
+TimeoutStartSec=3600
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/milan

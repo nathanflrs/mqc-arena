@@ -1,0 +1,33 @@
+[Unit]
+Description=Milan Capital — dashboard
+# Le dashboard doit pouvoir démarrer même si le Gateway est tombé : c'est
+# précisément dans ce cas qu'on a besoin de le consulter. D'où `Wants` et non
+# `Requires`, qui empêcherait le démarrage.
+Wants=ibgateway.service
+After=network-online.target ibgateway.service
+
+[Service]
+Type=simple
+User=milan
+Group=milan
+WorkingDirectory=/opt/milan
+EnvironmentFile=/opt/milan/.env
+
+ExecStart=/opt/milan/.venv/bin/uvicorn src.dashboard.server:app \
+          --host 127.0.0.1 --port 8000 --log-level warning
+
+# 127.0.0.1 uniquement : Caddy est le seul à parler au dashboard, et c'est lui
+# qui porte le HTTPS. Écouter sur 0.0.0.0 exposerait l'écran en clair sur
+# internet, en contournant le certificat.
+
+Restart=always
+RestartSec=5
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/milan
+
+[Install]
+WantedBy=multi-user.target
