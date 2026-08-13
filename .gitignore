@@ -49,3 +49,8 @@ logs/fundamentals_cache/
 
 # Verrou d'exécution — état d'un processus, jamais versionné.
 logs/run.lock
+
+# Notifications : clé privée VAPID et abonnements des appareils.
+# Régénérer les clés couperait tous les appareils inscrits, sans erreur visible.
+logs/vapid_keys.json
+logs/push_subscriptions.json
