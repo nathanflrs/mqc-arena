@@ -34,11 +34,15 @@ log "IB Gateway"
 if [[ -d "$GW_DIR" ]]; then
   ok "déjà installé"
 else
-  TMP=$(mktemp -d)
+  # Dossier temporaire créé PAR milan : `mktemp -d` lancé en root produit un
+  # dossier en 700 root, que `sudo -u milan` ne peut ensuite ni lire ni
+  # exécuter — l'installateur échouait sur « Permission denied ».
+  TMP=$(sudo -u "$APP_USER" mktemp -d)
   # URL « stable-standalone » : toujours la dernière version stable, pas de
   # numéro à mettre à jour dans ce script.
   curl -fsSL -o "$TMP/gw.sh" \
     https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh
+  chown "$APP_USER:$APP_USER" "$TMP/gw.sh"
   chmod +x "$TMP/gw.sh"
   # -q : installation silencieuse, -dir : cible.
   sudo -u "$APP_USER" "$TMP/gw.sh" -q -dir "$GW_DIR"
