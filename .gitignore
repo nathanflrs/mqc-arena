@@ -57,3 +57,8 @@ logs/push_subscriptions.json
 
 # Cache univers : révisions Wikipédia figées, régénérables.
 logs/universe_cache/
+
+# Instantané de prix de l'univers élargi : volumineux, régénérable.
+# Le manifeste est versionné — c'est lui qui documente la couverture réelle.
+logs/universe_snapshot/*
+!logs/universe_snapshot/manifest.json
