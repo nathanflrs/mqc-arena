@@ -173,6 +173,71 @@ Ce test rejoint le chantier d'univers de `docs/hypothese_01_accruals.md` : les
 deux ont besoin de la même chose — un univers large, reconstitué à chaque date
 sans biais du survivant.
 
+### RÉSULTAT DU TEST — 2026-08-13, quelques heures plus tard
+
+**La prédiction est tenue.** 570 sociétés, appartenance à l'indice reconstituée
+à chaque date, seuils strictement inchangés.
+
+| Horizon | N | dates | excès | IC 95 % | |
+|---|---|---|---|---|---|
+| H1 | 14 587 | 1 270 | +3.3 % | [−0.3 %, +6.8 %] | |
+| **H5** | 14 570 | 1 266 | **+5.4 %** | **[+2.0 %, +8.8 %]** | ✅ |
+| **H20** | 14 453 | 1 252 | **+5.1 %** | **[+2.1 %, +8.0 %]** | ✅ |
+
+Et sur le rendement, pas seulement la fréquence :
+
+| Horizon | rendement/signal | passif | IC 95 % | |
+|---|---|---|---|---|
+| H20 | **+2.194 %** | +1.137 % | [+1.443 %, +2.962 %] | ✅ |
+
+**Il bat la référence passive**, ce que CTA ne faisait pas. De 163 dates à
+1 252 : la puissance manquante est là.
+
+**Net de coûts**, comme le verdict l'exigeait :
+
+| Aller-retour | net | vs passif |
+|---|---|---|
+| 10 bps | +2.09 % | +0.96 % |
+| 20 bps | +1.99 % | +0.86 % |
+| 40 bps (pessimiste) | +1.79 % | +0.66 % |
+
+L'équivalence entre le calcul vectorisé et l'agent réel a été **prouvée avant
+le test**, sur 40 points tirés au hasard : 40/40 identiques. Sans cette
+vérification, on aurait testé autre chose que MeanReversion.
+
+### Ce que ce résultat NE prouve PAS
+
+Trois réserves, et la première est la plus sérieuse.
+
+**1. Ce n'est pas un test hors échantillon dans le TEMPS.** Les seuils
+(RSI 35, Bollinger 2σ) ont été choisis en regardant les mêmes marchés, sur la
+même période 2020-2026. Élargir l'univers ajoute des observations
+**transversales**, pas temporelles. Le test décisif reste à faire : rejouer la
+règle telle quelle sur une période antérieure, 2010-2019, jamais consultée.
+
+**2. Le profil de gain est asymétrique dans le mauvais sens.** Skew −0,63 à
+H20, ratio gain/perte 1,17. La stratégie gagne par la **fréquence**, pas par
+l'ampleur : beaucoup de petits gains, quelques pertes lourdes. C'est le profil
+qui ramasse des pièces devant un rouleau compresseur, et il exige une gestion
+du risque stricte.
+
+**3. Les 11 % de sociétés manquantes sont précisément les mauvaises pour cette
+stratégie.** La couverture est de 88,9 %, et parmi les 71 absentes figurent
+**SIVB et FRC** — Silicon Valley Bank et First Republic, deux faillites
+bancaires de 2023. Une stratégie qui achète les baisses les aurait ramassées
+en chute libre. Leur absence flatte donc le résultat, contrairement à la
+plupart des autres manquantes qui sont des rachats.
+
+### Verdict mis à jour
+
+**Conservé. Premier agent du fonds à franchir un test réel.**
+
+Ce n'est pas encore un avantage démontré hors échantillon — c'est un effet
+robuste à l'élargissement de l'univers, qui survit aux coûts, et dont les
+limites sont nommées. La prochaine étape est écrite : **la période 2010-2019,
+seuils inchangés.** Si l'effet y tient, on aura quelque chose. S'il disparaît,
+il aura été une propriété de 2020-2026.
+
 ---
 
 ## 3. CTATrendAgent — **RETIRÉ**, et les 6 ETF avec lui (2026-08-13)
