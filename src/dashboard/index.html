@@ -1362,9 +1362,16 @@ async function loadStatus() {
     const cb   = data.circuit_breaker || {};
     applyFreshness(data.last_run, data.fresh_max_hours);
 
-    if (cb.peak_netliq) {
-      const navStr = '$' + Math.round(cb.peak_netliq).toLocaleString('en-US');
-      countUp(document.getElementById('kpi-netliq'), navStr, cb.peak_netliq);
+    // `peak_netliq` est le SOMMET historique, pas la valeur du jour. L'afficher
+    // comme « Net Asset Value » surestimait le portefeuille de tout le drawdown
+    // en cours — et par construction, jamais dans l'autre sens : le sommet est
+    // toujours supérieur ou égal à la valeur réelle. Constaté le 2026-08-13,
+    // l'écran annonçait 1 026 192 $ pour 1 020 810 $ réels, pendant que la
+    // carte du circuit breaker affichait les deux chiffres côte à côte.
+    const nav = cb.current_netliq ?? cb.peak_netliq;
+    if (nav) {
+      const navStr = '$' + Math.round(nav).toLocaleString('en-US');
+      countUp(document.getElementById('kpi-netliq'), navStr, nav);
       const cmdNav = document.querySelector('.cmd-nav-val');
       if (cmdNav && cmdNav.textContent !== navStr) { cmdNav.textContent = navStr; flashEl(cmdNav); }
     }
