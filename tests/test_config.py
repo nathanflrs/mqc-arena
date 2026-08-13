@@ -5,13 +5,19 @@ import pytest
 
 from src.config import WATCHLIST, AGENT_PRIORITY
 
-# TLT exclu de la watchlist active (Sharpe négatif sur tous les agents)
+# Univers TRADABLE. Les ETF américains (SPY, QQQ, GLD, TLT, UUP, DBC) en ont
+# été retirés le 2026-08-13 : IBKR les refuse à un particulier résidant dans
+# l'UE, faute de document d'information réglementaire (PRIIPs/KID). SPY et GLD
+# restent téléchargés comme données — voir DATA_ONLY — mais ne sont plus
+# achetables.
 ACTIVE_TICKERS = {
-    "AAPL", "SPY", "QQQ", "NVDA", "MSFT",
-    "GOOGL", "META", "JPM", "GS", "GLD",
-    "TSLA", "AMD", "AMZN", "LLY",
+    "AAPL", "NVDA", "MSFT", "GOOGL", "META",
+    "JPM", "GS", "TSLA", "AMD", "AMZN", "LLY",
 }
-ARCHIVED_TICKERS = {"TLT"}  # gardés dans AGENT_PRIORITY pour référence, hors watchlist
+# Retirés de l'univers tradable, pour des raisons différentes :
+#   TLT                    — Sharpe négatif sur tous les agents
+#   SPY, QQQ, GLD          — ETF, interdits à l'achat depuis l'UE
+ARCHIVED_TICKERS = {"TLT", "SPY", "QQQ", "GLD"}
 
 VALID_AGENTS = {
     "BuffettAgent",

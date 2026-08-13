@@ -6,29 +6,60 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ====== WATCHLIST ======
+# ====== UNIVERS ======
+#
+# Deux listes, et la distinction compte.
+#
+# WATCHLIST : ce qu'on peut RÉELLEMENT acheter.
+# DATA_ONLY : ce qu'on télécharge pour raisonner, sans jamais le posséder.
+#
+# Les ETF américains (SPY, QQQ, GLD, TLT, UUP, DBC) ont été retirés de
+# l'univers tradable le 2026-08-13, après un refus d'IBKR au premier run réel :
+#
+#     Error 201: Order rejected — Customer Ineligible
+#     This product does not have a KID in a language approved for your country
+#
+# C'est la réglementation européenne PRIIPs : un particulier résidant dans l'UE
+# ne peut pas acheter un ETF américain, faute de document d'information
+# réglementaire. Aucun backtest ne pouvait le révéler — seul un ordre réel.
+#
+# SPY et GLD restent téléchargés : le premier sert à détecter le régime de
+# marché (GMM), les deux alimentent MacroAgent. On garde la donnée, on retire
+# la position.
 WATCHLIST = [
-    "AAPL", "SPY", "QQQ", "NVDA", "MSFT",
-    "GOOGL", "META", "JPM", "GS", "GLD",
-    "TSLA", "AMD", "AMZN", "LLY",
+    "AAPL", "NVDA", "MSFT", "GOOGL", "META",
+    "JPM", "GS", "TSLA", "AMD", "AMZN", "LLY",
 ]
+
+DATA_ONLY = ["SPY", "GLD"]
 
 # ====== AGENT PRIORITY PAR SYMBOLE ======
 # Backtest 3 ans — meilleur Sharpe par symbole (run_backtest.py)
 # Note: DividendArbitrageAgent (poids initial 1.0) n'a pas d'entrée ici car
 # il utilise un override absolu via meta["div_arb_priority"] dans selector.select_best()
 # pendant sa fenêtre J-7→J+1 — aucun autre mécanisme de priorité n'est nécessaire.
+# ⚠️ Table de sur-ajustement, conservée uniquement comme repli.
+#
+# Chacune de ces lignes a été choisie en regardant quel agent avait le meilleur
+# Sharpe passé sur ce symbole : on a désigné le gagnant après avoir vu la
+# course. Quatorze décisions prises sur la même période que celle qui sert à
+# les évaluer.
+#
+# En pratique elle ne sert presque jamais : `DynamicAllocator` fournit la
+# priorité, et cette table n'intervient qu'en repli quand un symbole manque de
+# son cache. Elle disparaîtra avec le passage à un univers large, où désigner
+# un agent par titre n'a plus de sens.
+#
+# Les entrées ETF (SPY, QQQ, GLD) sont retirées : ces titres ne sont plus
+# tradables depuis un compte européen.
 AGENT_PRIORITY = {
     "AAPL": "BuffettAgent",
-    "SPY": "BuffettAgent",
-    "QQQ": "CitadelAgent",
     "NVDA": "BuffettAgent",
     "MSFT": "MeanReversionAgent",
     "GOOGL": "CitadelAgent",
     "META": "CitadelAgent",
     "JPM": "MeanReversionAgent",
     "GS": "BuffettAgent",
-    "GLD": "BuffettAgent",
     "TSLA": "BuffettAgent",
     "AMD": "MeanReversionAgent",
     "AMZN": "TrendFollowingAgent",

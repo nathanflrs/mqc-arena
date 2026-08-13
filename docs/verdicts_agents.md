@@ -175,6 +175,77 @@ sans biais du survivant.
 
 ---
 
-*Prochains verdicts prévus : CTATrend, la fusion
+## 3. CTATrendAgent — **RETIRÉ**, et les 6 ETF avec lui (2026-08-13)
+
+### Ce qu'il affirmait
+
+Suivi de tendance multi-actifs, façon Winton ou Man AHL : momentum 3 et 6 mois
+filtré par moyenne longue et force de tendance, sur six fonds indiciels
+couvrant actions américaines, technologie, obligations, or, dollar et matières
+premières. Position longue **ou vendeuse**, taille ajustée à la volatilité.
+
+L'idée est légitime, et la diversification entre classes d'actifs a une vraie
+valeur théorique.
+
+### Quatre raisons de le retirer, dont une rédhibitoire
+
+**1. Aucun avantage mesurable.** Sur 955 séances : excès +0,2 % / +0,3 % /
++0,8 % à H1, H5, H20, tous les intervalles traversant zéro.
+
+**2. Il rapporte moins que ne rien faire.** Sharpe 0,21 contre 1,59 pour un
+simple achat équipondéré des mêmes six fonds. En cumul : +4 % contre +67 %.
+Ajouté à un portefeuille passif, il **dégrade** le Sharpe à toutes les
+allocations testées.
+
+**3. Le dosage du risque n'a jamais fonctionné.** 100 % des signaux sortent au
+plafond de 15 %, écart-type des poids `2.8e-17`. La formule `min(0.10 / vol,
+0.15)` ne cède le plafond qu'au-delà de 66,7 % de volatilité annualisée ; le
+maximum observé en cinq ans sur ces fonds est 61,1 %. UUP, à 6,5 % de
+volatilité, recevait le même poids que QQQ à 18,6 % — l'inverse exact de ce
+que le dosage annonce.
+
+**4. Rédhibitoire : les positions ne peuvent pas exister.** Au premier run
+réel, IBKR a refusé l'ordre :
+
+```
+Error 201: Order rejected — Customer Ineligible
+This product does not have a KID in a language approved for your country
+```
+
+Réglementation européenne **PRIIPs** : un particulier résidant dans l'UE ne
+peut pas acheter d'ETF américain, faute de document d'information
+réglementaire. L'univers CTA en est composé à 100 %.
+
+> **Aucun backtest ne pouvait révéler ce point.** Il fallait un ordre réel. Ce
+> qui valide exactement la raison d'être des runs quotidiens : ils ne mesurent
+> pas l'avantage, ils vérifient que la machine peut fonctionner.
+
+### Conséquence sur l'univers
+
+`SPY`, `QQQ` et `GLD` quittent la liste tradable ; `TLT`, `UUP` et `DBC` ne
+sont plus téléchargés. **L'univers passe de 14 à 11 titres, tous des actions.**
+
+`SPY` et `GLD` restent téléchargés comme **données** — le premier détecte le
+régime de marché, les deux alimentent MacroAgent. D'où la distinction
+introduite dans `config.py` entre `WATCHLIST` (ce qu'on peut acheter) et
+`DATA_ONLY` (ce qu'on lit sans jamais le posséder).
+
+### Découverte annexe : PairsTradingAgent est amputé de moitié
+
+Sept de ses quatorze paires candidates sont des ETF — `SPY/QQQ`, `SPY/IWM`,
+`GLD/SLV`, `QQQ/XLK`, `XLF/XLK`, `XLE/XLU`, `XLV/XLP` — donc inexécutables. Les
+sept autres sont des paires d'actions (`XOM/CVX`, `SO/DUK`, `AEP/EXC`,
+`MET/PRU`, `CB/TRV`, `RF/FITB`, `CFG/HBAN`) et restent valides. À traiter au
+verdict 7.
+
+### Verdict
+
+**Retiré de la production.** Le module reste dans le dépôt pour le replay
+historique. Rien ne peut le ressusciter tant que le compte est européen et
+l'univers composé d'ETF américains.
+
+---
+
+*Prochains verdicts prévus : la fusion
 Buffett/Citadel/TrendFollowing, Macro et Volatility, DividendArb et InsiderBuy,
 puis Pairs et EarningsSentiment.*

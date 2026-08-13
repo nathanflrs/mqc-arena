@@ -456,7 +456,9 @@ def test_watchlist_coverage(monkeypatch):
     result = generate_dividend_report(WATCHLIST)
     assert isinstance(result, str)
     assert "DIVIDENDES" in result
-    assert len(WATCHLIST) == 14  # sanity-check watchlist size matches spec
+    # L'univers tradable ne contient plus que des actions : les ETF en ont
+    # été retirés le 2026-08-13 (interdits à l'achat depuis l'UE).
+    assert len(WATCHLIST) == 11
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -13,6 +13,7 @@ import pandas as pd
 
 from src.config import (
     WATCHLIST,
+    DATA_ONLY,
     AGENT_PRIORITY,
     EXECUTION_ENABLED,
     MAX_ORDERS_PER_RUN,
@@ -41,7 +42,9 @@ from src.agents.dividend_arbitrage_agent import (
 from src.agents.pairs_trading import PairsTradingAgent
 from src.agents.volatility import VolatilityAgent
 from src.agents.earnings_sentiment import EarningsSentimentAgent
-from src.agents.cta_trend_agent import CTATrendAgent, CTA_UNIVERSE
+# Conservé pour le replay historique — retiré de la production le
+# 2026-08-13 (ETF non tradables depuis l'UE). Voir docs/verdicts_agents.md.
+from src.agents.cta_trend_agent import CTATrendAgent, CTA_UNIVERSE  # noqa: F401
 from src.agents.insider_buy import InsiderBuyAgent
 # Conservé pour le replay historique (scripts/measure_agent_edge.py),
 # retiré de l'arène de production — voir docs/verdicts_agents.md.
@@ -624,8 +627,13 @@ def _run() -> None:
 
         # Batch download — un seul appel réseau, thread-safe, ~10-15s.
         import yfinance as _yf
+        # On télécharge l'univers tradable ET les symboles de raisonnement.
+        # SPY sert à détecter le régime, GLD alimente MacroAgent : ils doivent
+        # être présents dans all_data sans jamais devenir des positions.
+        _download_symbols = list(WATCHLIST) + [s for s in DATA_ONLY
+                                               if s not in WATCHLIST]
         _raw_batch = _yf.download(
-            list(WATCHLIST),
+            _download_symbols,
             period="2y",
             interval="1d",
             auto_adjust=True,
@@ -633,7 +641,7 @@ def _run() -> None:
             group_by="ticker",
         )
         all_data: dict = {}
-        for sym in WATCHLIST:
+        for sym in _download_symbols:
             try:
                 _df_sym = _raw_batch[sym].copy() if isinstance(_raw_batch.columns, pd.MultiIndex) else _raw_batch.copy()
                 all_data[sym] = normalize_ohlcv(_df_sym)
@@ -1009,45 +1017,23 @@ def _run() -> None:
                     except Exception:
                         pass
 
-        # ====== CTA TREND — boucle séparée (TLT/UUP/DBC hors WATCHLIST) ======
-        # SPY/QQQ/GLD sont dans WATCHLIST et traités par l'Arena ci-dessus.
-        # Seuls TLT/UUP/DBC n'ont pas de couverture Arena et nécessitent ce loop.
-        _cta_agent  = CTATrendAgent()
-        _CTA_EXTRA  = [s for s in CTA_UNIVERSE if s not in WATCHLIST]  # TLT, UUP, DBC
-        cta_data: dict = dict(all_data)
-        for _sym in _CTA_EXTRA:
-            if _sym not in cta_data:
-                try:
-                    cta_data[_sym] = download_ohlcv(_sym)
-                except Exception as _exc:
-                    print(f"⚠️  CTA: téléchargement {_sym} échoué: {_exc}")
-
-        print("\n====== CTA TREND SIGNALS ======")
-        for _sym in _CTA_EXTRA:
-            _df_cta = cta_data.get(_sym)
-            if _df_cta is None or _df_cta.empty:
-                print(f"   {_sym}: données absentes — HOLD")
-                continue
-            _px_cta  = get_last_close_1d(_df_cta)
-            _state   = MarketState(symbol=_sym, price=_px_cta,
-                                   timestamp=str(_df_cta.index[-1]))
-            _sig_cta = _cta_agent.generate_signal(
-                _state, snap.positions, regime=regime, data=_df_cta
-            )
-            _plan_cta = cta_plan_from_signal(
-                _sig_cta,
-                net_liquidation=snap.net_liquidation,
-                last_price=_px_cta,
-                current_qty=float(snap.positions.get(_sym, 0.0)),
-            )
-            print(
-                f"   {_sym}: {_sig_cta.action} | tw={_sig_cta.target_weight:+.3f} | "
-                f"conf={_sig_cta.confidence:.2f} | {_sig_cta.reason[:80]}"
-            )
-            plans.append(_plan_cta)
-            _decisions_summary.append({
-                "symbol": _sym, "agent": "CTATrendAgent", "action": _sig_cta.action
-            })
+        # ====== CTA TREND — RETIRÉ le 2026-08-13 ======
+        #
+        # L'univers CTA était composé à 100 % d'ETF américains (SPY, QQQ, TLT,
+        # GLD, UUP, DBC). Au premier run réel, IBKR a refusé l'ordre :
+        #
+        #     Error 201: Order rejected — Customer Ineligible
+        #     This product does not have a KID in a language approved
+        #     for your country
+        #
+        # Réglementation européenne PRIIPs. Ces positions ne pouvaient donc
+        # pas exister, quelle qu'ait été la qualité du signal — et le signal
+        # n'en avait pas : mesuré la veille, aucun avantage, un rendement
+        # inférieur à l'achat passif des mêmes fonds, et un dosage du risque
+        # inerte (100 % des positions au plafond).
+        #
+        # Quatre raisons indépendantes, dont une rédhibitoire.
+        # Verdict complet : docs/verdicts_agents.md
 
         print("\n====== ORDER PLAN (NO EXECUTION) ======")
         if not plans:

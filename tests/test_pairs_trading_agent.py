@@ -855,13 +855,30 @@ def test_tier2_etf_pairs_present_in_candidate_universe():
             f"Sector ETF pair {pair[0]}/{pair[1]} missing from CANDIDATE_PAIRS"
 
 
-def test_tier1_a_legs_in_watchlist():
-    """Every Tier-1 pair's A-leg must be in the directional WATCHLIST."""
+def test_etf_pairs_are_no_longer_executable():
+    """
+    Les paires d'ETF ne peuvent plus atteindre l'exécution depuis le
+    2026-08-13 : IBKR refuse ces produits à un particulier résidant dans l'UE
+    (PRIIPs/KID), et ils ont donc été retirés de WATCHLIST.
+
+    Le test d'origine exigeait l'inverse — que chaque jambe A soit dans
+    WATCHLIST, « sinon le signal n'atteindrait jamais l'exécution ». Cette
+    exigence est devenue impossible à satisfaire, non par régression mais par
+    contrainte réglementaire.
+
+    Il est retourné pour documenter l'état réel : ces paires produisent encore
+    des signaux qui ne peuvent pas être exécutés. Le nettoyage de l'univers de
+    paires relève du verdict 7 (docs/verdicts_agents.md) ; en attendant, ce
+    test empêche que la situation soit oubliée.
+    """
     watchlist_set = set(_WATCHLIST)
-    for a, b in _TIER1_ETF_PAIRS:
-        assert a in watchlist_set, \
-            f"Tier-1 A-leg '{a}' (pair {a}/{b}) not in WATCHLIST — " \
-            "signal would never be routed to execution"
+    non_routables = [f"{a}/{b}" for a, b in _TIER1_ETF_PAIRS
+                     if a not in watchlist_set]
+    assert non_routables, \
+        "si une paire d'ETF redevient routable, cette contrainte a changé — " \
+        "revérifier la réglementation avant de rouvrir"
+    assert len(non_routables) == len(_TIER1_ETF_PAIRS), \
+        f"paires partiellement routables : {non_routables} — état incohérent"
 
 
 def test_etf_pairs_have_low_ma_risk():
