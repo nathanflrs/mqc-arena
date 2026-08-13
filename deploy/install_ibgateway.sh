@@ -226,7 +226,19 @@ Environment=HOME=$HOME_DIR
 # La taille n'a pas d'importance en soi, mais trop petite, certaines boîtes de
 # dialogue se dessinent mal et IBC ne les retrouve plus pour les fermer — le
 # démarrage reste alors bloqué sur une fenêtre invisible.
-ExecStart=/usr/bin/xvfb-run -a --server-args="-screen 0 1024x768x24 -nolisten tcp" $IBC_DIR/gatewaystart.sh
+#
+# '-inline' est indispensable. Sans lui, gatewaystart.sh part dans sa branche
+# par défaut :
+#
+#     xterm -T "\$title" -e ".../displaybannerandlaunch.sh" &
+#
+# c'est-à-dire une fenêtre de terminal graphique, mise en arrière-plan. Sur un
+# serveur, xterm n'est pas installé (« command not found »), et même s'il
+# l'était, le '&' rendrait la main immédiatement : systemd verrait le processus
+# principal se terminer et considérerait le service comme arrêté. Avec
+# '-inline', IBC fait un exec direct et reste au premier plan, ce qu'attend
+# Type=simple.
+ExecStart=/usr/bin/xvfb-run -a --server-args="-screen 0 1024x768x24 -nolisten tcp" $IBC_DIR/gatewaystart.sh -inline
 
 # Le Gateway peut tomber : session expirée, coupure réseau, maintenance IBKR.
 # On relance toujours, sans limite de tentatives — un fonds qui reste
