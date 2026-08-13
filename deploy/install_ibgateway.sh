@@ -16,7 +16,11 @@ set -euo pipefail
 
 APP_USER=milan
 HOME_DIR="/home/$APP_USER"
-IBC_VERSION="${IBC_VERSION:-3.20.0}"
+# Version figée plutôt que « dernière en date » : une installation doit donner
+# le même résultat aujourd'hui et dans six mois. Pour changer :
+#   IBC_VERSION=3.25.0 bash install_ibgateway.sh
+# Versions publiées : https://github.com/IbcAlpha/IBC/releases
+IBC_VERSION="${IBC_VERSION:-3.24.1}"
 IBC_DIR="$HOME_DIR/ibc"
 GW_DIR="$HOME_DIR/Jts"
 
