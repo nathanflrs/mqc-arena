@@ -106,6 +106,29 @@ _MAX_ATTEMPTS = 5
 _LOCKOUT_SECONDS = 300   # 5 minutes
 
 
+def _client_ip(request: Request) -> str:
+    """
+    Adresse réelle du client, à travers le proxy.
+
+    Depuis l'installation de Caddy devant le dashboard (2026-08-13),
+    `request.client.host` vaut toujours 127.0.0.1 : c'est l'adresse du proxy,
+    pas celle du visiteur. Le compteur d'échecs de connexion, indexé sur cette
+    valeur, est donc devenu commun à tout le monde — cinq échecs, d'où qu'ils
+    viennent, verrouillaient l'accès pour tous, y compris le propriétaire.
+
+    Caddy renseigne X-Forwarded-For ; le premier élément est le client d'origine.
+    On ne s'y fie QUE si la connexion vient bien de la machine locale : sur une
+    requête directe, cet en-tête est fourni par l'appelant et permettrait de
+    contourner la limite en le changeant à chaque tentative.
+    """
+    peer = request.client.host if request.client else "unknown"
+    if peer in ("127.0.0.1", "::1"):
+        fwd = request.headers.get("x-forwarded-for", "")
+        if fwd:
+            return fwd.split(",")[0].strip()
+    return peer
+
+
 def _check_login_rate(ip: str) -> bool:
     """Returns True if allowed, False if locked out."""
     now = _time.monotonic()
@@ -293,7 +316,7 @@ def push_test(user: str = Depends(require_auth)):
 # ── Auth routes ───────────────────────────────────────────────────────────────
 @app.post("/api/login")
 async def login(request: Request):
-    ip = request.client.host if request.client else "unknown"
+    ip = _client_ip(request)
     if not _check_login_rate(ip):
         return JSONResponse(
             {"error": "Trop de tentatives. Réessayez dans 5 minutes."},
