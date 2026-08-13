@@ -44,8 +44,10 @@ else
     https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh
   chown "$APP_USER:$APP_USER" "$TMP/gw.sh"
   chmod +x "$TMP/gw.sh"
-  # -q : installation silencieuse, -dir : cible.
-  sudo -u "$APP_USER" "$TMP/gw.sh" -q -dir "$GW_DIR"
+  # -q seulement, PAS -dir. Forcer le répertoire installait tout à plat dans
+  # ~/Jts, alors qu'IBC attend l'arborescence versionnée ~/Jts/ibgateway/<ver>
+  # qu'il produit par défaut — et sans elle, il ne trouve pas quoi lancer.
+  sudo -u "$APP_USER" HOME="$HOME_DIR" "$TMP/gw.sh" -q
   rm -rf "$TMP"
   ok "installé dans $GW_DIR"
 fi
@@ -67,9 +69,25 @@ fi
 
 log "Configuration IBC"
 CONF="$IBC_DIR/config.ini"
-if [[ -f "$CONF" ]] && grep -q '^IbLoginId=.\+' "$CONF"; then
+
+# IBC livre son propre config.ini d'exemple, avec `IbLoginId=edemo`,
+# `IbPassword=demouser` et surtout **TradingMode=live**.
+#
+# Une simple condition « IbLoginId a-t-il une valeur ? » voyait `edemo`,
+# concluait « déjà configuré », et laissait le mode `live` en place. Les
+# identifiants de démonstration ne se connectent à rien, mais le mode, lui,
+# serait resté — et une fois de vrais identifiants saisis, IBC aurait visé le
+# compte réel. On considère donc explicitement `edemo` comme « non configuré ».
+if [[ -f "$CONF" ]] \
+   && grep -qE '^IbLoginId=.+' "$CONF" \
+   && ! grep -qE '^IbLoginId=edemo\s*$' "$CONF"; then
   ok "config.ini déjà renseigné — laissé intact"
+  if ! grep -qE '^TradingMode=paper\s*$' "$CONF"; then
+    warn "ATTENTION : TradingMode n'est pas 'paper' dans $CONF"
+    warn "Corrige-le avant de démarrer le service."
+  fi
 else
+  [[ -f "$CONF" ]] && mv "$CONF" "$CONF.ibc-default.bak"
   cat > "$CONF" <<'EOF'
 # ─────────────────────────────────────────────────────────────────────────────
 # IBC — configuration Milan Capital
@@ -125,10 +143,15 @@ GW_VERSION=$(find "$GW_DIR/ibgateway" -maxdepth 1 -mindepth 1 -type d \
              -printf '%f\n' 2>/dev/null | sort -V | tail -1)
 if [[ -z "$GW_VERSION" ]]; then
   echo "Version du Gateway introuvable sous $GW_DIR/ibgateway." >&2
-  echo "L'installation a-t-elle abouti ?" >&2
+  echo "Contenu de $GW_DIR :" >&2
+  ls -la "$GW_DIR" >&2 || true
+  echo "L'installation a-t-elle abouti ? Si le Gateway est installé à plat," >&2
+  echo "supprime $GW_DIR et relance ce script." >&2
   exit 1
 fi
-ok "version détectée : $GW_VERSION"
+# IBC attend la version majeure sans point : 10.45 → 1045.
+IBC_MAJOR="${GW_VERSION//./}"
+ok "version détectée : $GW_VERSION (IBC : $IBC_MAJOR)"
 
 cat > /etc/systemd/system/ibgateway.service <<EOF
 [Unit]
@@ -141,7 +164,7 @@ Type=simple
 User=$APP_USER
 Group=$APP_USER
 Environment=DISPLAY=:1
-Environment=TWS_MAJOR_VRSN=$GW_VERSION
+Environment=TWS_MAJOR_VRSN=$IBC_MAJOR
 Environment=IBC_INI=$IBC_DIR/config.ini
 Environment=IBC_PATH=$IBC_DIR
 Environment=TWS_PATH=$GW_DIR
