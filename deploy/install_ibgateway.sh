@@ -182,6 +182,29 @@ if [[ -z "$IBC_MAJOR" || ! -d "$GW_DIR/ibgateway/$IBC_MAJOR/jars" ]]; then
 fi
 ok "version détectée : $IBC_MAJOR (jars présents)"
 
+# IBC ignore les variables d'environnement : gatewaystart.sh les RÉASSIGNE en
+# dur dans son propre corps (IBC_PATH=/opt/ibc, TWS_MAJOR_VRSN=1019…). Les
+# passer par systemd n'avait donc aucun effet, et le service s'arrêtait sur
+# « no execute permission for scripts in /opt/ibc/scripts » — un message
+# trompeur : le problème n'était pas les permissions mais le chemin, /opt/ibc
+# n'existant pas.
+#
+# On corrige les affectations à la source. TWOFA_TIMEOUT_ACTION passe de
+# 'exit' à 'restart' : si l'approbation sur le téléphone n'arrive pas à temps,
+# IBC réessaie au lieu de rendre la main définitivement — sans quoi une
+# notification manquée laisserait le fonds déconnecté jusqu'à intervention.
+log "Adaptation de gatewaystart.sh"
+sed -i \
+  -e "s|^TWS_MAJOR_VRSN=.*|TWS_MAJOR_VRSN=$IBC_MAJOR|" \
+  -e "s|^IBC_PATH=.*|IBC_PATH=$IBC_DIR|" \
+  -e "s|^TWS_PATH=.*|TWS_PATH=$GW_DIR|" \
+  -e "s|^IBC_INI=.*|IBC_INI=$IBC_DIR/config.ini|" \
+  -e "s|^LOG_PATH=.*|LOG_PATH=$IBC_DIR/logs|" \
+  -e "s|^TWOFA_TIMEOUT_ACTION=.*|TWOFA_TIMEOUT_ACTION=restart|" \
+  "$IBC_DIR/gatewaystart.sh"
+sudo -u "$APP_USER" mkdir -p "$IBC_DIR/logs"
+ok "chemins corrigés (IBC_PATH=$IBC_DIR, version=$IBC_MAJOR)"
+
 cat > /etc/systemd/system/ibgateway.service <<EOF
 [Unit]
 Description=IB Gateway (via IBC, écran virtuel Xvfb)
@@ -192,23 +215,18 @@ Wants=network-online.target
 Type=simple
 User=$APP_USER
 Group=$APP_USER
-Environment=DISPLAY=:1
-Environment=TWS_MAJOR_VRSN=$IBC_MAJOR
-Environment=IBC_INI=$IBC_DIR/config.ini
-Environment=IBC_PATH=$IBC_DIR
-Environment=TWS_PATH=$GW_DIR
+Environment=HOME=$HOME_DIR
 
-# Xvfb fournit l'écran que le Gateway exige, sans carte graphique ni personne
-# devant. La taille n'a pas d'importance en soi, mais trop petite, certaines
-# boîtes de dialogue se dessinent mal et IBC ne les retrouve plus pour les
-# fermer — le démarrage reste alors bloqué sur une fenêtre invisible.
+# xvfb-run crée l'écran virtuel, lance la commande dedans, et nettoie tout en
+# sortant. Il remplace un lancement manuel de Xvfb en arrière-plan, qui laissait
+# des processus orphelins dans le groupe de contrôle du service à chaque
+# redémarrage ('Found left-over process Xvfb') et exigeait un pkill préalable.
 #
-# Le préfixe '-' rend l'échec non fatal : au premier démarrage aucun Xvfb ne
-# tourne, et pkill sort en erreur. Sans lui, le service refusait de démarrer.
-# (systemd n'interprète pas le shell : un ';' aurait été passé comme argument.)
-ExecStartPre=-/usr/bin/pkill -f "Xvfb :1"
-ExecStartPre=/bin/bash -c '/usr/bin/Xvfb :1 -screen 0 1024x768x24 -nolisten tcp & sleep 3'
-ExecStart=$IBC_DIR/gatewaystart.sh
+# -a choisit un numéro d'écran libre : plus de collision si un Xvfb traîne.
+# La taille n'a pas d'importance en soi, mais trop petite, certaines boîtes de
+# dialogue se dessinent mal et IBC ne les retrouve plus pour les fermer — le
+# démarrage reste alors bloqué sur une fenêtre invisible.
+ExecStart=/usr/bin/xvfb-run -a --server-args="-screen 0 1024x768x24 -nolisten tcp" $IBC_DIR/gatewaystart.sh
 
 # Le Gateway peut tomber : session expirée, coupure réseau, maintenance IBKR.
 # On relance toujours, sans limite de tentatives — un fonds qui reste
