@@ -196,9 +196,28 @@ c'est le cas, la chaîne complète fonctionne.
 
 ---
 
-## Étape 5 — Activer l'exécution automatique
+## Étape 5 — Armer le système
 
-**Seulement une fois l'étape 4 concluante.** Dans `/opt/milan/.env` :
+**Seulement une fois l'étape 4 concluante.**
+
+Il y a **deux verrous distincts**, volontairement séparés. Tant que l'un des
+deux est fermé, aucun ordre ne peut partir.
+
+**Verrou 1 — le courtier.** Dans `/home/milan/ibc/config.ini` :
+
+```ini
+ReadOnlyApi=no
+```
+
+Tant qu'il vaut `yes`, IB Gateway refuse tout ordre quoi que demande le code.
+C'est une sécurité côté courtier : un bug, une erreur de configuration ou un
+run inattendu ne peuvent rien envoyer.
+
+```bash
+systemctl restart ibgateway
+```
+
+**Verrou 2 — le code.** Dans `/opt/milan/.env` :
 
 ```ini
 EXECUTION_ENABLED=true
@@ -212,6 +231,9 @@ systemctl enable --now milan-run.timer
 ```
 
 À partir de là, le fonds trade seul.
+
+> Pour tout arrêter en urgence, il suffit de refermer **un seul** des deux.
+> Le plus rapide : `ReadOnlyApi=yes` puis `systemctl restart ibgateway`.
 
 ---
 

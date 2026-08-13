@@ -146,6 +146,21 @@ AcceptIncomingConnectionAction=accept
 AcceptNonBrokerageAccountWarning=yes
 AllowBlindTrading=yes
 
+# ⚠️  L'INTERRUPTEUR D'ARMEMENT.
+#
+# 'yes' : le Gateway lit le compte mais REFUSE tout ordre, quoi que demande le
+# code. C'est une sécurité côté courtier, indépendante d'EXECUTION_ENABLED
+# dans .env — un bug, une erreur de configuration ou un run inattendu ne
+# peuvent rien envoyer.
+#
+# Deux verrous distincts, à ouvrir séparément et délibérément :
+#   1. ReadOnlyApi=no   ici        → le courtier accepte les ordres
+#   2. EXECUTION_ENABLED=true      → le code décide d'en émettre
+#
+# Tant que l'un des deux est fermé, aucun ordre ne part. Ne les ouvre qu'après
+# un run manuel concluant (étape 4 du README).
+ReadOnlyApi=yes
+
 # IBKR force une déconnexion quotidienne. On la place à 23:45 New York, après
 # la clôture et bien avant le run du lendemain matin.
 ClosedownAt=
