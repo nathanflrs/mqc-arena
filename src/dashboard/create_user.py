@@ -28,10 +28,14 @@ def main() -> None:
     users = [u for u in users if u["username"] != username]
     users.append({"username": username, "password_hash": hashed})
     USERS_PATH.write_text(json.dumps(users, indent=2))
+    # Le fichier contient des empreintes bcrypt de mots de passe. Sans ce
+    # chmod, il héritait du umask et sortait en 664 — lisible par tout compte
+    # de la machine. bcrypt reste coûteux à casser, mais un condensat n'a
+    # aucune raison d'être exposé : constaté sur le serveur le 2026-08-13.
+    USERS_PATH.chmod(0o600)
 
     print(f"✅ Compte '{username}' créé/mis à jour dans {USERS_PATH}")
-    print("ℹ️  Pour le déploiement Railway, copie le contenu de ce fichier")
-    print("   dans la variable d'env MILAN_USERS_JSON (railway variables set).")
+    print(f"   permissions : {USERS_PATH.stat().st_mode & 0o777:o} (propriétaire seul)")
 
 
 if __name__ == "__main__":
