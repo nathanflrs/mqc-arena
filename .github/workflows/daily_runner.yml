@@ -35,6 +35,12 @@ jobs:
       - name: Run arena runner
         env:
           CI: "true"
+          # Origine du run, conservée par le verrou puis lisible dans les logs.
+          # Distingue une séance produite par le planificateur d'une séance
+          # forcée à la main depuis le dashboard — un run manuel est une
+          # décision discrétionnaire et n'a pas le même statut dans un track
+          # record. Voir src/execution/run_lock.py.
+          RUN_TRIGGER: "scheduled"
           # Broker (IBKR unavailable on CI — runner degrades gracefully)
           IBKR_PORT: ${{ secrets.IBKR_PORT }}
           IBKR_CLIENT_ID: ${{ secrets.IBKR_CLIENT_ID }}

@@ -133,11 +133,18 @@ async def _execute_local(job_id: str, command: str) -> None:
         return
     JOBS[job_id]["started_at"] = datetime.now().isoformat()
     try:
+        # Un run déclenché depuis le dashboard est une décision discrétionnaire :
+        # quelqu'un a choisi ce moment-là. Sans étiquette, impossible de le
+        # distinguer plus tard d'une séance produite par le planificateur, et le
+        # track record devient inanalysable. Le verrou lit cette variable et la
+        # conserve. Voir src/execution/run_lock.py.
+        env = {**os.environ, "RUN_TRIGGER": "manual"}
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             cwd=str(ROOT),
+            env=env,
         )
         JOBS[job_id]["pid"] = proc.pid
         async for raw in proc.stdout:
@@ -395,12 +402,24 @@ def get_status(user: str = Depends(require_auth)):
     if raw:
         cb = json.loads(raw)
     running = [jid for jid, j in JOBS.items() if j.get("status") == "running"]
+    # Run en cours, y compris déclenché hors du dashboard (planificateur, ligne
+    # de commande). `running_jobs` ne connaît que les travaux lancés par ce
+    # processus : sur le serveur, le run planifié lui est invisible.
+    try:
+        from src.execution.run_lock import current_holder
+        holder = current_holder()
+        lock = ({"pid": holder.pid, "started_at": holder.started_at,
+                 "trigger": holder.trigger} if holder else None)
+    except Exception:
+        lock = None
+
     return {
         "circuit_breaker": cb,
         "running_jobs": running,
         "cloud": IS_CLOUD,
         "last_run": _last_run_info(),
         "fresh_max_hours": FRESH_MAX_HOURS,
+        "active_run": lock,
     }
 
 

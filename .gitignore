@@ -46,3 +46,6 @@ logs/cta_signals.parquet
 
 # Cache EDGAR : volumineux et régénérable (les dépôts passés ne changent pas).
 logs/fundamentals_cache/
+
+# Verrou d'exécution — état d'un processus, jamais versionné.
+logs/run.lock

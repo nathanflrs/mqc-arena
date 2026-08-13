@@ -57,6 +57,7 @@ from src.execution.reconciliation import (
 )
 
 from src.execution.logger import log_order_plan, log_execution, log_decisions
+from src.execution.run_lock import TRIGGER_CLI, RunLockBusy, run_lock
 from src.risk.manager import RiskConfig, RiskManager, DrawdownCircuitBreaker
 from src.risk.allocator import AllocatorConfig, DynamicAllocator
 from src.risk.correlation import CorrelationGuard
@@ -495,6 +496,39 @@ def _send_post_execution_report(
 
 
 def main() -> None:
+    """
+    Point d'entrée. Prend le verrou d'exécution, puis délègue à `_run`.
+
+    Le verrou n'est pas une précaution théorique : `execute_plans_paper_ibkr`
+    ne sait refuser qu'un plan **déjà exécuté**, en comparant les `plan_id`.
+    Deux runs simultanés produisent deux identifiants distincts, passent tous
+    les deux, et ouvrent la position deux fois. Voir src/execution/run_lock.py.
+
+    Sortie 75 (EX_TEMPFAIL) quand un run occupe déjà la place : c'est un
+    « réessayer plus tard », pas un échec — le planificateur ne doit pas le
+    remonter comme une panne.
+    """
+    trigger = os.getenv("RUN_TRIGGER", TRIGGER_CLI)
+    try:
+        with run_lock(trigger=trigger) as lock:
+            print(f"🔒 Verrou pris — origine={lock.trigger} pid={lock.pid}")
+            _run()
+    except RunLockBusy as exc:
+        print(f"⛔ {exc}")
+        try:
+            from src.events.bus import get_bus, Event
+            get_bus().emit(Event(
+                type="system", severity="warning",
+                title="Run refusé — un autre est en cours",
+                body=str(exc),
+                meta={"holder": exc.holder.render() if exc.holder else None},
+            ))
+        except Exception:
+            pass
+        raise SystemExit(75)
+
+
+def _run() -> None:
     print("✅ Runner started (IBKR READ-ONLY + ORDER PLAN)")
 
     ci_mode = os.getenv("CI", "").lower() == "true"
