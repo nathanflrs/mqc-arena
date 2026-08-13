@@ -423,34 +423,92 @@ def get_status(user: str = Depends(require_auth)):
     }
 
 
+def _data() -> "DashboardData":
+    from src.dashboard.data import DashboardData
+    return DashboardData(_read_text)
+
+
+@app.get("/api/overview")
+def get_overview(user: str = Depends(require_auth)):
+    """
+    Tout ce que la vue d'ensemble affiche, chaque chiffre avec sa provenance.
+
+    Un seul appel plutôt que six, et surtout une seule règle : `as_of`,
+    `source` et `kind` accompagnent systématiquement la valeur, si bien qu'une
+    carte ne peut plus afficher un backtest de 2022 ou une décision de juin
+    sans que l'écran ait de quoi le dire.
+    """
+    d = _data()
+    return {
+        "nav":           d.nav().to_dict(),
+        "total_return":  d.total_return().to_dict(),
+        "equity_curve":  d.equity_curve().to_dict(),
+        "pnl":           d.pnl().to_dict(),
+        "decisions":     d.latest_decisions().to_dict(),
+        "strategies":    d.strategies().to_dict(),
+        "circuit_breaker": d.circuit_breaker().to_dict(),
+        "last_run":      d.last_run().to_dict(),
+    }
+
+
 @app.get("/api/signals")
 def get_signals(user: str = Depends(require_auth)):
-    raw = _read_text("logs/decisions.csv")
+    """
+    Décisions du dernier run **seulement**.
+
+    L'implémentation précédente gardait le dernier gagnant de chaque symbole sur
+    tout l'historique : BRK-B et JNJ, retirés de l'univers en juin, figuraient
+    encore parmi les « signaux live » du 13 août, portant le compte à 16 au lieu
+    de 12. Le filtrage se fait désormais sur le plan_id du dernier run.
+
+    Le format de sortie est conservé pour ne pas casser l'écran existant.
+    """
+    fig = _data().latest_decisions()
+    rows = [
+        {
+            "ts":           fig.as_of,
+            "symbol":       r["symbol"],
+            "regime":       r["regime"],
+            "winner_agent": r["agent"],
+            "action":       r["action"],
+            "confidence":   r["confidence"],
+            "reason":       r["reason"],
+        }
+        for r in (fig.value or [])
+    ]
+    return JSONResponse(content=rows)
+
+
+@app.get("/api/equity")
+def get_equity_live(user: str = Depends(require_auth)):
+    """
+    Capital jour après jour, **du compte réel**.
+
+    L'ancienne version servait `logs/portfolio_equity.csv` — un backtest
+    2022→juin 2026 sur base 100 000 $ — sous le titre « Equity curve vs SPY ».
+    La courbe du vrai compte commence au premier run du serveur et se remplit
+    une séance à la fois ; un seul point au départ est la réponse honnête.
+    """
+    return _data().equity_curve().to_dict()
+
+
+@app.get("/api/backtest-equity")
+def get_backtest_equity(user: str = Depends(require_auth)):
+    """Courbe du backtest, servie séparément et jamais confondue avec le réel."""
+    raw = _read_text("logs/portfolio_equity.csv")
     if not raw:
-        return JSONResponse(content=[])
+        return JSONResponse(content={"kind": "unavailable", "value": None})
     try:
         df = pd.read_csv(io.StringIO(raw))
-        # New schema (sprint-6+): one row per agent, is_winner flag
-        if "is_winner" in df.columns:
-            df = df[df["is_winner"].astype(str).str.lower().isin(["true","1"])]
-            # ts: fill NaN old-column from new timestamp column
-            if "timestamp" in df.columns:
-                if "ts" not in df.columns:
-                    df = df.rename(columns={"timestamp": "ts"})
-                else:
-                    df["ts"] = df["ts"].fillna(df["timestamp"])
-            # winner_agent: fill NaN old-column from new agent column
-            if "agent" in df.columns:
-                if "winner_agent" not in df.columns:
-                    df = df.rename(columns={"agent": "winner_agent"})
-                else:
-                    df["winner_agent"] = df["winner_agent"].fillna(df["agent"])
-        cols = [c for c in ["ts","symbol","regime","winner_agent","action","confidence","reason"]
-                if c in df.columns]
-        df = df[cols].drop_duplicates(subset=["symbol"], keep="last").sort_values("symbol")
-        return _df_json(df)
+        step = max(1, len(df) // 120)
+        return JSONResponse(content={
+            "kind": "simulated",
+            "source": "logs/portfolio_equity.csv",
+            "note": "backtest — ni le capital réel, ni la période en cours",
+            "value": json.loads(df.iloc[::step].to_json(orient="records")),
+        })
     except Exception:
-        return JSONResponse(content=[])
+        return JSONResponse(content={"kind": "unavailable", "value": None})
 
 
 @app.get("/api/performance")
@@ -563,17 +621,12 @@ def reset_circuit_breaker(user: str = Depends(require_auth)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/equity")
-def get_equity(user: str = Depends(require_auth)):
-    raw = _read_text("logs/portfolio_equity.csv")
-    if not raw:
-        return JSONResponse(content=[])
-    try:
-        df = pd.read_csv(io.StringIO(raw))
-        step = max(1, len(df) // 120)
-        return _df_json(df.iloc[::step])
-    except Exception:
-        return JSONResponse(content=[])
+# L'ancien /api/equity servait logs/portfolio_equity.csv — un backtest — sous
+# le titre « Equity curve vs SPY ». Il est remplacé plus haut par la courbe du
+# compte réel, et le backtest est exposé séparément via /api/backtest-equity.
+# FastAPI retient la PREMIÈRE route déclarée : laisser ce doublon en place
+# n'avait pas d'effet visible, mais la moindre réorganisation du fichier aurait
+# silencieusement remis le backtest à l'écran.
 
 
 @app.get("/api/agents")
