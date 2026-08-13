@@ -33,7 +33,24 @@ def _chat_id() -> int:
     return int(s)
 
 
+# Telegram est éteint par défaut depuis le 2026-08-13.
+#
+# Deux raisons. Le pilotage passe désormais par le dashboard et les
+# notifications web, sur une seule surface au lieu de deux. Et le jeton du bot
+# s'est retrouvé public dans l'historique Git du dépôt le 2026-06-03 : tant
+# qu'il n'est pas révoqué, n'importe qui peut écrire dans la conversation en se
+# faisant passer pour le fonds.
+#
+# Retirer les planifications ne suffisait pas : plusieurs chemins de code
+# appellent encore send_message. Le verrou est donc ici, au point d'envoi.
+# Pour rallumer : TELEGRAM_ENABLED=true.
+def _enabled() -> bool:
+    return os.getenv("TELEGRAM_ENABLED", "false").strip().lower() == "true"
+
+
 def send_message(text: str) -> None:
+    if not _enabled():
+        return
     url = f"https://api.telegram.org/bot{_token()}/sendMessage"
     payload = {"chat_id": _chat_id(), "text": text}
     r = requests.post(url, json=payload, timeout=15)

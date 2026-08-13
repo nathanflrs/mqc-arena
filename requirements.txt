@@ -33,3 +33,6 @@ pyarrow>=14.0
 
 # Testing
 pytest>=8.0
+
+# Notifications web push (dashboard → téléphone)
+pywebpush>=2.0

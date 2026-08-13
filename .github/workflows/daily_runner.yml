@@ -11,10 +11,12 @@ on:
     # de 100 000 $ vide à chaque exécution : ses décisions ne décrivent aucun
     # compte réel, et mélangées à celles du serveur elles rendaient le track
     # record inanalysable.
-    - cron: '0 6 * * 1-5'     # Mon–Fri 06:00 UTC (8h00 CEST heure d'été)
-    - cron: '15 7 * * 1'      # Mon only 07:15 UTC (tearsheet hebdomadaire)
+    # Les trois planifications qui envoyaient sur Telegram — briefing matinal,
+    # tearsheet hebdomadaire, factsheet mensuelle — sont retirées le 2026-08-13.
+    # Le pilotage passe désormais par le dashboard et les notifications web, et
+    # le jeton du bot s'était retrouvé public dans l'historique Git le
+    # 2026-06-03. Les jobs restent déclenchables à la main.
     - cron: '30 14 * * 1-5'   # Mon–Fri 14:30 UTC (10:30 ET — shadow mode)
-    - cron: '0 7 1 * *'      # 1er du mois 07:00 UTC (factsheet mensuelle)
   workflow_dispatch:            # manual trigger from GitHub UI
 
 jobs:
