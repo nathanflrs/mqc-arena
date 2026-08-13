@@ -217,8 +217,77 @@ self.addEventListener('fetch', e => {
       .catch(() => caches.match(e.request))
   );
 });
+
+// ── Notifications ────────────────────────────────────────────────────────────
+// Le service worker vit indépendamment de l'onglet : ce gestionnaire s'exécute
+// même dashboard fermé, application quittée, téléphone verrouillé. C'est toute
+// la différence avec une alerte affichée dans la page.
+self.addEventListener('push', e => {
+  let d = { title: 'Milan Capital', body: '', url: '/', tag: 'milan' };
+  try { d = { ...d, ...e.data.json() }; } catch (_) {}
+  e.waitUntil(self.registration.showNotification(d.title, {
+    body: d.body,
+    icon: '/icon-192.png?v=3',
+    badge: '/icon-192.png?v=3',
+    // Un `tag` constant fait remplacer la notification précédente au lieu de
+    // l'empiler : deux runs le même jour ne doivent pas laisser deux lignes
+    // contradictoires dans le centre de notifications.
+    tag: d.tag,
+    renotify: true,
+    data: { url: d.url },
+  }));
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/';
+  // Réutilise l'onglet déjà ouvert plutôt que d'en empiler un par notification.
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true })
+    .then(list => {
+      for (const c of list) if ('focus' in c) return c.focus();
+      return clients.openWindow(url);
+    }));
+});
 """
     return Response(content=js, media_type="application/javascript")
+
+
+# ── Notifications push ────────────────────────────────────────────────────────
+
+@app.get("/api/push/key")
+def push_key(user: str = Depends(require_auth)):
+    """Clé publique VAPID — seule valeur transmise au navigateur."""
+    try:
+        from src.notify.push import count_subscriptions, public_key
+        return {"public_key": public_key(), "subscribed": count_subscriptions()}
+    except Exception as exc:
+        logger.warning("clé VAPID indisponible : %s", exc)
+        raise HTTPException(status_code=503, detail="notifications indisponibles")
+
+
+@app.post("/api/push/subscribe")
+async def push_subscribe(request: Request, user: str = Depends(require_auth)):
+    from src.notify.push import add_subscription
+    try:
+        n = add_subscription(await request.json())
+        return {"ok": True, "subscribed": n}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/push/unsubscribe")
+async def push_unsubscribe(request: Request, user: str = Depends(require_auth)):
+    from src.notify.push import remove_subscription
+    body = await request.json()
+    return {"ok": True, "subscribed": remove_subscription(body.get("endpoint", ""))}
+
+
+@app.post("/api/push/test")
+def push_test(user: str = Depends(require_auth)):
+    """Envoi de vérification — la seule façon honnête de savoir si ça marche."""
+    from src.notify.push import send_push
+    r = send_push("Milan Capital", "Les notifications fonctionnent.", tag="test")
+    return {"ok": r.sent > 0, "detail": r.render()}
 
 
 # ── Auth routes ───────────────────────────────────────────────────────────────

@@ -898,6 +898,18 @@ tr:hover td{background:var(--s2)}
             Reset Circuit Breaker
           </button>
 
+          <!-- Notifications — remplace Telegram, éteint le 2026-08-13 -->
+          <div class="card card-enter mb-10" id="push-card" style="--i:7;padding:16px 18px">
+            <div class="cb-row" style="margin-bottom:10px">
+              <span style="font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:var(--t3);padding-left:8px;border-left:2px solid var(--cobalt)">Notifications</span>
+              <span class="badge badge-neutral" id="push-status">—</span>
+            </div>
+            <div style="font-family:var(--mono);font-size:9.5px;line-height:1.7;color:var(--t3);margin-bottom:10px" id="push-help">
+              Recevoir les décisions du fonds sur ce téléphone, même application fermée.
+            </div>
+            <button class="btn" id="btn-push" onclick="togglePush()" style="width:100%">Activer</button>
+          </div>
+
           <!-- Fill stats -->
           <div class="card fill-card card-enter" id="fill-stats-card" style="--i:8;display:none;margin-bottom:10px">
             <div class="card-head" style="margin-bottom:0">
@@ -1205,6 +1217,7 @@ function revealDashboard() {
   detectMode();
   tabLoaded[0] = true;
   loadStatus(); loadSignals(); loadFillStats(); loadReturnHero(); loadBestSharpeHero(); loadNewsToday();
+  refreshPushUI();
   setInterval(loadStatus, 6000);
 }
 
@@ -1527,6 +1540,103 @@ function _renderSignals(rows) {
       </div></td>
     </tr>`;
   }).join('');
+}
+
+// ── Notifications push ────────────────────────────────────────────────────────
+//
+// Remplace Telegram, éteint le 2026-08-13. Le service worker reçoit les
+// messages même application fermée : c'est ce qui distingue une notification
+// d'une alerte affichée dans la page.
+//
+// iOS impose une contrainte : les notifications web n'existent QUE si le site
+// a été ajouté à l'écran d'accueil. Dans Safari, le bouton ne peut rien faire —
+// autant l'expliquer plutôt que d'échouer en silence.
+let pushSub = null;
+
+function pushSupported() {
+  return 'serviceWorker' in navigator && 'PushManager' in window;
+}
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+}
+
+function b64ToUint8(base64) {
+  const pad = '='.repeat((4 - base64.length % 4) % 4);
+  const raw = atob((base64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function refreshPushUI() {
+  const badge = document.getElementById('push-status');
+  const btn   = document.getElementById('btn-push');
+  const help  = document.getElementById('push-help');
+  if (!badge || !btn) return;
+
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  if (!pushSupported() || (isIOS && !isStandalone())) {
+    badge.textContent = 'INDISPONIBLE';
+    badge.className   = 'badge badge-neutral';
+    btn.disabled = true;
+    btn.textContent = 'Indisponible';
+    help.textContent = isIOS
+      ? "Sur iPhone, les notifications exigent d'ajouter le site à l'écran d'accueil : Partager → Sur l'écran d'accueil, puis rouvrir depuis l'icône."
+      : "Ce navigateur ne prend pas en charge les notifications web.";
+    return;
+  }
+
+  const reg = await navigator.serviceWorker.ready;
+  pushSub = await reg.pushManager.getSubscription();
+  if (pushSub && Notification.permission === 'granted') {
+    badge.textContent = 'ACTIVES';
+    badge.className   = 'badge badge-ok';
+    btn.textContent   = 'Désactiver';
+    help.textContent  = 'Tu recevras un résumé après chaque run, et les alertes critiques.';
+  } else {
+    badge.textContent = Notification.permission === 'denied' ? 'REFUSÉES' : 'INACTIVES';
+    badge.className   = 'badge ' + (Notification.permission === 'denied' ? 'badge-warn' : 'badge-neutral');
+    btn.textContent   = 'Activer';
+    btn.disabled      = Notification.permission === 'denied';
+    help.textContent  = Notification.permission === 'denied'
+      ? "Autorisation refusée. À réactiver dans les réglages du navigateur."
+      : "Recevoir les décisions du fonds sur ce téléphone, même application fermée.";
+  }
+}
+
+async function togglePush() {
+  const btn = document.getElementById('btn-push');
+  btn.disabled = true;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    if (pushSub) {
+      await fetch('/api/push/unsubscribe', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ endpoint: pushSub.endpoint }),
+      });
+      await pushSub.unsubscribe();
+      pushSub = null;
+    } else {
+      if (await Notification.requestPermission() !== 'granted') { await refreshPushUI(); return; }
+      const { public_key } = await fetch('/api/push/key').then(r => r.json());
+      pushSub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: b64ToUint8(public_key),
+      });
+      await fetch('/api/push/subscribe', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(pushSub),
+      });
+      // Envoi de vérification : la seule façon honnête de savoir si la chaîne
+      // complète fonctionne, plutôt que d'afficher « activé » et d'espérer.
+      await fetch('/api/push/test', { method: 'POST' });
+    }
+  } catch (e) {
+    console.warn('Notifications:', e);
+  } finally {
+    btn.disabled = false;
+    await refreshPushUI();
+  }
 }
 
 // ── Performance : capital réel, jour après jour ───────────────────────────────

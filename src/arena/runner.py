@@ -495,6 +495,27 @@ def _send_post_execution_report(
         print(f"⚠️  Post-execution event bus emit failed: {e}")
 
 
+def _notify_phone(n_orders: int, n_rejected: int, netliq: float,
+                  regime: str, executed: bool) -> None:
+    """
+    Résumé de la séance poussé sur le téléphone.
+
+    Remplace les messages Telegram, éteints le 2026-08-13. Isolé dans un
+    try/except large et volontairement muet : une notification est un confort,
+    jamais une étape du trading. Si Apple ou Google est injoignable, la séance
+    doit se terminer normalement — le fonds n'a pas à dépendre de la
+    disponibilité d'un service de messagerie.
+    """
+    try:
+        from src.notify.push import notify_run_complete
+        r = notify_run_complete(n_orders=n_orders, n_rejected=n_rejected,
+                                netliq=netliq, regime=regime, executed=executed)
+        if r.sent or r.failed or r.pruned:
+            print(f"📱 Notification : {r.render()}")
+    except Exception as exc:
+        print(f"⚠️  Notification non envoyée : {exc}")
+
+
 def main() -> None:
     """
     Point d'entrée. Prend le verrou d'exécution, puis délègue à `_run`.
@@ -1178,6 +1199,8 @@ def _run() -> None:
                                         body=msg, meta={"plan_id": plan_id}))
                 except Exception:
                     pass
+            _notify_phone(0, len(risk_report.rejected), snap.net_liquidation,
+                          regime, executed=False)
             return
 
         lines = []
@@ -1218,10 +1241,14 @@ def _run() -> None:
             except Exception:
                 pass
             print(f"🧯 {reason} → NO orders sent.")
+            _notify_phone(len(plans), len(risk_report.rejected),
+                          snap.net_liquidation, regime, executed=False)
             return
 
         execute_plans_paper_ibkr(ib, snap, plans, plan_id)
         _send_post_execution_report(plans, risk_report, corr_blocks, cb, snap, plan_id, regime)
+        _notify_phone(len(plans), len(risk_report.rejected),
+                      snap.net_liquidation, regime, executed=True)
 
     finally:
         if ib is not None:
