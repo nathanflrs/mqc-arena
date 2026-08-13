@@ -43,7 +43,9 @@ from src.agents.volatility import VolatilityAgent
 from src.agents.earnings_sentiment import EarningsSentimentAgent
 from src.agents.cta_trend_agent import CTATrendAgent, CTA_UNIVERSE
 from src.agents.insider_buy import InsiderBuyAgent
-from src.agents.momentum import CrossSectionalMomentumAgent
+# Conservé pour le replay historique (scripts/measure_agent_edge.py),
+# retiré de l'arène de production — voir docs/verdicts_agents.md.
+from src.agents.momentum import CrossSectionalMomentumAgent  # noqa: F401
 from src.agents.base import MarketState
 from src.broker.ibkr import connect_ibkr
 from src.broker.portfolio import fetch_account_snapshot
@@ -656,7 +658,14 @@ def _run() -> None:
             VolatilityAgent(),
             EarningsSentimentAgent(),
             InsiderBuyAgent(),
-            CrossSectionalMomentumAgent(universe=all_data),
+            # CrossSectionalMomentumAgent retiré de l'arène le 2026-08-13 :
+            # seul agent dont l'intervalle de confiance exclut zéro PAR LE BAS
+            # (−3.0 % à 20 jours, IC [−5.0 %, −1.1 %]). Il pilotait encore 18 %
+            # des décisions. L'idée de Jegadeesh-Titman est solide, mais elle
+            # exige des centaines de titres et une jambe vendeuse : sur 14
+            # mégacaps corrélées et en long seulement, elle se réduit à
+            # « acheter les 3 qui ont le plus monté ».
+            # Verdict complet : docs/verdicts_agents.md
         ])
 
         _gmm_detector = GMMRegimeDetector()
