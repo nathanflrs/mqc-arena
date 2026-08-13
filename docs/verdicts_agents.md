@@ -84,6 +84,97 @@ réglage de celle-ci.
 
 ---
 
-*Prochains verdicts prévus : MeanReversion, CTATrend, la fusion
+## 2. MeanReversionAgent — **CONSERVÉ, sous condition** (2026-08-13)
+
+### Ce qu'il affirme
+
+Acheter après une baisse marquée, en pariant sur le rebond. Trois conditions
+simultanées :
+
+- RSI 14 jours < 35 (< 30 en régime baissier)
+- prix sous la bande de Bollinger basse (20 jours, 2 écarts-types)
+- volume du jour > 1,2 × la moyenne 20 jours
+
+Le docstring invoque Renaissance Technologies. C'est une décoration : la règle
+est un croisement RSI-Bollinger de manuel. Mais contrairement à
+`BuffettAgent`, elle fait bien ce qu'elle annonce — acheter des baisses.
+
+### Ce que dit la mesure
+
+| Horizon | excès vs base | IC 95 % | signaux / dates |
+|---|---|---|---|
+| H1 | **+5.6 %** | [−1.5 %, +13.0 %] | 272 / 168 |
+| H5 | **+4.6 %** | [−4.1 %, +13.0 %] | — |
+| H20 | **+8.3 %** | [−0.3 %, +16.3 %] | 265 / 163 |
+
+**Meilleur excès des douze agents aux trois horizons.** Et pourtant aucun
+intervalle n'exclut zéro — à H20 il s'en faut de 0,3 point.
+
+Ce n'est pas la même situation que CrossSectionalMomentum, dont l'intervalle
+excluait zéro *par le bas*. Ici on ne sait pas, et la raison est identifiée.
+
+### Pourquoi on ne sait pas : il se tait
+
+Fréquence de chaque condition sur 13 370 observations :
+
+| Condition | Fréquence |
+|---|---|
+| RSI < 35 | 12,8 % |
+| + prix sous Bollinger | **3,1 %** — retire 76 % |
+| + volume élevé | **2,1 %** — retire encore 33 % |
+
+La bande de Bollinger étrangle l'agent. Elle mesure largement la même chose que
+le RSI — une baisse récente — mais bien plus strictement.
+
+Conséquence : **163 dates sur 955 portent un signal**, contre 907 pour
+BuffettAgent. Le bootstrap rééchantillonne les dates : c'est leur nombre, pas
+celui des signaux, qui fixe la largeur de l'intervalle.
+
+### La correction qu'il ne faut PAS faire
+
+Desserrer les seuils. Passer Bollinger à 1,5 écart-type multiplierait les
+signaux et resserrerait l'intervalle — mais le seuil aurait été choisi en
+regardant ce même historique, et le résultat ne vaudrait plus rien. C'est
+exactement ce qui a produit `near_high_252_threshold: 0.85  # assoupli de 0.90`
+dans `buffett.py`.
+
+### La correction légitime : le même agent, plus d'observations
+
+Appliquer la règle **inchangée**, aux **mêmes seuils**, à un univers plus
+large. On ne modifie pas l'affirmation, on la teste sur plus de données.
+
+Avec 2,1 % de déclenchement par titre et par jour, presque chaque séance
+porterait un signal :
+
+| Univers | Dates avec signal | Effet sur l'IC | IC projeté à H20 |
+|---|---|---|---|
+| 14 titres (aujourd'hui) | 163 | — | [−0.3 %, +16.3 %] |
+| 100 titres | ~841 | ÷2,3 | **[+4.6 %, +12.0 %]** |
+| 500 titres | ~955 | ÷2,4 | **[+4.9 %, +11.7 %]** |
+
+### Verdict
+
+**Conservé dans l'arène, et promu au rang de seul candidat sérieux.**
+
+**Prédiction falsifiable, posée avant le test :** si l'effet est réel à cette
+amplitude, un univers de 100 titres ou plus doit produire un intervalle
+excluant zéro à H20. **S'il s'évanouit en s'élargissant, c'était du bruit** —
+et l'agent sera retiré comme le précédent.
+
+Deux réserves à ne pas oublier au moment de conclure :
+
+- Les seuils (RSI 35, Bollinger 2σ) ont été choisis en regardant ces mêmes
+  marchés. Le +8,3 % est une **borne haute**, pas une promesse.
+- Le retour à la moyenne sur petites capitalisations n'est pas celui des
+  mégacaps : écarts achat-vente plus larges, liquidité moindre. Le test devra
+  être **net de coûts**, sans quoi il ne prouvera rien d'exploitable.
+
+Ce test rejoint le chantier d'univers de `docs/hypothese_01_accruals.md` : les
+deux ont besoin de la même chose — un univers large, reconstitué à chaque date
+sans biais du survivant.
+
+---
+
+*Prochains verdicts prévus : CTATrend, la fusion
 Buffett/Citadel/TrendFollowing, Macro et Volatility, DividendArb et InsiderBuy,
 puis Pairs et EarningsSentiment.*
