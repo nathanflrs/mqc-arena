@@ -308,6 +308,64 @@ mais un régime.
 même échec. Ou la démonstration que la persistance du taux de réussite
 s'explique entièrement par la structure des données.
 
+### TEST DE L'HYPOTHÈSE DE RÉGIME — 2026-08-14 : **réfutée**
+
+Protocole fixé avant exécution (`scripts/test_regime_hypothesis.py`) : chaque
+signal classé selon la baisse de SPY depuis son plus haut glissant sur un an,
+en quatre tranches, sur les deux périodes. La référence est le rendement
+inconditionnel de l'univers **dans la même tranche** — comparer à la moyenne
+globale aurait mélangé effet de régime et effet d'agent.
+
+| Régime | part 20-26 | part 10-19 | excès 20-26 | excès 10-19 |
+|---|---|---|---|---|
+| 0-5 % sommets | 55.4 % | 57.1 % | +0.51 % | +0.10 % |
+| 5-10 % correction | 17.7 % | 19.5 % | **+3.14 %** ✅ | −0.21 % |
+| 10-20 % marquée | 21.7 % | 19.3 % | **+2.84 %** ✅ | −1.91 % |
+| > 20 % baissier | 5.1 % | 4.0 % | **−2.62 %** ❌ | +1.32 % |
+
+L'hypothèse avait deux jambes. La première tient, la seconde s'effondre.
+
+**Confirmé :** l'avantage se concentre bien dans les corrections. Tout se joue
+entre 5 et 20 % de baisse ; ailleurs, rien.
+
+**Réfuté :** la composition des régimes est quasi identique entre les deux
+périodes. Marché tendu (baisse > 10 %) : **26,8 % contre 23,4 %**. Trois points
+d'écart ne peuvent expliquer un renversement de signe.
+
+### Ce que le test révèle à la place
+
+Même régime, résultats opposés :
+
+```
+correction  5-10 %    2020-2026 : +3.14 %      2010-2019 : −0.21 %
+correction 10-20 %    2020-2026 : +2.84 %      2010-2019 : −1.91 %
+```
+
+Ce n'est donc pas la **fréquence** des corrections qui a changé, c'est **leur
+comportement**. Les creux de 2020-2026 se sont rattrapés en V, soutenus par une
+liquidité exceptionnelle ; ceux de la décennie précédente se sont traînés.
+
+L'agent n'exploite ni une inefficience persistante, ni une composition de
+régimes. Il exploite **une caractéristique d'une époque** — ce qui est plus
+difficile à défendre, et impossible à projeter.
+
+### Le seul résultat immédiatement exploitable
+
+```
+> 20 % baissier    −2.62 %    IC [−4.08 %, −1.15 %]
+```
+
+**En marché franchement baissier, l'agent perd de façon significative.** C'est
+le couteau qui tombe : acheter des baisses pendant un krach. Le résultat est
+cohérent avec la théorie, significatif, et donne une règle applicable
+directement — cet agent ne doit pas acheter au-delà de 20 % de baisse du
+marché.
+
+C'est aussi, symétriquement, la seule piste sérieuse de **vente à découvert**
+identifiée à ce jour : ce que l'agent perd à l'achat dans ce régime, il
+pourrait le gagner à la vente. À tester séparément — le constat d'une perte à
+l'achat ne démontre pas un gain à la vente.
+
 ---
 
 ## 3. CTATrendAgent — **RETIRÉ**, et les 6 ETF avec lui (2026-08-13)
