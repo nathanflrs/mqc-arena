@@ -51,8 +51,8 @@ from src.analysis.agent_edge import (                                # noqa: E40
 )
 from src.data.universe import sp500_at                               # noqa: E402
 
-SNAP = Path("logs/universe_snapshot")
-OUT = Path("logs/mr_sp500_signals.parquet")
+DEFAULT_SNAP = Path("logs/universe_snapshot")
+DEFAULT_OUT = Path("logs/mr_sp500_signals.parquet")
 WARMUP = 60          # assez pour RSI 14 + Bollinger 20 + volume 20
 MEMBERSHIP_STEP = 90
 
@@ -152,6 +152,17 @@ def table_appartenance(dates: pd.DatetimeIndex) -> dict:
 
 
 def main() -> None:
+    import argparse
+    ap = argparse.ArgumentParser()
+    # Le test hors échantillon vit dans son propre dossier : les données de
+    # validation ne doivent jamais se mélanger à celles de conception.
+    ap.add_argument("--snapshot", default=str(DEFAULT_SNAP))
+    ap.add_argument("--out", default=str(DEFAULT_OUT))
+    ap.add_argument("--label", default="2020-2026")
+    args = ap.parse_args()
+    SNAP = Path(args.snapshot)
+    OUT = Path(args.out)
+    print(f"📂 instantané : {SNAP}   ({args.label})\n")
     cfg = MeanReversionConfig()
     manifest = json.loads((SNAP / "manifest.json").read_text())
 
@@ -162,7 +173,17 @@ def main() -> None:
         if len(df) > WARMUP + 60:
             data[p.stem] = df
     print(f"   {len(data)} sociétés   couverture "
-          f"{manifest['coverage']['couverture']:.1%}\n")
+          f"{manifest['coverage']['couverture']:.1%}")
+
+    # Filtre de qualité. Sans lui, le test du 2026-08-14 affichait un skew de
+    # +43,6 et 16 observations d'un seul ticker corrompu (TIE, +758 % de
+    # rendement journalier) portaient la MOITIÉ du rendement moyen mesuré.
+    # Les rejets sont imprimés, jamais avalés : une exclusion silencieuse de
+    # données est aussi dangereuse qu'une donnée fausse.
+    from src.data.quality import filter_universe, render_rejects
+    data, rejets = filter_universe(data)
+    print(render_rejects(rejets, limit=8))
+    print(f"   → {len(data)} sociétés retenues\n")
 
     print("🔬 Vérification de l'équivalence vectorisée")
     verifier_equivalence(data, cfg)
