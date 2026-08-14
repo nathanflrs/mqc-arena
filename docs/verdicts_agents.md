@@ -238,6 +238,76 @@ limites sont nommées. La prochaine étape est écrite : **la période 2010-2019
 seuils inchangés.** Si l'effet y tient, on aura quelque chose. S'il disparaît,
 il aura été une propriété de 2020-2026.
 
+### TEST HORS ÉCHANTILLON — 2026-08-14 : **il ne se reproduit pas**
+
+535 sociétés, 2010-2019, appartenance reconstituée à chaque date, seuils
+strictement inchangés. Une décennie qu'aucun réglage n'avait jamais vue.
+
+| | 2020-2026 (conception) | 2010-2019 (validation) |
+|---|---|---|
+| Taux de réussite H1 | +3.2 % [−0.4, +7.0] | +4.7 % [+1.8, +7.7] ✅ |
+| Taux de réussite H5 | +5.3 % [+1.9, +8.7] ✅ | +3.4 % [+0.9, +5.5] ✅ |
+| Taux de réussite H20 | +5.1 % [+2.0, +8.0] ✅ | +2.0 % [−0.5, +4.3] ❌ |
+| **Rendement H5** | **+0.855 % [+0.46, +1.25] ✅** | **+0.254 % [−0.22, +0.67] ❌** |
+| **Rendement H20** | **+2.254 % [+1.48, +3.00] ✅** | **+0.856 % [−0.09, +1.72] ❌** |
+| vs passif à H20 | +2.25 % contre +1.17 % ✅ | +0.86 % contre +0.73 % |
+| Ratio gain/perte H20 | 1.20 | **0.87** |
+
+**La prédiction écrite le matin même n'est pas tenue.** L'intervalle à H20
+inclut zéro sur la période de validation.
+
+Et le point décisif est ailleurs, dans les lignes de rendement : **les trois
+intervalles traversent zéro.** Le taux de réussite conserve une part de
+persistance à H1 et H5 — ce n'est pas rien — mais **un taux de réussite sans
+avantage de rendement n'est pas exploitable.** Le ratio gain/perte de 0,87 le
+dit crûment : on a raison plus souvent, et on perd davantage quand on a tort.
+
+### L'incident qui a failli inverser la conclusion
+
+Le premier passage de ce test affichait un rendement significatif à tous les
+horizons — et un **skew de +43,6**. Sur 35 000 observations, ce chiffre ne
+décrit pas un marché mais quelques valeurs aberrantes.
+
+Elles venaient d'un seul ticker. `TIE` affichait +758 % de rendement journalier
+— +197 000 % en prix. **Seize observations portaient la moitié du rendement
+moyen.** L'inspection a révélé 37 séries corrompues sur 547 : tickers
+réattribués, facteurs d'ajustement cassés.
+
+Après filtrage (`src/data/quality.py`, 12 séries écartées), le skew passe de
++43,6 à −2,07 et **tous les rendements deviennent non significatifs**.
+
+> Sans ce contrôle, ce document annoncerait aujourd'hui que MeanReversion se
+> reproduit hors échantillon. C'était faux, et rien dans les chiffres bruts ne
+> le signalait.
+
+Le résultat de conception, lui, **survit au même filtrage** — une seule série
+écartée sur 2020-2026, et les chiffres bougent à peine. Il n'était donc pas
+contaminé.
+
+### Verdict mis à jour — **CONSERVÉ EN SURSIS**
+
+L'effet mesuré sur 2020-2026 était réel et robuste à l'élargissement de
+l'univers. **Il n'est pas robuste au changement d'époque.** C'était une
+propriété de cette période, pas une régularité du marché.
+
+Il reste dans l'arène pour deux raisons, et pas une de plus :
+
+1. La persistance du taux de réussite à H1 et H5 sur les deux périodes n'est
+   pas rien. Quelque chose existe, ce n'est simplement pas exploitable en
+   l'état.
+2. C'est le dernier agent du fonds dont une propriété résiste à un test.
+
+**Ce qu'il faudrait pour le confirmer**, et qui ne relève plus du réglage :
+comprendre *pourquoi* le rendement se dissipe alors que le taux de réussite
+tient. L'hypothèse la plus simple est que 2020-2026 a connu des rebonds
+d'ampleur inhabituelle — le creux de mars 2020, puis 2022 — que la décennie
+précédente n'offrait pas. Si c'est vrai, l'agent ne capte pas une inefficience
+mais un régime.
+
+**Ce qui le condamnerait :** un troisième test sur une autre période, avec le
+même échec. Ou la démonstration que la persistance du taux de réussite
+s'explique entièrement par la structure des données.
+
 ---
 
 ## 3. CTATrendAgent — **RETIRÉ**, et les 6 ETF avec lui (2026-08-13)
