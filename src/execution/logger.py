@@ -211,3 +211,63 @@ def log_decisions(
         df_all = df_new
 
     df_all.to_csv(out_path, index=False)
+
+CONSENSUS_PATH = "logs/consensus_shadow.csv"
+
+CONSENSUS_COLS = [
+    "plan_id", "timestamp", "symbol", "regime",
+    "consensus_action", "score", "conviction", "target_weight",
+    "n_speaking", "n_eligible", "participation",
+    "winner_agent", "winner_action", "diverge",
+]
+
+
+def log_consensus(
+    consensus,                       # ConsensusSignal | None
+    symbol: str,
+    plan_id: str,
+    regime: str,
+    winner_agent: str | None = None,
+    winner_action: str | None = None,
+) -> None:
+    """
+    Journalise la décision de l'arène AGRÉGÉE, qui ne s'exécute pas.
+
+    Fichier séparé, et c'est délibéré : `decisions.csv` porte l'historique de
+    production depuis mars, il alimente edge_audit, live_scorer, monte_carlo et
+    factor_analysis. Y ajouter des colonnes pour une mesure en observation
+    reviendrait à changer le schéma d'un fichier que quatre modules relisent —
+    exactement le mécanisme qui a corrompu trois lignes le 2026-08-02, mises en
+    quarantaine depuis.
+
+    `consensus` à None signifie « le mécanisme agrégé se serait abstenu » : la
+    ligne est écrite quand même, sinon la comparaison serait biaisée en ne
+    retenant que les séances où il agit.
+    """
+    Path("logs").mkdir(parents=True, exist_ok=True)
+
+    action = consensus.action if consensus is not None else "NONE"
+    row = {
+        "plan_id": plan_id,
+        "timestamp": _utc_now(),
+        "symbol": symbol,
+        "regime": regime,
+        "consensus_action": action,
+        "score": round(consensus.score, 4) if consensus else 0.0,
+        "conviction": round(consensus.conviction, 4) if consensus else 0.0,
+        "target_weight": round(consensus.target_weight, 4) if consensus else 0.0,
+        "n_speaking": consensus.n_speaking if consensus else 0,
+        "n_eligible": consensus.n_eligible if consensus else 0,
+        "participation": round(consensus.participation, 4) if consensus else 0.0,
+        "winner_agent": winner_agent or "NONE",
+        "winner_action": winner_action or "NONE",
+        "diverge": action != (winner_action or "NONE"),
+    }
+
+    df_new = pd.DataFrame([row], columns=CONSENSUS_COLS)
+    try:
+        df_old = pd.read_csv(CONSENSUS_PATH).reindex(columns=CONSENSUS_COLS)
+        df_all = pd.concat([df_old, df_new], ignore_index=True)
+    except FileNotFoundError:
+        df_all = df_new
+    df_all.to_csv(CONSENSUS_PATH, index=False)

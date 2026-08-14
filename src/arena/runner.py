@@ -29,6 +29,7 @@ from src.config import (
 )
 from src.arena.arena import Arena
 from src.arena.normalizer import ConfidenceNormalizer
+from src.arena.consensus import aggregate
 from src.arena.selector import select_best
 from src.agents.buffett import BuffettAgent
 from src.agents.citadel import CitadelAgent
@@ -61,7 +62,7 @@ from src.execution.reconciliation import (
     summarize, to_execution_rows,
 )
 
-from src.execution.logger import log_order_plan, log_execution, log_decisions
+from src.execution.logger import log_order_plan, log_execution, log_decisions, log_consensus
 from src.execution.run_lock import TRIGGER_CLI, RunLockBusy, run_lock
 from src.risk.manager import RiskConfig, RiskManager, DrawdownCircuitBreaker
 from src.risk.allocator import AllocatorConfig, DynamicAllocator
@@ -853,6 +854,28 @@ def _run() -> None:
             for s in signals:
                 print(" -", s)
             print("🏆 WINNER:", winner)
+
+            # ── Arène agrégée, en observation ────────────────────────────────
+            # Calculée et journalisée à chaque séance, JAMAIS exécutée. Elle
+            # remplacera `select_best` si la comparaison lui donne raison sur
+            # quelques semaines de données réelles — pas avant.
+            #
+            # Ce qu'elle corrige : `select_best` couronne l'agent dont l'auteur
+            # a écrit la plus grosse `confidence` dans son fichier, alors que la
+            # calibration mesurée montre que ce nombre ne prédit rien (plat chez
+            # Buffett, inversé chez TrendFollowing). Voir src/arena/consensus.py.
+            #
+            # Un échec ici ne doit jamais interrompre le run : c'est une mesure
+            # parallèle, pas une étape du trading.
+            try:
+                _cons = aggregate(_signals_norm)
+                if _cons is not None:
+                    print(f"🧭 CONSENSUS (observation) : {_cons.render()}")
+                log_consensus(_cons, symbol=sym, plan_id=plan_id, regime=regime,
+                              winner_agent=winner.agent_name if winner else None,
+                              winner_action=winner.action if winner else None)
+            except Exception as _cons_exc:
+                print(f"⚠️  consensus non calculé ({_cons_exc}) — sans effet sur le run")
 
             log_decisions(
                 signals,
