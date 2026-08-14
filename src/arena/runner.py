@@ -653,8 +653,10 @@ def _run() -> None:
         # CrossSectionalMomentumAgent reçoit tout all_data pour le ranking JT.
         # Baisse du marché depuis son plus haut sur un an, transmise à
         # MeanReversionAgent. Mesuré le 2026-08-14 : au-delà de 20 % de baisse,
-        # l'agent perd −2.6 % (IC [−4.1 %, −1.2 %]) — acheter des creux pendant
-        # un krach revient à rattraper le couteau qui tombe. Voir
+        # l'agent perd −2.6 % (IC [−3.5 %, −0.3 %]) sur 2020-2026 — mais le
+        # signe s'inverse sur 2010-2019, sans que ni l'une ni l'autre période ne
+        # tranche. Le garde-fou est conservé pour son asymétrie, pas pour sa
+        # significativité : voir MeanReversionConfig.max_market_drawdown,
         # docs/verdicts_agents.md et scripts/test_regime_hypothesis.py.
         _market_dd = None
         try:
@@ -687,13 +689,22 @@ def _run() -> None:
             VolatilityAgent(),
             EarningsSentimentAgent(),
             InsiderBuyAgent(),
-            # CrossSectionalMomentumAgent retiré de l'arène le 2026-08-13 :
-            # seul agent dont l'intervalle de confiance exclut zéro PAR LE BAS
-            # (−3.0 % à 20 jours, IC [−5.0 %, −1.1 %]). Il pilotait encore 18 %
-            # des décisions. L'idée de Jegadeesh-Titman est solide, mais elle
-            # exige des centaines de titres et une jambe vendeuse : sur 14
-            # mégacaps corrélées et en long seulement, elle se réduit à
-            # « acheter les 3 qui ont le plus monté ».
+            # CrossSectionalMomentumAgent retiré de l'arène le 2026-08-13.
+            # Il pilotait 18 % des décisions sans avoir jamais démontré le
+            # moindre avantage : −1.2 % à 20 jours, IC [−8.1 %, +6.0 %].
+            #
+            # Le retrait s'appuyait alors sur un IC de [−5.0 %, −1.1 %] qui
+            # excluait zéro. Le bootstrap par blocs du 2026-08-14 a montré que
+            # cet intervalle ignorait le chevauchement des fenêtres : on ne
+            # peut pas dire que l'agent perd, seulement qu'il n'a rien prouvé.
+            # Cela suffit — un agent justifie sa place, on ne prouve pas sa
+            # nocivité pour le retirer.
+            #
+            # L'idée de Jegadeesh-Titman reste solide, mais elle exige des
+            # centaines de titres et une jambe vendeuse : sur 14 mégacaps
+            # corrélées et en long seulement, elle se réduit à « acheter les 3
+            # qui ont le plus monté ». Testée avec les deux jambes sur le
+            # S&P 500, elle traverse zéro sur les deux époques.
             # Verdict complet : docs/verdicts_agents.md
         ])
 

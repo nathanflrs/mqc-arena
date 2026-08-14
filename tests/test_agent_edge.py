@@ -313,13 +313,45 @@ class TestBlockBootstrap:
     """
 
     def test_blocks_are_contiguous(self):
+        """Contigus modulo n : la série est refermée en anneau."""
         from src.analysis.agent_edge import block_bootstrap_indices
         rng = np.random.default_rng(0)
-        idx = block_bootstrap_indices(n_dates=100, block=20, n_boot=5, rng=rng)
-        # À l'intérieur d'un bloc, les indices se suivent.
+        n = 100
+        idx = block_bootstrap_indices(n_dates=n, block=20, n_boot=5, rng=rng)
         for ligne in idx:
             bloc = ligne[:20]
-            assert list(bloc) == list(range(bloc[0], bloc[0] + 20))
+            attendu = [(bloc[0] + k) % n for k in range(20)]
+            assert list(bloc) == attendu
+
+    def test_every_observation_carries_the_same_weight(self):
+        """
+        Régression du 2026-08-14, seconde passe. La première version tirait les
+        débuts dans [0, n−H] : la position 0 était 23 fois moins échantillonnée
+        que le centre, et le symptôme était une moyenne tombant HORS de son
+        propre intervalle de confiance.
+        """
+        from src.analysis.agent_edge import block_bootstrap_indices
+        n, block = 70, 20
+        idx = block_bootstrap_indices(n, block, 20_000, np.random.default_rng(0))
+        poids = np.bincount(idx.ravel(), minlength=n) / idx.size * n
+        assert poids.max() / poids.min() < 1.15, \
+            f"échantillonnage non uniforme : {poids.min():.2f} à {poids.max():.2f}"
+
+    def test_bootstrap_mean_brackets_the_sample_mean(self):
+        """
+        Le test qui aurait attrapé le défaut tout de suite : la moyenne de la
+        distribution bootstrap doit coïncider avec la moyenne de l'échantillon.
+        """
+        from src.analysis.agent_edge import block_bootstrap_indices
+        rng = np.random.default_rng(11)
+        # Série à tendance marquée : les extrémités portent les valeurs
+        # extrêmes, donc les sous-pondérer se voit immédiatement.
+        serie = np.linspace(-1.0, 1.0, 80) + rng.normal(0, 0.05, 80)
+        idx = block_bootstrap_indices(80, 20, 5000, np.random.default_rng(2))
+        boot = serie[idx].mean(axis=1)
+        assert abs(boot.mean() - serie.mean()) < 0.02
+        lo, hi = np.percentile(boot, [2.5, 97.5])
+        assert lo <= serie.mean() <= hi
 
     def test_indices_stay_in_range(self):
         from src.analysis.agent_edge import block_bootstrap_indices

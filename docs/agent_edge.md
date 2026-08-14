@@ -38,11 +38,11 @@ DummyHoldAgent                     —      —       —       —        —  
 ```
 ── Edge par agent — horizon H5 (succès = |rendement| > 0.30%) ──
 Agent                              N  dates    taux    base    excès            IC 95%
-MeanReversionAgent               209    147   59.3%   54.3%    +5.1%   [-5.4%, +16.2%]
-CitadelAgent                    2686    769   55.7%   54.3%    +1.4%    [-2.1%, +5.2%]
-CrossSectionalMomentumAgent     3535    950   54.7%   54.3%    +0.5%    [-3.1%, +4.1%]
-BuffettAgent                    7655    898   53.4%   54.3%    -0.9%    [-3.9%, +2.2%]
-TrendFollowingAgent             2516    755   53.0%   54.3%    -1.3%    [-5.3%, +2.9%]
+MeanReversionAgent               209    147   59.3%   54.3%    +5.1%   [-6.0%, +15.6%]
+CitadelAgent                    2686    769   55.7%   54.3%    +1.4%    [-2.2%, +5.0%]
+CrossSectionalMomentumAgent     3535    950   54.7%   54.3%    +0.5%    [-3.2%, +4.1%]
+BuffettAgent                    7655    898   53.4%   54.3%    -0.9%    [-3.9%, +2.3%]
+TrendFollowingAgent             2516    755   53.0%   54.3%    -1.3%    [-5.4%, +2.8%]
 DummyHoldAgent                     —      —       —       —        —                 —
 ```
 
@@ -51,11 +51,11 @@ DummyHoldAgent                     —      —       —       —        —  
 ```
 ── Edge par agent — horizon H20 (succès = |rendement| > 0.30%) ──
 Agent                              N  dates    taux    base    excès            IC 95%
-MeanReversionAgent               206    145   68.9%   60.2%    +8.7%   [-1.5%, +21.3%]
-TrendFollowingAgent             2495    740   60.1%   60.2%    -0.1%    [-8.0%, +7.7%]
-BuffettAgent                    7537    883   59.2%   60.2%    -1.0%    [-7.4%, +5.0%]
-CrossSectionalMomentumAgent     3475    935   58.9%   60.2%    -1.2%    [-8.1%, +6.0%]
-CitadelAgent                    2655    755   58.0%   60.2%    -2.2%    [-9.4%, +5.0%]
+MeanReversionAgent               206    145   68.9%   60.2%    +8.7%   [-3.0%, +20.1%]
+TrendFollowingAgent             2495    740   60.1%   60.2%    -0.1%    [-8.1%, +7.8%]
+BuffettAgent                    7537    883   59.2%   60.2%    -1.0%    [-7.4%, +5.2%]
+CrossSectionalMomentumAgent     3475    935   58.9%   60.2%    -1.2%    [-8.1%, +5.4%]
+CitadelAgent                    2655    755   58.0%   60.2%    -2.2%    [-9.6%, +4.8%]
 DummyHoldAgent                     —      —       —       —        —                 —
 ```
 
@@ -82,11 +82,11 @@ CTATrendAgent                   3222    953  +0.008%  +0.051%    [-0.039%, +0.05
 ```
 ── Edge par agent — horizon H5 (succès = |rendement| > 0.30%) ──
 Agent                              N  dates    taux    base    excès            IC 95%
-CTATrendAgent                   3213    949   46.4%   46.1%    +0.3%    [-2.6%, +3.2%]
+CTATrendAgent                   3213    949   46.4%   46.1%    +0.3%    [-2.6%, +3.3%]
 
 ── Rendement par signal — horizon H5 (log, sens annoncé) ──
 Agent                              N  dates    moyen   passif                IC 95%   skew   G/P
-CTATrendAgent                   3213    949  +0.083%  +0.258%    [-0.056%, +0.235%]  -0.10  0.94
+CTATrendAgent                   3213    949  +0.083%  +0.258%    [-0.061%, +0.231%]  -0.10  0.94
 ```
 
 ### Horizon H20
@@ -94,11 +94,11 @@ CTATrendAgent                   3213    949  +0.083%  +0.258%    [-0.056%, +0.23
 ```
 ── Edge par agent — horizon H20 (succès = |rendement| > 0.30%) ──
 Agent                              N  dates    taux    base    excès            IC 95%
-CTATrendAgent                   3149    934   53.2%   52.4%    +0.8%    [-3.6%, +6.2%]
+CTATrendAgent                   3149    934   53.2%   52.4%    +0.8%    [-4.1%, +5.5%]
 
 ── Rendement par signal — horizon H20 (log, sens annoncé) ──
 Agent                              N  dates    moyen   passif                IC 95%   skew   G/P
-CTATrendAgent                   3149    934  +0.453%  +1.056%    [-0.016%, +1.034%]  -0.21  1.04
+CTATrendAgent                   3149    934  +0.453%  +1.056%    [-0.084%, +0.985%]  -0.21  1.04
 ```
 
 ### Pourquoi deux tableaux

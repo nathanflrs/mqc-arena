@@ -185,9 +185,9 @@ immobilières exclues :
 
 | période | dates | faibles | élevées | écart | IC 95 % | |
 |---|---|---|---|---|---|---|
-| 2011-2019 conception | 453 | +2.37 % | +2.24 % | +0.13 % | [−0.92 %, +1.45 %] | — |
-| 2020-2023 contrôle | 201 | +4.39 % | +3.12 % | +1.27 % | [−0.68 %, +3.79 %] | — |
-| **2024-2026 VALIDATION** | **119** | **+4.42 %** | **+2.78 %** | **+1.64 %** | **[−0.55 %, +3.98 %]** | **—** |
+| 2011-2019 conception | 453 | +2.37 % | +2.24 % | +0.13 % | [−1.07 %, +1.35 %] | — |
+| 2020-2023 contrôle | 201 | +4.39 % | +3.12 % | +1.27 % | [−0.92 %, +3.50 %] | — |
+| **2024-2026 VALIDATION** | **119** | **+4.42 %** | **+2.78 %** | **+1.64 %** | **[−0.75 %, +3.79 %]** | **—** |
 
 Les trois intervalles traversent zéro. L'hypothèse est rejetée.
 
@@ -206,13 +206,18 @@ Le remède est le **bootstrap par blocs mobiles** : on tire des tranches
 contiguës de douze lignes — la durée exacte d'une fenêtre de rendement — au
 lieu de lignes isolées. À l'intérieur d'un bloc la dépendance est conservée ;
 deux blocs éloignés sont bien indépendants. L'intervalle passe de
-[+0.68 %, +2.51 %] à [−0.55 %, +3.98 %].
+[+0.68 %, +2.51 %] à [−0.75 %, +3.79 %].
 
 Le défaut est corrigé à la source, dans `block_bootstrap_indices`
 (`src/analysis/agent_edge.py`), et les trois scripts de recherche appellent
 désormais cette fonction unique. Cinq tests de non-régression le verrouillent,
 dont un qui échoue si l'intervalle par blocs cesse d'être plus large que le
 tirage indépendant sur une série chevauchante.
+
+Une seconde correction a suivi le même jour : le tirage sous-échantillonnait
+les extrémités de la série (la première date pesait 23 fois moins que celles du
+milieu). La série est refermée en anneau — bootstrap circulaire — pour que
+chaque date pèse pareil. Les chiffres ci-dessus sont ceux d'après.
 
 ## Ce que le rejet signifie — et ce qu'il ne signifie pas
 

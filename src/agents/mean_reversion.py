@@ -27,16 +27,26 @@ class MeanReversionConfig:
 
     # Baisse du marché au-delà de laquelle l'agent cesse d'acheter.
     #
-    # Mesuré le 2026-08-14 sur 14 318 signaux (scripts/test_regime_hypothesis.py).
-    # L'avantage de l'agent se concentre dans les corrections modérées :
+    # Mesuré le 2026-08-14 sur 14 318 signaux (scripts/test_regime_hypothesis.py),
+    # chiffres du bootstrap circulaire par blocs :
     #
-    #     baisse  5-10 %   →  +3.14 %   IC [+0.71 %, +5.68 %]
-    #     baisse 10-20 %   →  +2.84 %   IC [+0.07 %, +4.98 %]
-    #     baisse  > 20 %   →  −2.62 %   IC [−4.08 %, −1.15 %]
+    #                      2020-2026                  2010-2019
+    #     baisse  5-10 %   +3.14 %  [−1.31, +6.75]    −0.21 %  [−4.65, +3.15]
+    #     baisse 10-20 %   +2.84 %  [−2.67, +6.26]    −1.91 %  [−8.46, +3.14]
+    #     baisse  > 20 %   −2.62 %  [−3.47, −0.29] ❌  +1.32 %  [−4.63, +5.35]
     #
-    # Au-delà de 20 %, l'intervalle exclut zéro PAR LE BAS : ce n'est pas une
-    # absence d'avantage, c'est une perte. Acheter des baisses pendant un krach,
-    # c'est rattraper le couteau qui tombe.
+    # Ce garde-fou repose sur la SEULE case qui exclut encore zéro après les deux
+    # corrections statistiques du 2026-08-14 — et il faut dire ce qu'elle vaut :
+    # elle ne se reproduit PAS sur 2010-2019, où le même régime donne un signe
+    # opposé. Sur 736 signaux d'un seul côté et 1 401 de l'autre, aucune des deux
+    # périodes ne tranche.
+    #
+    # On garde quand même le garde-fou, pour une raison qui n'est pas
+    # statistique : il est ASYMÉTRIQUE. S'il a raison, il évite d'acheter des
+    # creux pendant un krach — le mode de défaillance classique de la stratégie.
+    # S'il a tort, il coûte quelques achats manqués dans un régime qui représente
+    # 4 à 5 % des séances. Le pire cas d'une erreur est petit, celui de l'inaction
+    # ne l'est pas.
     #
     # Seuil repris tel quel du découpage fixé avant le test, non ajusté après
     # coup pour améliorer un résultat.
@@ -154,7 +164,8 @@ class MeanReversionAgent(BaseAgent):
                 confidence=0.0, target_weight=0.0,
                 reason=(f"Marché en baisse de {dd:.0%} > "
                         f"{self.cfg.max_market_drawdown:.0%} — achat suspendu "
-                        f"(perte mesurée de −2.6 % dans ce régime)"),
+                        f"(perte de −2.6 % mesurée dans ce régime sur "
+                        f"2020-2026, non reproduite sur 2010-2019)"),
                 meta={"regime": regime, "market_drawdown": round(dd, 4),
                       "blocked_by": "max_market_drawdown"},
             )

@@ -36,7 +36,18 @@ fictif. Sur le momentum long/short, 1 364 « observations » n'en valaient que 6
 `src/analysis/agent_edge.py`, appelé par les quatre scripts de mesure) : tirer
 des **blocs contigus** de la longueur de la fenêtre plutôt que des séances
 isolées. La dépendance est conservée à l'intérieur d'un bloc, deux blocs
-éloignés restent indépendants. Cinq tests de non-régression le verrouillent.
+éloignés restent indépendants. Sept tests de non-régression le verrouillent.
+
+> **Le remède avait lui-même un défaut, corrigé le même jour.** La première
+> version tirait les débuts de bloc de façon à ne jamais déborder de la série,
+> ce qui sous-échantillonnait gravement ses extrémités — la première séance
+> pesait 23 fois moins que celles du milieu. Le symptôme était visible sans
+> ambiguïté : dans le test de régime sur 2010-2019, la moyenne mesurée
+> (+1.32 %) tombait **hors de son propre intervalle** [−5.00 %, +1.19 %], ce
+> qu'un bootstrap correct ne peut pas produire. La série est désormais refermée
+> en anneau (bootstrap circulaire, Politis-Romano 1992) : chaque séance pèse
+> exactement autant que les autres. Les chiffres de ce document sont ceux
+> d'après cette seconde correction.
 
 **Ce que la correction a changé.** Deux résultats « significatifs » tombent :
 le momentum transversal perdant à H20 (verdict 1), et le rendement par signal
@@ -70,8 +81,8 @@ inconditionnel du même univers (`docs/agent_edge.md`, remesuré le 2026-08-14) 
 | Horizon | N | dates | taux | base | excès | IC 95 % |
 |---|---|---|---|---|---|---|
 | H1 | 3 551 | 954 | 46.8 % | 45.8 % | +1.0 % | [−1.1 %, +3.1 %] |
-| H5 | 3 535 | 950 | 54.7 % | 54.3 % | +0.5 % | [−3.1 %, +4.1 %] |
-| H20 | 3 475 | 935 | 58.9 % | 60.2 % | −1.2 % | [−8.1 %, +6.0 %] |
+| H5 | 3 535 | 950 | 54.7 % | 54.3 % | +0.5 % | [−3.2 %, +4.1 %] |
+| H20 | 3 475 | 935 | 58.9 % | 60.2 % | −1.2 % | [−8.1 %, +5.4 %] |
 
 Aux trois horizons, l'intervalle contient zéro : l'agent est **indistinguable
 du hasard** sur cet univers.
@@ -136,8 +147,8 @@ titres.
 
 | | séances | écart long/short à 20 j | IC 95 % | |
 |---|---|---|---|---|
-| 2020-2026 | 1 364 | +0.53 % | [−0.42 %, +1.62 %] | traverse zéro |
-| 2010-2019 | 3 821 | +0.42 % | [−0.17 %, +1.09 %] | traverse zéro |
+| 2020-2026 | 1 364 | +0.53 % | [−0.47 %, +1.55 %] | traverse zéro |
+| 2010-2019 | 3 821 | +0.42 % | [−0.19 %, +1.06 %] | traverse zéro |
 
 Le signe est le même sur les deux époques et va dans le sens prédit par
 Jegadeesh-Titman. L'ampleur, elle, n'est pas distinguable de zéro.
@@ -498,7 +509,7 @@ valeur théorique.
 > D'où la seconde mesure, le rendement moyen par signal — la seule du projet à
 > porter un intervalle strictement positif : **[+0,284 %, +0,628 %]** à vingt
 > jours. Elle souffrait exactement du même défaut de chevauchement que les
-> autres. Recalculée par blocs : **[−0,016 %, +1,034 %]**, qui traverse zéro.
+> autres. Recalculée par blocs : **[−0,084 %, +0,985 %]**, qui traverse zéro.
 >
 > Le retrait ne dépendait pas de ce point — la raison 4 est réglementaire et
 > sans appel — mais il ne subsiste désormais plus rien du côté favorable.

@@ -152,14 +152,33 @@ def block_bootstrap_indices(n_dates: int, block: int, n_boot: int,
 
     On tire donc des blocs contigus de longueur H : la dépendance est conservée
     à l'intérieur d'un bloc, et deux blocs éloignés sont indépendants. C'est le
-    bootstrap par blocs mobiles, remède standard aux fenêtres chevauchantes.
+    remède standard aux fenêtres chevauchantes.
+
+    Pourquoi CIRCULAIRE et pas simplement mobile
+    --------------------------------------------
+    La première version tirait les débuts de bloc dans [0, n−H] pour ne pas
+    déborder de la série. Cela sous-échantillonne gravement les extrémités :
+    une observation du milieu appartient à H blocs possibles, la toute première
+    à un seul. Mesuré sur n=70, H=20 : la position 0 pesait 0.08 contre 1.38 au
+    centre, soit un rapport de 23.
+
+    Le symptôme était visible et sans ambiguïté — dans le test de régime sur
+    2010-2019, la moyenne mesurée (+1.32 %) tombait HORS de son propre
+    intervalle [−5.00 %, +1.19 %], ce qu'un bootstrap correct ne peut pas
+    produire.
+
+    On referme donc la série en anneau (Politis-Romano, 1992) : les blocs
+    peuvent repasser par le début, chaque observation appartient à exactement H
+    blocs, et le poids est uniforme. Le prix à payer est de coller artificiellement
+    la fin de la période à son début — sans conséquence ici, puisqu'on estime
+    une moyenne et non une structure temporelle.
     """
     block = max(1, min(int(block), n_dates))
     n_blocks = int(np.ceil(n_dates / block))
-    starts = rng.integers(0, max(1, n_dates - block + 1), size=(n_boot, n_blocks))
+    starts = rng.integers(0, n_dates, size=(n_boot, n_blocks))
     offs = np.arange(block)
     idx = (starts[:, :, None] + offs[None, None, :]).reshape(n_boot, -1)
-    return np.minimum(idx[:, :n_dates], n_dates - 1)
+    return idx[:, :n_dates] % n_dates
 
 
 def _bootstrap_excess(
