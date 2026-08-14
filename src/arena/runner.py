@@ -651,11 +651,32 @@ def _run() -> None:
         # Arena créée APRÈS all_data — MacroAgent reçoit SPY/GLD pré-chargés
         # pour éviter 2 appels réseau redondants par run.
         # CrossSectionalMomentumAgent reçoit tout all_data pour le ranking JT.
+        # Baisse du marché depuis son plus haut sur un an, transmise à
+        # MeanReversionAgent. Mesuré le 2026-08-14 : au-delà de 20 % de baisse,
+        # l'agent perd −2.6 % (IC [−4.1 %, −1.2 %]) — acheter des creux pendant
+        # un krach revient à rattraper le couteau qui tombe. Voir
+        # docs/verdicts_agents.md et scripts/test_regime_hypothesis.py.
+        _market_dd = None
+        try:
+            _spy_close = pd.to_numeric(all_data["SPY"]["Close"], errors="coerce").dropna()
+            _peak = float(_spy_close.tail(252).max())
+            if _peak > 0:
+                _market_dd = float((_peak - _spy_close.iloc[-1]) / _peak)
+                print(f"📉 Baisse du marché depuis son plus haut 1 an : {_market_dd:.1%}")
+        except Exception as _dd_exc:
+            # Sans cette information, MeanReversionAgent n'applique PAS le
+            # garde-fou : supposer un marché calme reviendrait à ignorer le
+            # risque en silence.
+            print(f"⚠️  Baisse du marché non calculable ({_dd_exc}) — garde-fou inactif")
+
+        _mean_rev = MeanReversionAgent()
+        _mean_rev.set_market_drawdown(_market_dd)
+
         arena = Arena([
             DummyHoldAgent(),
             BuffettAgent(),
             CitadelAgent(),
-            MeanReversionAgent(),
+            _mean_rev,
             MacroAgent(preloaded={
                 "SPY": all_data.get("SPY"),
                 "GLD": all_data.get("GLD"),

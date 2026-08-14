@@ -25,6 +25,23 @@ class MeanReversionConfig:
     sell_confidence: float = 0.82
     buy_base_confidence: float = 0.65
 
+    # Baisse du marché au-delà de laquelle l'agent cesse d'acheter.
+    #
+    # Mesuré le 2026-08-14 sur 14 318 signaux (scripts/test_regime_hypothesis.py).
+    # L'avantage de l'agent se concentre dans les corrections modérées :
+    #
+    #     baisse  5-10 %   →  +3.14 %   IC [+0.71 %, +5.68 %]
+    #     baisse 10-20 %   →  +2.84 %   IC [+0.07 %, +4.98 %]
+    #     baisse  > 20 %   →  −2.62 %   IC [−4.08 %, −1.15 %]
+    #
+    # Au-delà de 20 %, l'intervalle exclut zéro PAR LE BAS : ce n'est pas une
+    # absence d'avantage, c'est une perte. Acheter des baisses pendant un krach,
+    # c'est rattraper le couteau qui tombe.
+    #
+    # Seuil repris tel quel du découpage fixé avant le test, non ajusté après
+    # coup pour améliorer un résultat.
+    max_market_drawdown: float = 0.20
+
 
 def _rsi(close: pd.Series, period: int = 14) -> float:
     delta = close.diff().dropna()
@@ -55,6 +72,15 @@ class MeanReversionAgent(BaseAgent):
 
     def __init__(self, config: Optional[MeanReversionConfig] = None):
         self.cfg = config or MeanReversionConfig()
+        # Baisse du marché depuis son plus haut sur un an, renseignée par le
+        # runner à chaque séance. `None` = information indisponible : dans ce
+        # cas l'agent n'applique pas le garde-fou plutôt que de supposer un
+        # marché calme, ce qui reviendrait à ignorer le risque en silence.
+        self._market_drawdown: Optional[float] = None
+
+    def set_market_drawdown(self, drawdown: Optional[float]) -> None:
+        """Baisse du marché (0.15 = −15 %). Appelé une fois par run."""
+        self._market_drawdown = drawdown
 
     def generate_signal(
         self,
@@ -115,10 +141,28 @@ class MeanReversionAgent(BaseAgent):
                     },
                 )
 
-        # 4) En bear : mean reversion fonctionne encore mais on est plus prudent
+        # 4) Garde-fou baissier — bloque l'ACHAT, jamais la sortie.
+        #
+        # Volontairement placé après la logique de vente : en krach, fermer une
+        # position reste possible et souhaitable. Seule l'ouverture est
+        # interdite. Voir MeanReversionConfig.max_market_drawdown pour les
+        # chiffres qui justifient le seuil.
+        dd = self._market_drawdown
+        if dd is not None and dd > self.cfg.max_market_drawdown:
+            return AgentSignal(
+                agent_name=self.name, symbol=state.symbol, action="HOLD",
+                confidence=0.0, target_weight=0.0,
+                reason=(f"Marché en baisse de {dd:.0%} > "
+                        f"{self.cfg.max_market_drawdown:.0%} — achat suspendu "
+                        f"(perte mesurée de −2.6 % dans ce régime)"),
+                meta={"regime": regime, "market_drawdown": round(dd, 4),
+                      "blocked_by": "max_market_drawdown"},
+            )
+
+        # 5) En bear : mean reversion fonctionne encore mais on est plus prudent
         rsi_threshold = self.cfg.rsi_threshold_bear if regime == "bear" else self.cfg.rsi_threshold
 
-        # 5) BUY logic
+        # 6) BUY logic
         oversold = rsi14 < rsi_threshold
         below_bb = px < bb_lower
         buy = oversold and below_bb and vol_ok
