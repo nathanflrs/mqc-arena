@@ -63,9 +63,10 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 warnings.filterwarnings("ignore")
 
-from src.agents.momentum import MomentumConfig  # noqa: E402
-from src.data.quality import filter_universe    # noqa: E402
-from src.data.universe import sp500_at          # noqa: E402
+from src.agents.momentum import MomentumConfig                  # noqa: E402
+from src.analysis.agent_edge import block_bootstrap_indices     # noqa: E402
+from src.data.quality import filter_universe                    # noqa: E402
+from src.data.universe import sp500_at                          # noqa: E402
 
 H = 20
 N_BOOT = 2000
@@ -134,8 +135,13 @@ def analyser(label: str, snap: Path) -> dict:
         lignes.append((d, haut, bas, haut - bas, len(s)))
 
     g = pd.DataFrame(lignes, columns=["date", "haut", "bas", "ecart", "n"])
+    # Bootstrap par BLOCS de H jours. Le classement est refait chaque séance
+    # alors que le rendement court sur 20 : deux lignes consécutives partagent
+    # 19 jours de marché sur 20. Les tirer indépendamment comptait la même
+    # information vingt fois — c'est ce qui rendait ce résultat « significatif »
+    # le 2026-08-14 avant correction.
     rng = np.random.default_rng(SEED)
-    idx = rng.integers(0, len(g), size=(N_BOOT, len(g)))
+    idx = block_bootstrap_indices(len(g), H, N_BOOT, rng)
     boot = g["ecart"].to_numpy()[idx].mean(axis=1)
     lo, hi = np.percentile(boot, [2.5, 97.5])
 

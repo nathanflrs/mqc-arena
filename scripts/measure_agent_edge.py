@@ -33,7 +33,7 @@ from src.analysis.agent_edge import (  # noqa: E402
 )
 from src.arena.arena import Arena  # noqa: E402
 from src.backtest.system_backtest import EXCLUDED_AGENTS, _replayable_agents  # noqa: E402
-from src.config import WATCHLIST  # noqa: E402
+from src.config import DATA_ONLY, WATCHLIST  # noqa: E402
 from src.data.regime import detect_regime  # noqa: E402
 from src.data.snapshot import load_snapshot  # noqa: E402
 
@@ -53,16 +53,29 @@ def replay_signals(data: dict, symbols: list[str]) -> pd.DataFrame:
     Comme dans le backtest, chaque agent ne voit que `data[:t]` et les
     classements momentum sont recalculés sur la fenêtre tronquée à chaque date
     — sans quoi l'agent verrait tout l'historique futur.
+
+    Deux listes distinctes, et c'est délibéré
+    -----------------------------------------
+    `symbols` sont les titres SUR LESQUELS on émet un signal. La fenêtre passée
+    au momentum et au détecteur de régime y ajoute `DATA_ONLY` — SPY, GLD — qui
+    servent de contexte de marché sans jamais être tradés.
+
+    Confondre les deux a coûté un document entier le 2026-08-14 : SPY est passé
+    de WATCHLIST à DATA_ONLY quand l'univers a été réduit aux actions, le garde
+    `if "SPY" not in window` a sauté TOUTES les dates, et le script a écrit
+    « 0 signaux sur 0 séances » avant de régénérer docs/agent_edge.md avec des
+    tableaux vides. Sans erreur, sans code de retour non nul.
     """
     agents = _replayable_agents(data)
     momentum = next(a for a in agents if isinstance(a, CrossSectionalMomentumAgent))
     arena = Arena(agents)
     dates = data["SPY"].index
+    contexte = list(dict.fromkeys(list(symbols) + list(DATA_ONLY)))
 
     rows = []
     for i in range(WARMUP, len(dates)):
         today = dates[i]
-        window = {s: data[s].iloc[: i + 1] for s in symbols if s in data}
+        window = {s: data[s].iloc[: i + 1] for s in contexte if s in data}
         if "SPY" not in window:
             continue
         regime = detect_regime(df=window["SPY"])["regime"]
@@ -152,6 +165,17 @@ def main() -> None:
 
     print("\n🔁 Replay de l'arène…")
     signals = replay_signals(data, list(WATCHLIST))
+
+    # Un replay vide n'est jamais un résultat : c'est une panne de plomberie.
+    # Sans ce garde-fou, le script écrivait des tableaux vides par-dessus les
+    # mesures publiées et sortait avec un code 0 (incident du 2026-08-14).
+    if signals.empty or signals["date"].nunique() < MIN_DATES:
+        raise SystemExit(
+            f"❌ replay de l'arène vide ou trop court "
+            f"({len(signals)} signaux, {signals['date'].nunique() if len(signals) else 0} "
+            f"séances, minimum {MIN_DATES}). docs/agent_edge.md n'est PAS réécrit.\n"
+            f"   Vérifier que WATCHLIST et DATA_ONLY sont couverts par le snapshot.")
+
     signals.to_parquet(SIGNALS_PATH)
     print(f"✅ {len(signals):,} signaux sur {signals['date'].nunique()} séances "
           f"→ {SIGNALS_PATH}")
@@ -191,22 +215,37 @@ def main() -> None:
         "dans le sens annoncé (seuil de matérialité : environ la moitié d'un "
         "aller-retour IBKR large-cap).",
         "",
-        "### Deux corrections par rapport à `docs/edge_audit.md`",
+        "### Trois corrections successives",
         "",
-        "**Hypothèse nulle.** L'audit précédent testait contre une pièce équilibrée. "
-        "Sur un marché haussier, un agent qui dit toujours BUY obtient bien plus de "
-        "50 % sans contenir la moindre information. La référence retenue ici est le "
-        "**taux de base inconditionnel** de la même action sur le même univers et la "
-        "même période. La colonne `excès` est ce que l'agent apporte au-delà.",
+        "**Hypothèse nulle.** L'audit précédent (`docs/edge_audit.md`) testait contre "
+        "une pièce équilibrée. Sur un marché haussier, un agent qui dit toujours BUY "
+        "obtient bien plus de 50 % sans contenir la moindre information. La référence "
+        "retenue ici est le **taux de base inconditionnel** de la même action sur le "
+        "même univers et la même période. La colonne `excès` est ce que l'agent "
+        "apporte au-delà.",
         "",
-        "**Intervalles de confiance.** L'audit précédent calculait un intervalle de "
+        "**Corrélation entre actifs.** L'audit précédent calculait un intervalle de "
         "Wilson sur le nombre de signaux, alors que son propre texte reconnaissait "
         "qu'un run où un agent dit BUY sur 12 actifs vaut une observation et non "
-        "douze. On utilise ici un bootstrap sur les **dates** (2 000 tirages), qui "
-        "conserve la corrélation entre actifs d'une même journée.",
+        "douze. On regroupe donc par **date** avant de bootstrapper.",
         "",
-        f"Seuil de puissance : {MIN_DATES} dates indépendantes minimum. "
-        f"Atteint ({n_dates}).",
+        "**Chevauchement des fenêtres — correction du 2026-08-14.** Regrouper par date "
+        "ne suffisait pas. Un rendement à 20 jours mesuré chaque séance partage 19 "
+        "jours avec le précédent : tirer les dates indépendamment revenait à compter "
+        "la même information vingt fois, et divisait l'intervalle par la racine d'un "
+        "effectif fictif. Les intervalles ci-dessous viennent d'un **bootstrap par "
+        "blocs mobiles** de longueur H (2 000 tirages), qui préserve cette dépendance.",
+        "",
+        "Deux résultats publiés auparavant n'y ont pas survécu : le momentum "
+        "transversal « significativement perdant » à H20, et le rendement par signal "
+        "du CTA à H20, seul intervalle strictement positif du document. Les deux "
+        "traversent désormais zéro. **Aucun résultat n'a été renforcé par la "
+        "correction** — c'est le signe attendu quand on cesse de surestimer sa "
+        "propre information.",
+        "",
+        f"Seuil de puissance : {MIN_DATES} dates minimum. Atteint ({n_dates}) — mais "
+        "le bootstrap par blocs rappelle que ces séances ne valent pas autant "
+        "d'observations indépendantes.",
         "",
     ]
     for tag in HORIZONS:
@@ -300,6 +339,15 @@ def main() -> None:
            "- Prix ajustés : l'historique est réécrit rétroactivement à chaque "
            "dividende. Le snapshot fige les données, mais un `--refresh` change la "
            "base de mesure.",
+           f"- L'univers de l'arène compte {len(WATCHLIST)} titres. Les ETF en ont "
+           "été retirés (un fonds de fonds ne teste pas la sélection de titres) et "
+           f"servent désormais de contexte seul : {', '.join(DATA_ONLY)}. Les "
+           "effectifs `N` ne sont donc pas comparables à ceux des versions "
+           "antérieures de ce document.",
+           "- Onze titres ne suffisent à établir aucun edge. Ce document sert à "
+           "**réfuter**, pas à valider : un agent qui n'y ressort pas est écarté, "
+           "un agent qui y ressort demande une confirmation sur l'univers élargi "
+           "(S&P 500, `logs/universe_snapshot`).",
            ]
     Path("docs/agent_edge.md").write_text("\n".join(md))
     print("\n✅ docs/agent_edge.md")

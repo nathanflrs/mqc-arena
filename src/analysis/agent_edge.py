@@ -133,8 +133,38 @@ class AgentEdge:
                 and (self.ci_lo > 0 or self.ci_hi < 0))
 
 
+def block_bootstrap_indices(n_dates: int, block: int, n_boot: int,
+                   rng: np.random.Generator) -> np.ndarray:
+    """
+    Indices d'un bootstrap par BLOCS contigus.
+
+    Pourquoi pas un tirage indépendant des dates
+    --------------------------------------------
+    Un rendement à H jours mesuré chaque jour partage H−1 jours avec le
+    précédent. Tirer les dates indépendamment revient à compter la même
+    information H fois : l'intervalle est divisé par la racine d'un effectif
+    fictif.
+
+    Constaté le 2026-08-14 sur le momentum long/short : 1 364 « observations »
+    n'en valaient que 69. L'intervalle passait de [+0.22 %, +0.82 %] —
+    significatif — à [−0.85 %, +1.89 %], qui traverse zéro. Le même défaut
+    faisait paraître concluante l'hypothèse sur les régularisations.
+
+    On tire donc des blocs contigus de longueur H : la dépendance est conservée
+    à l'intérieur d'un bloc, et deux blocs éloignés sont indépendants. C'est le
+    bootstrap par blocs mobiles, remède standard aux fenêtres chevauchantes.
+    """
+    block = max(1, min(int(block), n_dates))
+    n_blocks = int(np.ceil(n_dates / block))
+    starts = rng.integers(0, max(1, n_dates - block + 1), size=(n_boot, n_blocks))
+    offs = np.arange(block)
+    idx = (starts[:, :, None] + offs[None, None, :]).reshape(n_boot, -1)
+    return np.minimum(idx[:, :n_dates], n_dates - 1)
+
+
 def _bootstrap_excess(
-    df: pd.DataFrame, base_buy: float, base_sell: float, n_boot: int = N_BOOTSTRAP,
+    df: pd.DataFrame, base_buy: float, base_sell: float,
+    horizon: int = 1, n_boot: int = N_BOOTSTRAP,
 ) -> Tuple[float, float]:
     """
     IC 95 % de l'excès, par rééchantillonnage **des dates** avec remise.
@@ -161,7 +191,7 @@ def _bootstrap_excess(
     exp = n_buy * base_buy + (counts - n_buy) * base_sell
 
     rng = np.random.default_rng(SEED)
-    idx = rng.integers(0, len(per_date), size=(n_boot, len(per_date)))
+    idx = block_bootstrap_indices(len(per_date), horizon, n_boot, rng)
 
     boot_hits = hits[idx].sum(axis=1)
     boot_exp = exp[idx].sum(axis=1)
@@ -219,7 +249,7 @@ def compute_agent_edge(
             hit = float(g["success"].mean())
             expected = (n_buy * base_buy + n_sell * base_sell) / n
             excess = hit - expected
-            lo, hi = _bootstrap_excess(g, base_buy, base_sell)
+            lo, hi = _bootstrap_excess(g, base_buy, base_sell, horizon=h)
 
             if n_dates < MIN_DATES:
                 verdict = f"échantillon insuffisant ({n_dates}/{MIN_DATES} dates)"
@@ -323,7 +353,7 @@ def signed_return_edge(
                 tot = per_date["sum"].to_numpy(dtype=float)
                 cnt = per_date["size"].to_numpy(dtype=float)
                 rng = np.random.default_rng(SEED)
-                idx = rng.integers(0, len(per_date), size=(N_BOOTSTRAP, len(per_date)))
+                idx = block_bootstrap_indices(len(per_date), h, N_BOOTSTRAP, rng)
                 boot = tot[idx].sum(axis=1) / cnt[idx].sum(axis=1)
                 lo, hi = (float(np.nanpercentile(boot, 2.5)),
                           float(np.nanpercentile(boot, 97.5)))

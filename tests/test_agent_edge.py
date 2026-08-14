@@ -295,3 +295,76 @@ class TestSignedReturnEdge:
         e = signed_return_edge(sig, data, SYMS, horizons={"H5": 5})[0]
         assert "échantillon insuffisant" in e.verdict
         assert not e.is_significant
+
+
+# ── Chevauchement des fenêtres ────────────────────────────────────────────────
+
+class TestBlockBootstrap:
+    """
+    Régression du 2026-08-14, la plus coûteuse du projet.
+
+    Un rendement à H jours mesuré chaque jour partage H−1 jours avec le
+    précédent. Les tirer indépendamment revient à compter la même information H
+    fois, et divise l'intervalle par la racine d'un effectif fictif.
+
+    Deux résultats « significatifs » n'y ont pas survécu : le momentum
+    long/short, dont l'IC passait de [+0.22 %, +0.82 %] à [−0.85 %, +1.89 %],
+    et l'hypothèse sur les régularisations comptables.
+    """
+
+    def test_blocks_are_contiguous(self):
+        from src.analysis.agent_edge import block_bootstrap_indices
+        rng = np.random.default_rng(0)
+        idx = block_bootstrap_indices(n_dates=100, block=20, n_boot=5, rng=rng)
+        # À l'intérieur d'un bloc, les indices se suivent.
+        for ligne in idx:
+            bloc = ligne[:20]
+            assert list(bloc) == list(range(bloc[0], bloc[0] + 20))
+
+    def test_indices_stay_in_range(self):
+        from src.analysis.agent_edge import block_bootstrap_indices
+        rng = np.random.default_rng(0)
+        idx = block_bootstrap_indices(n_dates=37, block=20, n_boot=50, rng=rng)
+        assert idx.shape == (50, 37)
+        assert idx.min() >= 0 and idx.max() <= 36
+
+    def test_block_of_one_is_the_old_behaviour(self):
+        """À horizon 1 il n'y a pas de chevauchement : rien ne doit changer."""
+        from src.analysis.agent_edge import block_bootstrap_indices
+        a = block_bootstrap_indices(50, 1, 10, np.random.default_rng(1))
+        b = np.random.default_rng(1).integers(0, 50, size=(10, 50))
+        assert (a == b).all()
+
+    def test_overlap_widens_the_interval(self):
+        """
+        Le point qui compte. Sur une série autocorrélée — ce que produit une
+        fenêtre glissante — le bootstrap par blocs doit donner un intervalle
+        PLUS LARGE que le tirage indépendant, parce qu'il ne fait pas semblant
+        d'avoir plus d'information qu'il n'y en a.
+        """
+        from src.analysis.agent_edge import block_bootstrap_indices
+        rng = np.random.default_rng(3)
+        base = rng.normal(0.005, 0.02, 400)
+        # Moyenne glissante sur 20 : chaque point partage 19 valeurs avec le
+        # suivant, exactement comme un rendement forward mesuré quotidiennement.
+        serie = pd.Series(base).rolling(20).mean().dropna().to_numpy()
+
+        def largeur(block):
+            idx = block_bootstrap_indices(len(serie), block, 2000, np.random.default_rng(7))
+            b = serie[idx].mean(axis=1)
+            lo, hi = np.percentile(b, [2.5, 97.5])
+            return hi - lo
+
+        assert largeur(20) > largeur(1) * 1.5, \
+            "le bootstrap par blocs doit refléter la dépendance, pas l'ignorer"
+
+    def test_horizon_is_actually_passed_through(self):
+        """
+        Sans ce test, une refonte pourrait perdre le paramètre en silence et
+        rétablir des intervalles trop étroits sans que rien ne le signale.
+        """
+        data = _data(drift=0.002)
+        sig = _signals("A", "BUY", n_dates=300)
+        e1 = compute_agent_edge(sig, data, SYMS, horizons={"H": 1})[0]
+        e20 = compute_agent_edge(sig, data, SYMS, horizons={"H": 20})[0]
+        assert (e20.ci_hi - e20.ci_lo) != (e1.ci_hi - e1.ci_lo)

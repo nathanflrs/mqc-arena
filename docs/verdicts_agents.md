@@ -19,6 +19,38 @@ Trois questions, un verdict écrit et daté. Pas de « on verra ».
 
 ---
 
+## ⚠️ Correction statistique du 2026-08-14 — lire avant les verdicts
+
+Tous les intervalles de confiance de ce registre antérieurs au 2026-08-14
+étaient **trop étroits**. Ils ont été recalculés ; les tableaux ci-dessous
+portent les valeurs corrigées, et chaque endroit où la conclusion change le
+dit explicitement.
+
+**Le défaut.** Un rendement à 20 jours mesuré chaque séance partage 19 jours de
+marché avec celui de la veille. Le bootstrap tirait ces séances indépendamment,
+comme si chacune apportait une information neuve : il comptait la même
+information vingt fois et divisait l'intervalle par la racine d'un effectif
+fictif. Sur le momentum long/short, 1 364 « observations » n'en valaient que 69.
+
+**Le remède**, appliqué en un seul endroit (`block_bootstrap_indices` dans
+`src/analysis/agent_edge.py`, appelé par les quatre scripts de mesure) : tirer
+des **blocs contigus** de la longueur de la fenêtre plutôt que des séances
+isolées. La dépendance est conservée à l'intérieur d'un bloc, deux blocs
+éloignés restent indépendants. Cinq tests de non-régression le verrouillent.
+
+**Ce que la correction a changé.** Deux résultats « significatifs » tombent :
+le momentum transversal perdant à H20 (verdict 1), et le rendement par signal
+du CTA à H20, seul intervalle strictement positif de `docs/agent_edge.md`
+(verdict 3). L'hypothèse 01 sur les régularisations comptables est rejetée pour
+la même raison (`docs/hypothese_01_accruals.md`).
+
+**Aucun résultat n'a été renforcé.** C'est attendu : la correction ne fait que
+retirer de la certitude qu'on n'avait pas. Les verdicts de retrait, eux, ne
+changent pas — ils reposaient sur l'absence d'avantage démontré, et une
+absence de preuve reste une absence de preuve avec un intervalle plus large.
+
+---
+
 ## 1. CrossSectionalMomentumAgent — **RETIRÉ** (2026-08-13)
 
 ### Ce qu'il affirme
@@ -32,19 +64,31 @@ littérature. L'idée n'est pas en cause.
 
 ### Ce que dit la mesure
 
-955 séances rejouées, bootstrap par dates, référence = taux de base
-inconditionnel du même univers (`docs/agent_edge.md`) :
+955 séances rejouées, bootstrap par blocs, référence = taux de base
+inconditionnel du même univers (`docs/agent_edge.md`, remesuré le 2026-08-14) :
 
 | Horizon | N | dates | taux | base | excès | IC 95 % |
 |---|---|---|---|---|---|---|
-| H1 | 3 816 | 954 | 46.4 % | 44.8 % | +1.6 % | [−0.4 %, +3.6 %] |
-| H5 | 3 800 | 950 | 54.3 % | 54.3 % | +0.0 % | [−2.0 %, +2.0 %] |
-| **H20** | 3 740 | 935 | 58.5 % | 61.5 % | **−3.0 %** | **[−5.0 %, −1.1 %]** |
+| H1 | 3 551 | 954 | 46.8 % | 45.8 % | +1.0 % | [−1.1 %, +3.1 %] |
+| H5 | 3 535 | 950 | 54.7 % | 54.3 % | +0.5 % | [−3.1 %, +4.1 %] |
+| H20 | 3 475 | 935 | 58.9 % | 60.2 % | −1.2 % | [−8.1 %, +6.0 %] |
 
-À vingt jours, l'intervalle **exclut zéro par le bas**. Ce n'est pas « on ne
-sait pas » : c'est le seul résultat statistiquement solide de tout l'audit
-d'agents, et il est défavorable. L'agent fait moins bien que d'acheter au
-hasard dans le même univers.
+Aux trois horizons, l'intervalle contient zéro : l'agent est **indistinguable
+du hasard** sur cet univers.
+
+> **Ce que disait cette section avant le 2026-08-14.** Elle affirmait qu'à
+> vingt jours l'excès valait −3.0 % avec un intervalle [−5.0 %, −1.1 %]
+> excluant zéro, et en tirait « le seul résultat statistiquement solide de tout
+> l'audit d'agents ». C'était faux : l'intervalle ignorait le chevauchement des
+> fenêtres de vingt jours (voir la correction en tête de document), et l'excès
+> lui-même était mesuré sur un univers de 14 titres incluant des ETF, depuis
+> ramené à 11 actions.
+>
+> **Le verdict de retrait ne change pas, mais son fondement si.** On ne peut
+> plus dire que l'agent perd de l'argent de façon démontrée ; on peut seulement
+> dire qu'il n'a jamais démontré en gagner. C'est suffisant pour le retirer —
+> un agent doit justifier sa place, pas attendre qu'on prouve sa nocivité — et
+> c'est moins que ce que ce document affirmait.
 
 ### Pourquoi il échoue — le diagnostic
 
@@ -90,16 +134,30 @@ inchangé, déciles au lieu de quartiles — retour à la construction de
 Jegadeesh-Titman, le quartile n'ayant été qu'une concession à un univers de 14
 titres.
 
-| | écart long/short à 20 j | IC 95 % |
-|---|---|---|
-| 2020-2026 | **+0.53 %** | [+0.22 %, +0.82 %] ✅ |
-| 2010-2019 | **+0.42 %** | [+0.24 %, +0.60 %] ✅ |
+| | séances | écart long/short à 20 j | IC 95 % | |
+|---|---|---|---|---|
+| 2020-2026 | 1 364 | +0.53 % | [−0.42 %, +1.62 %] | traverse zéro |
+| 2010-2019 | 3 821 | +0.42 % | [−0.17 %, +1.09 %] | traverse zéro |
 
-**C'est le premier résultat du projet qui se reproduit sur deux époques.** Le
-diagnostic était donc juste : l'échec venait bien de l'implémentation, pas de
-l'idée.
+Le signe est le même sur les deux époques et va dans le sens prédit par
+Jegadeesh-Titman. L'ampleur, elle, n'est pas distinguable de zéro.
 
-Et pourtant il reste inexploitable, pour deux raisons que la moyenne cachait.
+> **Correction du même jour, quelques heures plus tard.** La première version de
+> cette section donnait [+0.22 %, +0.82 %] et [+0.24 %, +0.60 %], deux
+> intervalles strictement positifs, et concluait : « c'est le premier résultat
+> du projet qui se reproduit sur deux époques ». C'était un artefact de
+> comptage. Le classement est refait chaque séance alors que le rendement court
+> sur vingt jours : les 1 364 lignes de 2020-2026 ne valent que 69 observations
+> indépendantes. Avec le bootstrap par blocs, les deux intervalles traversent
+> zéro.
+>
+> Le diagnostic de départ (univers trop petit, jambe vendeuse absente) reste
+> plausible — le signe est constant — mais il n'est **pas démontré**. La
+> distinction compte : « vrai et trop petit » était une affirmation, c'est
+> redevenu une hypothèse.
+
+Deux constats survivent à la correction, parce qu'ils ne dépendent d'aucun
+intervalle de confiance — ils décrivent la distribution elle-même.
 
 **Le signal est dix fois plus petit que le bruit.**
 
@@ -120,10 +178,12 @@ brutalement.
 long/short en déciles rebalancé toutes les vingt séances a une rotation double,
 plus des frais d'emprunt sur la jambe vendeuse.
 
-**Verdict inchangé : reste retiré.** Mais la raison a changé, et c'est une
-information utile. L'agent n'est plus « faux » : il est **vrai et trop petit**.
-Un effet réel de 0,4 à 0,5 % par vingt séances, noyé dans 5,7 % d'écart-type et
-exposé à des pertes de 30 %, n'est pas exploitable à cette échelle.
+**Verdict inchangé : reste retiré.** Et l'argument est plus court qu'il n'y
+paraissait. Il n'est même pas nécessaire de trancher si l'effet existe : un
+écart moyen de 0,4 à 0,5 % par vingt séances, noyé dans 5,7 % d'écart-type,
+exposé à des pertes de 30 % et effacé par 60 bps de frais, ne serait pas
+exploitable **même s'il était démontré**. La correction statistique retire une
+certitude qu'on n'avait pas ; elle ne retire rien à cette conclusion-là.
 
 Ce qui pourrait changer cela, et rien d'autre : une exécution nettement moins
 chère, ou une couverture du risque de krach de momentum. Les deux sortent du
@@ -431,6 +491,17 @@ valeur théorique.
 
 **1. Aucun avantage mesurable.** Sur 955 séances : excès +0,2 % / +0,3 % /
 +0,8 % à H1, H5, H20, tous les intervalles traversant zéro.
+
+> **Le seul argument à décharge est tombé le 2026-08-14.** Juger un suiveur de
+> tendance au taux de réussite est injuste : il a classiquement raison 35 à
+> 40 % du temps et gagne quand même, parce que ses gains dépassent ses pertes.
+> D'où la seconde mesure, le rendement moyen par signal — la seule du projet à
+> porter un intervalle strictement positif : **[+0,284 %, +0,628 %]** à vingt
+> jours. Elle souffrait exactement du même défaut de chevauchement que les
+> autres. Recalculée par blocs : **[−0,016 %, +1,034 %]**, qui traverse zéro.
+>
+> Le retrait ne dépendait pas de ce point — la raison 4 est réglementaire et
+> sans appel — mais il ne subsiste désormais plus rien du côté favorable.
 
 **2. Il rapporte moins que ne rien faire.** Sharpe 0,21 contre 1,59 pour un
 simple achat équipondéré des mêmes six fonds. En cumul : +4 % contre +67 %.

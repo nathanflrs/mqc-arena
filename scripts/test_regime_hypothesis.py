@@ -46,7 +46,8 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 warnings.filterwarnings("ignore")
 
-from src.data.quality import filter_universe  # noqa: E402
+from src.analysis.agent_edge import block_bootstrap_indices  # noqa: E402
+from src.data.quality import filter_universe                 # noqa: E402
 
 HORIZON = 20            # celui où l'écart entre périodes est le plus net
 TRANCHES = [(0.00, 0.05, "0-5 %   sommets"),
@@ -124,10 +125,11 @@ def analyser(nom: str, snap: Path, signaux: Path) -> pd.DataFrame:
         if len(a) < 50:
             res.append((label, len(a), np.nan, np.nan, np.nan))
             continue
-        # Bootstrap par dates, comme partout ailleurs.
+        # Bootstrap par blocs de HORIZON dates, comme partout ailleurs : les
+        # rendements à 20 jours mesurés quotidiennement se chevauchent.
         per = a.groupby("date")["fwd"].agg(["sum", "size"])
         rng = np.random.default_rng(20260814)
-        idx = rng.integers(0, len(per), size=(2000, len(per)))
+        idx = block_bootstrap_indices(len(per), HORIZON, 2000, rng)
         tot, cnt = per["sum"].to_numpy(), per["size"].to_numpy()
         boot = tot[idx].sum(1) / cnt[idx].sum(1)
         lo_ic, hi_ic = np.percentile(boot - b.fwd.mean(), [2.5, 97.5])

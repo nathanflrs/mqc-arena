@@ -170,3 +170,79 @@ résultat sera écrit ici, qu'il soit favorable ou non.
 *Règle du projet, posée dans `docs/comprendre_milan_capital.md` :*
 *hypothèse → données → validation hors échantillon → ensuite le code.*
 *Ce document est l'étape 1.*
+
+---
+
+# RÉSULTAT — 2026-08-14 : **HYPOTHÈSE REJETÉE**
+
+Le protocole ci-dessus a été écrit le 2026-08-12, avant toute mesure. Le
+critère de rejet y était fixé d'avance : *« rejetée si l'IC contient zéro sur
+la période de validation »*. Il est atteint, et sur les trois périodes.
+
+Écart long/short à 60 jours (long régularisations faibles, short élevées),
+817 dates de classement, univers médian 349 sociétés, financières et
+immobilières exclues :
+
+| période | dates | faibles | élevées | écart | IC 95 % | |
+|---|---|---|---|---|---|---|
+| 2011-2019 conception | 453 | +2.37 % | +2.24 % | +0.13 % | [−0.92 %, +1.45 %] | — |
+| 2020-2023 contrôle | 201 | +4.39 % | +3.12 % | +1.27 % | [−0.68 %, +3.79 %] | — |
+| **2024-2026 VALIDATION** | **119** | **+4.42 %** | **+2.78 %** | **+1.64 %** | **[−0.55 %, +3.98 %]** | **—** |
+
+Les trois intervalles traversent zéro. L'hypothèse est rejetée.
+
+## Le détail qui compte : la première lecture disait le contraire
+
+Une première exécution donnait sur la validation **[+0.68 %, +2.51 %]** — un
+intervalle strictement positif, donc concluant. Il était faux.
+
+Le classement est refait tous les cinq jours de bourse, mais le rendement
+mesuré court sur soixante. Deux lignes consécutives partagent donc 55 jours de
+marché sur 60 : ce sont, à 92 %, la même observation écrite deux fois. Le
+bootstrap tirait ces 119 lignes indépendamment, comme si chacune apportait une
+information neuve. Elle n'en valait qu'une douzaine.
+
+Le remède est le **bootstrap par blocs mobiles** : on tire des tranches
+contiguës de douze lignes — la durée exacte d'une fenêtre de rendement — au
+lieu de lignes isolées. À l'intérieur d'un bloc la dépendance est conservée ;
+deux blocs éloignés sont bien indépendants. L'intervalle passe de
+[+0.68 %, +2.51 %] à [−0.55 %, +3.98 %].
+
+Le défaut est corrigé à la source, dans `block_bootstrap_indices`
+(`src/analysis/agent_edge.py`), et les trois scripts de recherche appellent
+désormais cette fonction unique. Cinq tests de non-régression le verrouillent,
+dont un qui échoue si l'intervalle par blocs cesse d'être plus large que le
+tirage indépendant sur une série chevauchante.
+
+## Ce que le rejet signifie — et ce qu'il ne signifie pas
+
+**Il ne dit pas que Sloan (1996) avait tort.** L'effet mesuré va dans le sens
+prédit sur les trois périodes : les entreprises dont le bénéfice est adossé à
+de la trésorerie battent les autres de 0,1 à 1,6 point sur trois mois. Le signe
+est constant. C'est l'ampleur qui n'est pas distinguable du hasard avec le
+nombre d'observations réellement indépendantes dont on dispose.
+
+**Il ne dit pas non plus que la mesure était mauvaise.** Le point-in-time est
+strict (date de premier dépôt SEC, pas de clôture d'exercice), les financières
+sont exclues, les séries corrompues écartées. Ce qui manque est de la donnée,
+pas de la rigueur : 119 dates de validation à fenêtres chevauchantes ne pèsent
+que quelques dizaines d'observations.
+
+**Ce qu'il dit :** l'anomalie, si elle survit, est trop ténue pour être
+distinguée du bruit sur quinze ans de S&P 500 à cet horizon. Elle est publiée
+depuis trente ans ; un edge encore présent après trente ans de publication
+serait précisément ce qu'on s'attendrait à ne pas pouvoir mesurer.
+
+**Aucun agent n'est écrit.** C'est le fonctionnement normal de la règle du
+projet, pas son échec : l'hypothèse a coûté deux jours au lieu de deux mois
+d'un agent qui aurait tourné en production sans rien produire.
+
+## Ce qui est acquis, et qui resservira
+
+- L'univers S&P 500 point-in-time, 2010-2026 (`src/data/universe.py`).
+- Les comptes EDGAR point-in-time par date de dépôt (`src/data/sec_fundamentals.py`).
+- Le filtre de qualité des séries de prix (`src/data/quality.py`).
+- Le bootstrap par blocs, qui a immédiatement invalidé deux autres résultats
+  publiés — le momentum transversal et le rendement par signal du CTA.
+
+Ces quatre briques survivent au rejet de l'hypothèse qui les a fait naître.
