@@ -82,6 +82,53 @@ centaines de titres **et** une jambe vendeuse. C'est-à-dire une stratégie
 différente, à valider par une hypothèse écrite avant d'être codée — pas un
 réglage de celle-ci.
 
+### RÉEXAMEN AVEC LES DEUX JAMBES — 2026-08-14
+
+Les deux conditions posées ci-dessus ont été réunies : 500 titres disponibles,
+et vente à découvert vérifiée comme autorisée sur le compte. Score de momentum
+inchangé, déciles au lieu de quartiles — retour à la construction de
+Jegadeesh-Titman, le quartile n'ayant été qu'une concession à un univers de 14
+titres.
+
+| | écart long/short à 20 j | IC 95 % |
+|---|---|---|
+| 2020-2026 | **+0.53 %** | [+0.22 %, +0.82 %] ✅ |
+| 2010-2019 | **+0.42 %** | [+0.24 %, +0.60 %] ✅ |
+
+**C'est le premier résultat du projet qui se reproduit sur deux époques.** Le
+diagnostic était donc juste : l'échec venait bien de l'implémentation, pas de
+l'idée.
+
+Et pourtant il reste inexploitable, pour deux raisons que la moyenne cachait.
+
+**Le signal est dix fois plus petit que le bruit.**
+
+| | 2020-2026 | 2010-2019 |
+|---|---|---|
+| moyenne | +0.53 % | +0.42 % |
+| écart-type | **5.63 %** | **5.72 %** |
+| séances négatives | 42 % | 44 % |
+
+**La queue est catastrophique.** Pire fenêtre de 20 jours : **−31,4 %** sur la
+première période, **−34,5 %** sur la seconde. Une seule efface soixante séances
+de gain moyen. C'est le « krach de momentum », mode de défaillance documenté de
+cette stratégie — elle perd le plus violemment quand les perdants rebondissent
+brutalement.
+
+**Les coûts finissent le travail** : net de 40 bps d'aller-retour, il reste
++0,13 % et +0,02 % ; à 60 bps, les deux périodes deviennent négatives. Or un
+long/short en déciles rebalancé toutes les vingt séances a une rotation double,
+plus des frais d'emprunt sur la jambe vendeuse.
+
+**Verdict inchangé : reste retiré.** Mais la raison a changé, et c'est une
+information utile. L'agent n'est plus « faux » : il est **vrai et trop petit**.
+Un effet réel de 0,4 à 0,5 % par vingt séances, noyé dans 5,7 % d'écart-type et
+exposé à des pertes de 30 %, n'est pas exploitable à cette échelle.
+
+Ce qui pourrait changer cela, et rien d'autre : une exécution nettement moins
+chère, ou une couverture du risque de krach de momentum. Les deux sortent du
+périmètre actuel du fonds.
+
 ---
 
 ## 2. MeanReversionAgent — **CONSERVÉ, sous condition** (2026-08-13)

@@ -64,3 +64,7 @@ logs/universe_snapshot/*
 !logs/universe_snapshot/manifest.json
 logs/universe_oos_*/*
 !logs/universe_oos_*/manifest.json
+
+# Comptes EDGAR : volumineux, régénérables. Le manifeste documente la couverture.
+logs/fundamentals_snapshot/*
+!logs/fundamentals_snapshot/manifest.json
