@@ -44,7 +44,7 @@ warnings.filterwarnings("ignore")
 from src.data.market_data import normalize_ohlcv          # noqa: E402
 from src.data.universe import coverage_report, ever_members, sp500_at  # noqa: E402
 
-OUT = Path("logs/universe_snapshot")
+DEFAULT_OUT = Path("logs/universe_snapshot")
 CHUNK = 40          # yfinance devient instable au-delà
 PAUSE = 1.5         # entre lots, pour ne pas se faire limiter
 
@@ -52,13 +52,20 @@ PAUSE = 1.5         # entre lots, pour ne pas se faire limiter
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--start", default="2020-01-01")
+    ap.add_argument("--end", default=None,
+                    help="défaut : aujourd'hui")
+    # Destination séparée : la période de VALIDATION (2010-2019) ne doit pas
+    # se mélanger à celle de conception. Deux dossiers, deux manifestes, aucune
+    # confusion possible sur ce qui a servi à quoi.
+    ap.add_argument("--out", default=str(DEFAULT_OUT))
     ap.add_argument("--force", action="store_true",
                     help="retélécharge même ce qui existe déjà")
     args = ap.parse_args()
 
+    out = Path(args.out)
     start = date.fromisoformat(args.start)
-    today = date.today()
-    OUT.mkdir(parents=True, exist_ok=True)
+    today = date.fromisoformat(args.end) if args.end else date.today()
+    out.mkdir(parents=True, exist_ok=True)
 
     print(f"📚 Reconstitution de l'univers {start} → {today}")
     membres = sorted(ever_members(start, today, step_days=90))
@@ -70,7 +77,7 @@ def main() -> None:
     import yfinance as yf
 
     reste = [t for t in membres
-             if args.force or not (OUT / f"{t}.parquet").exists()]
+             if args.force or not (out / f"{t}.parquet").exists()]
     print(f"⬇️  {len(reste)} à télécharger "
           f"({len(membres) - len(reste)} déjà en cache)\n")
 
@@ -94,7 +101,7 @@ def main() -> None:
                 if len(df) < 60:      # trop court pour tout indicateur long
                     vides.append(t)
                     continue
-                df.to_parquet(OUT / f"{t}.parquet")
+                df.to_parquet(out / f"{t}.parquet")
                 obtenus.append(t)
             except Exception:
                 vides.append(t)
@@ -104,7 +111,7 @@ def main() -> None:
               f"sans données {len(vides):3d}")
         time.sleep(PAUSE)
 
-    disponibles = {p.stem for p in OUT.glob("*.parquet")}
+    disponibles = {p.stem for p in out.glob("*.parquet")}
     rapport = coverage_report(set(membres), disponibles)
 
     manifest = {
@@ -122,7 +129,7 @@ def main() -> None:
             "résultat obtenu sur cet univers."
         ),
     }
-    (OUT / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    (out / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
     print(f"\n{'='*66}")
     print(f"  univers réel            : {rapport['n_univers']}")
@@ -130,7 +137,7 @@ def main() -> None:
     print(f"  manquants               : {rapport['n_manquants']}")
     print(f"  COUVERTURE              : {rapport['couverture']:.1%}")
     print(f"{'='*66}")
-    print(f"\n✅ {OUT}/manifest.json")
+    print(f"\n✅ {out}/manifest.json")
 
 
 if __name__ == "__main__":

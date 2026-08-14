@@ -62,3 +62,5 @@ logs/universe_cache/
 # Le manifeste est versionné — c'est lui qui documente la couverture réelle.
 logs/universe_snapshot/*
 !logs/universe_snapshot/manifest.json
+logs/universe_oos_*/*
+!logs/universe_oos_*/manifest.json
