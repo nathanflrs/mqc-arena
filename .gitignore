@@ -68,3 +68,9 @@ logs/universe_oos_*/*
 # Comptes EDGAR : volumineux, régénérables. Le manifeste documente la couverture.
 logs/fundamentals_snapshot/*
 !logs/fundamentals_snapshot/manifest.json
+
+# Réglages d'éditeur : propres à une machine, jamais partagés.
+.vscode/
+
+# Documents de travail Apple (binaires, illisibles sur GitHub).
+*.pages

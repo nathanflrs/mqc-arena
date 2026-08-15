@@ -1,0 +1,69 @@
+2026-08-14 23:40:59,381 INFO     MSFT J-3 div=0.7500 edge=5.00 conf=0.80 special=False
+2026-08-14 23:40:59,383 INFO     MSFT J-3 div=0.7500 edge=5.00 conf=0.80 special=False
+2026-08-14 23:40:59,384 INFO     MSFT J-3 div=0.7500 edge=5.00 conf=0.80 special=False
+2026-08-14 23:40:59,385 INFO     MSFT J-3 div=0.7500 edge=5.00 conf=0.80 special=False
+2026-08-14 23:40:59,386 INFO     DIV_OPEN  MSFT entry=200.00 ex=2026-08-17 div=0.7500 shares=48.0
+2026-08-14 23:40:59,387 INFO     DIV_OPEN  MSFT entry=200.00 ex=2026-08-17 div=0.7500 shares=48.0
+2026-08-14 23:40:59,387 INFO     AAPL J-5 div=2.0000 edge=128.80 conf=0.79 special=False
+2026-08-14 23:40:59,388 INFO     AAPL J-5 div=0.0010 edge=-61.93 conf=0.49 special=False
+2026-08-14 23:40:59,388 INFO     AAPL HOLD — net_edge=-61.93 (carry=54.79 risk=294.27 costs=7.20)
+2026-08-14 23:40:59,388 INFO     AAPL J-7 div=2.0000 edge=128.80 conf=0.79 special=False
+2026-08-14 23:40:59,389 INFO     AAPL J-5 div=2.0000 edge=128.80 conf=0.79 special=False
+2026-08-14 23:40:59,389 INFO     AAPL J-2 div=2.0000 edge=128.80 conf=0.64 special=False
+2026-08-14 23:40:59,391 INFO     DIV_OPEN  AAPL entry=150.00 ex=2026-08-13 div=0.2500 shares=53.0
+2026-08-14 23:40:59,391 INFO     DIV_CLOSE AAPL exit=150.10 pnl=9.41 reason=J+1_EXIT
+2026-08-14 23:40:59,392 INFO     DIV_OPEN  AAPL entry=150.00 ex=2026-08-16 div=0.2500 shares=53.0
+2026-08-14 23:40:59,392 INFO     DIV_CLOSE AAPL exit=149.00 pnl=-48.87 reason=STOP_LOSS
+2026-08-14 23:40:59,392 INFO     DIV_OPEN  AAPL entry=150.00 ex=2026-08-16 div=0.2500 shares=53.0
+2026-08-14 23:40:59,392 INFO     DIV_CLOSE AAPL exit=150.50 pnl=30.60 reason=TAKE_PROFIT
+2026-08-14 23:40:59,394 INFO     DIV_OPEN  AAPL entry=150.00 ex=2026-06-25 div=0.2500 shares=53.0
+2026-08-14 23:41:00,141 INFO     AAPL J-5 div=0.0010 edge=-209.06 conf=0.59 special=False
+2026-08-14 23:41:00,141 INFO     AAPL HOLD — net_edge=-209.06 (carry=54.79 risk=294.27 costs=7.20)
+2026-08-14 23:41:00,151 INFO     DIV_OPEN  AAPL entry=150.00 ex=2026-08-13 div=0.2500 shares=53.3
+2026-08-14 23:41:00,152 INFO     DIV_CLOSE AAPL exit=150.10 pnl=9.46 reason=J+1_EXIT
+2026-08-15 16:38:12,123 INFO     MSFT J-3 div=0.7500 edge=5.00 conf=0.80 special=False
+2026-08-15 16:38:12,125 INFO     MSFT J-3 div=0.7500 edge=5.00 conf=0.80 special=False
+2026-08-15 16:38:12,126 INFO     MSFT J-3 div=0.7500 edge=5.00 conf=0.80 special=False
+2026-08-15 16:38:12,128 INFO     MSFT J-3 div=0.7500 edge=5.00 conf=0.80 special=False
+2026-08-15 16:38:12,129 INFO     DIV_OPEN  MSFT entry=200.00 ex=2026-08-18 div=0.7500 shares=48.0
+2026-08-15 16:38:12,129 INFO     DIV_OPEN  MSFT entry=200.00 ex=2026-08-18 div=0.7500 shares=48.0
+2026-08-15 16:38:12,130 INFO     AAPL J-5 div=2.0000 edge=128.80 conf=0.79 special=False
+2026-08-15 16:38:12,130 INFO     AAPL J-5 div=0.0010 edge=-61.93 conf=0.49 special=False
+2026-08-15 16:38:12,130 INFO     AAPL HOLD — net_edge=-61.93 (carry=54.79 risk=294.27 costs=7.20)
+2026-08-15 16:38:12,131 INFO     AAPL J-7 div=2.0000 edge=128.80 conf=0.79 special=False
+2026-08-15 16:38:12,132 INFO     AAPL J-5 div=2.0000 edge=128.80 conf=0.79 special=False
+2026-08-15 16:38:12,132 INFO     AAPL J-2 div=2.0000 edge=128.80 conf=0.64 special=False
+2026-08-15 16:38:12,134 INFO     DIV_OPEN  AAPL entry=150.00 ex=2026-08-14 div=0.2500 shares=53.0
+2026-08-15 16:38:12,134 INFO     DIV_CLOSE AAPL exit=150.10 pnl=9.41 reason=J+1_EXIT
+2026-08-15 16:38:12,134 INFO     DIV_OPEN  AAPL entry=150.00 ex=2026-08-17 div=0.2500 shares=53.0
+2026-08-15 16:38:12,135 INFO     DIV_CLOSE AAPL exit=149.00 pnl=-48.87 reason=STOP_LOSS
+2026-08-15 16:38:12,136 INFO     DIV_OPEN  AAPL entry=150.00 ex=2026-08-17 div=0.2500 shares=53.0
+2026-08-15 16:38:12,136 INFO     DIV_CLOSE AAPL exit=150.50 pnl=30.60 reason=TAKE_PROFIT
+2026-08-15 16:38:12,137 INFO     DIV_OPEN  AAPL entry=150.00 ex=2026-06-25 div=0.2500 shares=53.0
+2026-08-15 16:38:13,159 INFO     AAPL J-5 div=0.0010 edge=-209.06 conf=0.59 special=False
+2026-08-15 16:38:13,159 INFO     AAPL HOLD — net_edge=-209.06 (carry=54.79 risk=294.27 costs=7.20)
+2026-08-15 16:38:13,169 INFO     DIV_OPEN  AAPL entry=150.00 ex=2026-08-14 div=0.2500 shares=53.3
+2026-08-15 16:38:13,170 INFO     DIV_CLOSE AAPL exit=150.10 pnl=9.46 reason=J+1_EXIT
+2026-08-15 16:41:07,455 INFO     MSFT J-3 div=0.7500 edge=5.00 conf=0.80 special=False
+2026-08-15 16:41:07,457 INFO     MSFT J-3 div=0.7500 edge=5.00 conf=0.80 special=False
+2026-08-15 16:41:07,458 INFO     MSFT J-3 div=0.7500 edge=5.00 conf=0.80 special=False
+2026-08-15 16:41:07,460 INFO     MSFT J-3 div=0.7500 edge=5.00 conf=0.80 special=False
+2026-08-15 16:41:07,461 INFO     DIV_OPEN  MSFT entry=200.00 ex=2026-08-18 div=0.7500 shares=48.0
+2026-08-15 16:41:07,461 INFO     DIV_OPEN  MSFT entry=200.00 ex=2026-08-18 div=0.7500 shares=48.0
+2026-08-15 16:41:07,462 INFO     AAPL J-5 div=2.0000 edge=128.80 conf=0.79 special=False
+2026-08-15 16:41:07,462 INFO     AAPL J-5 div=0.0010 edge=-61.93 conf=0.49 special=False
+2026-08-15 16:41:07,462 INFO     AAPL HOLD — net_edge=-61.93 (carry=54.79 risk=294.27 costs=7.20)
+2026-08-15 16:41:07,463 INFO     AAPL J-7 div=2.0000 edge=128.80 conf=0.79 special=False
+2026-08-15 16:41:07,463 INFO     AAPL J-5 div=2.0000 edge=128.80 conf=0.79 special=False
+2026-08-15 16:41:07,464 INFO     AAPL J-2 div=2.0000 edge=128.80 conf=0.64 special=False
+2026-08-15 16:41:07,465 INFO     DIV_OPEN  AAPL entry=150.00 ex=2026-08-14 div=0.2500 shares=53.0
+2026-08-15 16:41:07,465 INFO     DIV_CLOSE AAPL exit=150.10 pnl=9.41 reason=J+1_EXIT
+2026-08-15 16:41:07,466 INFO     DIV_OPEN  AAPL entry=150.00 ex=2026-08-17 div=0.2500 shares=53.0
+2026-08-15 16:41:07,466 INFO     DIV_CLOSE AAPL exit=149.00 pnl=-48.87 reason=STOP_LOSS
+2026-08-15 16:41:07,467 INFO     DIV_OPEN  AAPL entry=150.00 ex=2026-08-17 div=0.2500 shares=53.0
+2026-08-15 16:41:07,467 INFO     DIV_CLOSE AAPL exit=150.50 pnl=30.60 reason=TAKE_PROFIT
+2026-08-15 16:41:07,468 INFO     DIV_OPEN  AAPL entry=150.00 ex=2026-06-25 div=0.2500 shares=53.0
+2026-08-15 16:41:08,204 INFO     AAPL J-5 div=0.0010 edge=-209.06 conf=0.59 special=False
+2026-08-15 16:41:08,205 INFO     AAPL HOLD — net_edge=-209.06 (carry=54.79 risk=294.27 costs=7.20)
+2026-08-15 16:41:08,214 INFO     DIV_OPEN  AAPL entry=150.00 ex=2026-08-14 div=0.2500 shares=53.3
+2026-08-15 16:41:08,215 INFO     DIV_CLOSE AAPL exit=150.10 pnl=9.46 reason=J+1_EXIT
