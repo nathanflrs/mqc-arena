@@ -422,6 +422,33 @@ class FactorRegression:
             )
             return _insufficient_result(agent_name, self.model, T, source)
 
+        # ── Série dégénérée : refuser plutôt que fabriquer un alpha ───────────
+        #
+        # Constaté le 2026-08-17 sur BuffettAgent : 854 « rendements
+        # quotidiens » ne portaient que 13 valeurs distinctes, parce que
+        # `_from_walkforward` remplit chaque jour d'une fenêtre avec le MÊME
+        # rendement implicite. La régression annonçait alors un alpha de
+        # +18.5 % annualisé, un t de 14.8, une p-value de 9×10⁻⁵⁰ et un
+        # Information Ratio de 21.4 — tous produits par une volatilité
+        # résiduelle de 0.885 % par an, contre 31 % pour AAPL seul.
+        #
+        # La cause est de fond : un rendement de période ne contient PAS
+        # l'information du chemin quotidien. Savoir qu'une stratégie a gagné
+        # 20 % en six mois ne dit pas si elle est montée en ligne droite ou
+        # passée par −40 %. Remplir les jours d'une constante invente le chemin
+        # le plus lisse possible, puis la régression mesure qu'il est lisse.
+        #
+        # Le nombre de valeurs distinctes est donc la borne haute de l'effectif
+        # réellement indépendant. On l'exige au même niveau que T.
+        n_distinct = int(combined["R_agent"].round(12).nunique())
+        if n_distinct < self.min_observations:
+            warnings.warn(
+                f"{agent_name}: {T} observations mais seulement {n_distinct} "
+                f"valeurs distinctes — série dégénérée, régression refusée.",
+                RuntimeWarning, stacklevel=2,
+            )
+            return _degenerate_result(agent_name, self.model, T, n_distinct, source)
+
         # Excess return of agent over Rf
         y = combined["R_agent"] - combined["RF"]
         X = sm.add_constant(combined[factor_cols])
@@ -569,6 +596,47 @@ def _insufficient_result(
         interpretation    = (
             f"DONNÉES INSUFFISANTES : {n} obs < {MIN_OBS_DEFAULT}. "
             "Verdict impossible, accumuler plus de track record."
+        ),
+    )
+
+
+def _degenerate_result(
+    agent_name: str, model: str, n: int, n_distinct: int, source: str
+) -> RegressionResult:
+    """
+    Verdict refusé : la série de rendements ne porte pas assez d'information
+    indépendante pour être régressée.
+
+    On renvoie des NaN plutôt qu'un zéro : un alpha nul serait une affirmation
+    (« cet agent n'a pas d'avantage »), alors qu'on ne sait rien du tout.
+    """
+    nan = float("nan")
+    return RegressionResult(
+        agent_name        = agent_name,
+        model             = model,
+        alpha_daily       = nan,
+        alpha_annualized  = nan,
+        alpha_tstat       = nan,
+        alpha_pvalue      = nan,
+        alpha_significant = False,
+        betas             = {},
+        beta_tstats       = {},
+        beta_pvalues      = {},
+        r_squared         = nan,
+        adj_r_squared     = nan,
+        n_observations    = n,
+        residual_vol_annual = nan,
+        information_ratio = nan,
+        source            = source,
+        insufficient_data = True,
+        interpretation    = (
+            f"VERDICT REFUSÉ — série dégénérée : {n} lignes pour seulement "
+            f"{n_distinct} valeurs distinctes. Les rendements de fenêtre "
+            f"walk-forward sont étalés en constantes sur chaque jour, ce qui "
+            f"écrase la volatilité et fabrique un alpha significatif à partir "
+            f"de rien. Un rendement de période ne contient pas le chemin "
+            f"quotidien : l'information n'existe pas. Il faut {MIN_OBS_DEFAULT} "
+            f"observations RÉELLEMENT distinctes — en pratique, du live."
         ),
     )
 

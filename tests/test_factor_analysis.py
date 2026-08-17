@@ -596,3 +596,88 @@ def test_residual_vol_and_ir_consistency():
     assert result.residual_vol_annual > 0
     # IR sign matches alpha sign
     assert (result.information_ratio >= 0) == (result.alpha_annualized >= 0)
+
+
+# ── Séries dégénérées ─────────────────────────────────────────────────────────
+
+class TestSerieDegeneree:
+    """
+    Régression du 2026-08-17, trouvée en expliquant le module à Nathan.
+
+    `_from_walkforward` convertit chaque rendement de fenêtre en un rendement
+    quotidien implicite, puis remplit TOUS les jours de la fenêtre avec cette
+    même valeur. Sur BuffettAgent : 854 « observations » pour 13 valeurs
+    distinctes, volatilité résiduelle de 0.885 % par an contre 31 % pour AAPL
+    seul, et un alpha annoncé à +18.5 % avec t = 14.8 et IR = 21.4.
+
+    Tout venait du dénominateur écrasé. Une régression ne peut pas extraire un
+    chemin quotidien d'un rendement de période : l'information n'existe pas.
+    """
+
+    def _facteurs(self, n=400, seed=0):
+        rng = np.random.default_rng(seed)
+        idx = pd.bdate_range("2023-01-02", periods=n)
+        return pd.DataFrame({
+            "Mkt-RF": rng.normal(0.0004, 0.011, n),
+            "SMB":    rng.normal(0.0, 0.005, n),
+            "HML":    rng.normal(0.0, 0.005, n),
+            "Mom":    rng.normal(0.0, 0.006, n),
+            "RF":     np.full(n, 0.04 / 252),
+        }, index=idx)
+
+    def test_un_escalier_est_refuse(self):
+        """Le cas réel : quelques constantes étalées sur des centaines de jours."""
+        f = self._facteurs()
+        # 12 fenêtres, chacune remplie d'une constante — comme le walk-forward.
+        bloc = len(f) // 12
+        valeurs = np.repeat(np.linspace(0.0005, 0.0015, 12), bloc)
+        serie = pd.Series(valeurs[:len(f)], index=f.index[:len(valeurs)],
+                          name="Escalier")
+
+        from src.analytics.factor_analysis import FactorRegression
+        res = FactorRegression(model="carhart").run(serie, f)
+        assert res.insufficient_data, "une série à 12 valeurs doit être refusée"
+        assert np.isnan(res.alpha_annualized), "aucun alpha ne doit être publié"
+        assert np.isnan(res.information_ratio)
+        assert "dégénérée" in res.interpretation
+
+    def test_un_alpha_nul_n_est_pas_affirme(self):
+        """
+        Refuser doit produire NaN, pas zéro. Un zéro serait l'affirmation
+        « cet agent n'a pas d'avantage », alors qu'on ne sait rien.
+        """
+        f = self._facteurs()
+        serie = pd.Series(0.001, index=f.index, name="Constante")
+        from src.analytics.factor_analysis import FactorRegression
+        res = FactorRegression(model="carhart").run(serie, f)
+        assert res.insufficient_data
+        assert not res.alpha_significant
+        assert np.isnan(res.alpha_daily) and np.isnan(res.alpha_tstat)
+
+    def test_une_vraie_serie_passe(self):
+        """Contrôle positif : sans lui, un module qui refuse tout passerait."""
+        f = self._facteurs()
+        rng = np.random.default_rng(7)
+        serie = pd.Series(rng.normal(0.0003, 0.009, len(f)),
+                          index=f.index, name="Réelle")
+        from src.analytics.factor_analysis import FactorRegression
+        res = FactorRegression(model="carhart").run(serie, f)
+        assert not res.insufficient_data
+        assert np.isfinite(res.alpha_annualized)
+
+    def test_le_walkforward_reel_est_bien_degenere(self):
+        """
+        Vérifie sur les données du dépôt, pas sur un cas fabriqué : la série
+        walk-forward de BuffettAgent doit être reconnue comme dégénérée.
+        """
+        from pathlib import Path
+        if not Path("logs/walkforward_results.csv").exists():
+            pytest.skip("walkforward_results.csv absent")
+        from src.analytics.factor_analysis import AgentReturnSeriesBuilder
+        s = AgentReturnSeriesBuilder().build_daily_returns(
+            "BuffettAgent", source="walkforward")
+        if s.empty:
+            pytest.skip("aucune série walk-forward pour BuffettAgent")
+        assert s.nunique() < 60, (
+            f"{len(s)} points pour {s.nunique()} valeurs distinctes — "
+            "si ce test échoue, le mode de construction a changé")
