@@ -72,3 +72,35 @@ def test_each_active_ticker_has_priority_agent(ticker):
     assert ticker in AGENT_PRIORITY, f"{ticker} manquant dans AGENT_PRIORITY"
     assert isinstance(AGENT_PRIORITY[ticker], str)
     assert len(AGENT_PRIORITY[ticker]) > 0
+
+
+def test_env_example_mirrors_config_defaults():
+    """
+    Le gabarit publié ne doit jamais contredire les défauts du code.
+
+    Écrit le 2026-08-15 après incident : le `.env.example` ajouté au dépôt
+    public annonçait un stop loss à 15 % contre 7 % dans `src/config.py`, un
+    plancher de cash à 20 % contre 30 %, et une taille d'ordre cinq fois trop
+    grande. Un gabarit qui desserre silencieusement une limite de risque est
+    pire que pas de gabarit du tout : il est copié tel quel, et personne ne
+    relit un fichier d'exemple.
+    """
+    import re
+    from pathlib import Path
+    import src.config as cfg
+
+    tpl = dict(re.findall(r"^([A-Z_]+)=(.*)$",
+                          Path(".env.example").read_text(), re.M))
+    numeriques = [
+        "RISK_MAX_NET_LONG_PCT", "RISK_MAX_SINGLE_POSITION_PCT",
+        "RISK_MIN_CASH_PCT", "STOP_LOSS_PCT", "MAX_LEVERAGE",
+        "MAX_ORDERS_PER_RUN", "MAX_NOTIONAL_PCT", "LIMIT_BUFFER_BPS",
+    ]
+    ecarts = []
+    for k in numeriques:
+        code = getattr(cfg, k, None)
+        if code is None or k not in tpl or tpl[k].strip() == "":
+            continue
+        if abs(float(tpl[k]) - float(code)) > 1e-9:
+            ecarts.append(f"{k} : gabarit {tpl[k]} ≠ code {code}")
+    assert not ecarts, "\n".join(ecarts)
