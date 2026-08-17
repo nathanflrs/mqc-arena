@@ -197,8 +197,12 @@ ib_insync · FastAPI · pywebpush · pytest · systemd
   historical replay is possible. They still make live decisions.
 - **Agent thresholds were tuned on the same data used to judge them.** Any edge
   measured in this repository is an upper bound, not a forecast.
-- **Portfolio construction ignores correlation.** Five megacaps bought on the
-  same day are one bet placed five times, and nothing in the system notices.
+- **The arena decides each symbol in isolation.** Ten agents vote per name with
+  no view of the rest of the book. A correlation guard downstream does block
+  buys above |r| = 0.70 — against open positions *and* against other buys
+  approved earlier in the same run — but that is a veto at the end of the
+  pipeline, not portfolio construction. Nothing chooses a set of positions
+  together.
 - **Large parts of the code were written with AI assistance.** The research
   direction, the decisions, and the verdicts are mine.
 
