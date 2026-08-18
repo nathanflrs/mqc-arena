@@ -502,7 +502,7 @@ def _send_post_execution_report(
 
 
 def _notify_phone(n_orders: int, n_rejected: int, netliq: float,
-                  regime: str, executed: bool) -> None:
+                  regime: str, executed: bool, broker_ok: bool = True) -> None:
     """
     Résumé de la séance poussé sur le téléphone.
 
@@ -515,7 +515,8 @@ def _notify_phone(n_orders: int, n_rejected: int, netliq: float,
     try:
         from src.notify.push import notify_run_complete
         r = notify_run_complete(n_orders=n_orders, n_rejected=n_rejected,
-                                netliq=netliq, regime=regime, executed=executed)
+                                netliq=netliq, regime=regime, executed=executed,
+                                broker_ok=broker_ok)
         if r.sent or r.failed or r.pruned:
             print(f"📱 Notification : {r.render()}")
     except Exception as exc:
@@ -1291,8 +1292,12 @@ def _run() -> None:
             except Exception:
                 pass
             print(f"🧯 {reason} → NO orders sent.")
+            # `ibkr_ok` remonte jusqu'à la notification : sans lui, une panne de
+            # courtier s'affichait « aucun ordre », mot pour mot ce qu'affiche
+            # une journée calme. Voir notify_run_complete.
             _notify_phone(len(plans), len(risk_report.rejected),
-                          snap.net_liquidation, regime, executed=False)
+                          snap.net_liquidation, regime, executed=False,
+                          broker_ok=ibkr_ok)
             return
 
         execute_plans_paper_ibkr(ib, snap, plans, plan_id)

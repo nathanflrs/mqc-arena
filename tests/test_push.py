@@ -225,3 +225,56 @@ class TestSending:
         assert "aucun ordre" in captured["title"].lower()
         assert "12" in captured["body"]
 
+
+
+class TestPanneCourtier:
+    """
+    Régression du 2026-08-18.
+
+    IB Gateway s'est déconnecté le samedi 2026-08-15 à 23h45 lors de son
+    redémarrage quotidien : « Unrecognized Username or Password ». Le fonds a
+    analysé, décidé et appliqué ses garde-fous dans le vide pendant trois jours.
+
+    La notification du lundi disait « Milan Capital — aucun ordre · Régime BULL
+    · 5 plan(s) écarté(s) par le risque » — c'est-à-dire exactement ce
+    qu'affiche une journée calme réussie. Une panne déguisée en fonctionnement
+    normal est pire que pas de notification du tout.
+    """
+
+    def _capture(self, monkeypatch):
+        envoyes = []
+        from src.notify import push as p
+        monkeypatch.setattr(p, "send_push",
+                            lambda t, b, **k: envoyes.append((t, b)) or p.PushResult(1, 0, 0))
+        return envoyes
+
+    def test_une_panne_de_courtier_ne_ressemble_pas_a_un_jour_calme(self, monkeypatch):
+        from src.notify.push import notify_run_complete
+        envoyes = self._capture(monkeypatch)
+
+        notify_run_complete(n_orders=0, n_rejected=5, netliq=1_000_000,
+                            regime="bull", executed=False, broker_ok=True)
+        notify_run_complete(n_orders=4, n_rejected=5, netliq=1_000_000,
+                            regime="bull", executed=False, broker_ok=False)
+
+        calme, panne = envoyes[0][0], envoyes[1][0]
+        assert calme != panne
+        assert "COURTIER INJOIGNABLE" in panne
+        assert "aucun ordre" in calme.lower()
+
+    def test_la_panne_dit_combien_de_decisions_sont_perdues(self, monkeypatch):
+        from src.notify.push import notify_run_complete
+        envoyes = self._capture(monkeypatch)
+        notify_run_complete(n_orders=7, n_rejected=2, netliq=1_000_000,
+                            regime="bull", executed=False, broker_ok=False)
+        assert "7" in envoyes[0][1], "le nombre de décisions perdues doit apparaître"
+
+    def test_le_comportement_normal_est_inchange(self, monkeypatch):
+        """broker_ok vaut True par défaut : aucun appel existant ne change."""
+        from src.notify.push import notify_run_complete
+        envoyes = self._capture(monkeypatch)
+        notify_run_complete(n_orders=3, n_rejected=1, netliq=1_021_514,
+                            regime="bull", executed=True)
+        titre, corps = envoyes[0]
+        assert "3 ordres envoyé" in titre and "COURTIER" not in titre
+        assert "1,021,514" in corps

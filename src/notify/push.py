@@ -259,6 +259,7 @@ def notify_run_complete(
     netliq: float,
     regime: str,
     executed: bool,
+    broker_ok: bool = True,
 ) -> PushResult:
     """
     Résumé d'un run, poussé sur le téléphone.
@@ -266,7 +267,33 @@ def notify_run_complete(
     Volontairement bref et sans détail de position : le message transite par
     l'infrastructure d'Apple ou de Google. Il dit qu'une décision a été prise et
     invite à ouvrir le dashboard, qui lui est authentifié.
+
+    `broker_ok=False` n'est pas une variante du message : c'est une panne
+    ------------------------------------------------------------------
+    Avant le 2026-08-18, cette fonction ne savait pas distinguer « le risque a
+    tout écarté » de « le courtier était injoignable ». Les deux produisaient
+    le même titre, « aucun ordre ».
+
+    IB Gateway s'est déconnecté le samedi 2026-08-15 à 23h45 — son
+    redémarrage quotidien obligatoire, suivi d'un « Unrecognized Username or
+    Password ». Le fonds a continué d'analyser, de décider et d'appliquer ses
+    garde-fous dans le vide pendant trois jours. La notification du lundi
+    annonçait « aucun ordre · 5 plan(s) écarté(s) par le risque », ce qui est
+    exactement ce qu'affiche une journée calme normale.
+
+    Une panne déguisée en fonctionnement normal est pire qu'une absence de
+    notification : elle fabrique une fausse confiance. Le titre doit donc être
+    impossible à confondre avec un run réussi.
     """
+    if not broker_ok:
+        return send_push(
+            "🔴 Milan Capital — COURTIER INJOIGNABLE",
+            (f"Aucun ordre n'a pu partir. {n_orders} décision(s) perdue(s). "
+             f"Le fonds tourne à vide tant que la passerelle IBKR n'est pas "
+             f"reconnectée."),
+            url="/", tag="run",
+        )
+
     if n_orders == 0:
         title = "Milan Capital — aucun ordre"
         body = f"Régime {regime.upper()} · {n_rejected} plan(s) écarté(s) par le risque"
