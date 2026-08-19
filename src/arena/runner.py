@@ -1226,7 +1226,19 @@ def _run() -> None:
 
         log_order_plan(plans, plan_id=plan_id)
 
-        if not ci_mode:
+        # Le track record est signé et chaîné : il fait foi. On n'y écrit donc
+        # QUE des séances adossées à un vrai portefeuille.
+        #
+        # Constaté le 2026-08-19 : la passerelle IBKR étant coupée depuis le
+        # samedi 15, les runs des 17 et 18 août ont écrit netliq=100 000 — la
+        # valeur du portefeuille FICTIF servant de repli hors ligne. Le track
+        # record affichait donc 1 021 514 $ puis 100 000 $, soit une chute de
+        # −90 % qui n'a jamais eu lieu, certifiée par la chaîne de hachage.
+        #
+        # Le raisonnement était déjà écrit vingt lignes plus haut pour le
+        # coupe-circuit (« the offline fallback would produce a spurious 90%+
+        # drawdown ») ; il n'avait simplement pas été appliqué ici.
+        if not ci_mode and ibkr_ok:
             try:
                 from src import track_record
                 digest = track_record.append_daily_entry(
@@ -1238,6 +1250,10 @@ def _run() -> None:
                 print(f"✅ Track record signed: {digest[:16]}…")
             except Exception as _tr_err:
                 print(f"⚠️  Track record: {_tr_err}")
+        elif not ci_mode:
+            print("⏭️  Track record non écrit — pas de portefeuille réel "
+                  "(courtier injoignable). Une séance sans broker n'est pas "
+                  "une séance.")
 
         if not plans:
             msg = f"Milan Capital — ORDER PLAN ready\nplan_id={plan_id}\nNo plans."
