@@ -1,0 +1,9 @@
+[Unit]
+Description=Milan Capital — chien de garde de la passerelle IBKR
+Documentation=file:/opt/milan/deploy/ibgateway-watchdog.sh
+
+[Service]
+Type=oneshot
+ExecStart=/opt/milan/deploy/ibgateway-watchdog.sh
+# Le script teste le port et redémarre ibgateway : il lui faut les droits.
+User=root

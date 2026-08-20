@@ -1,0 +1,13 @@
+[Unit]
+Description=Vérifie toutes les 10 min que la passerelle IBKR accepte des connexions
+
+[Timer]
+# Toutes les 10 minutes. La panne du 2026-08-15 a duré cinq jours faute de
+# vérification ; dix minutes bornent la prochaine à une séance au pire, et en
+# pratique à rien du tout puisque le run est à 13h35 UTC.
+OnBootSec=5min
+OnUnitActiveSec=10min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
