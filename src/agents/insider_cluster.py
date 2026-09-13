@@ -29,6 +29,9 @@ from src.agents.insider_buy import InsiderBuyConfig, evaluate_cluster
 from src.agents.universe_base import UniverseAgent
 from src.data.form4_feed import Form4Feed
 
+# Au-delà de 10 % de dépôts illisibles, l'agent se déclare en panne.
+MAX_UNREADABLE = 0.10
+
 
 class InsiderClusterAgent(UniverseAgent):
     name = "InsiderClusterAgent"
@@ -53,6 +56,14 @@ class InsiderClusterAgent(UniverseAgent):
         # dépôt tardif d'un achat ancien ne fait pas un signal frais.
         txns = [t for t in self._feed.purchases(cik_to_ticker, start, end)
                 if t.transaction_date >= start.isoformat()]
+
+        # Des dépôts illisibles en nombre rendent le résultat incomplet : une
+        # liste vide ne doit pas pouvoir passer pour un jour sans achat.
+        fetched = getattr(self._feed, "fetches", 0)
+        failed = getattr(self._feed, "failures", 0)
+        if failed > MAX_UNREADABLE * max(fetched, 1):
+            raise RuntimeError(f"{failed} dépôt(s) SEC illisible(s) sur {fetched} téléchargé(s) "
+                               "— résultat incomplet, pas un jour calme")
 
         by_ticker = defaultdict(list)
         for t in txns:

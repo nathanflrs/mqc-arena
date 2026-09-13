@@ -9,6 +9,9 @@ User=milan
 Group=milan
 WorkingDirectory=/opt/milan
 EnvironmentFile=/opt/milan/.env
+# Sans lui, Python retient sa sortie jusqu'à la fin : le journal resterait muet
+# pendant l'heure du premier passage, impossible de savoir où il en est.
+Environment=PYTHONUNBUFFERED=1
 
 # N'importe pas le courtier : aucun ordre ne peut partir de ce service.
 ExecStart=/opt/milan/.venv/bin/python -m src.market.observe

@@ -12,9 +12,8 @@ l'univers, et on ne télécharge que ceux-là.
 
 Ce que ça coûte
 ---------------
-- Premier passage : un mois de dépôts, soit quelques milliers de requêtes à
-  environ six par seconde (limite de la SEC : dix). Une dizaine de minutes,
-  une seule fois.
+- Premier passage : un mois de dépôts, soit environ 1 700 requêtes. Une
+  heure environ depuis l'Europe, une seule fois.
 - Ensuite, seuls les jours nouveaux sont lus. Un dépôt ne change jamais : son
   analyse est mise en cache pour toujours, sous son numéro d'enregistrement.
 
@@ -26,6 +25,16 @@ l'univers — Berkshire déclarant ses achats d'Occidental —, une ligne porte 
 CIK de Berkshire, et attribuer l'achat à Berkshire serait faux. Le CIK de
 l'émetteur est donc relu dans le document lui-même : une ligne qui ne lui
 correspond pas est écartée.
+
+EDGAR répond 403, pas 404, à un fichier absent
+----------------------------------------------
+Constaté le 2026-09-13 : l'index du Labor Day (7 septembre) et un nom de
+fichier inventé renvoient tous deux 403. La première version prenait ce 403
+pour un blocage et s'arrêtait au premier jour férié. Un 403 ne distingue donc
+pas « pas d'index ce jour-là » de « la SEC nous bloque ». La différence se
+voit dans la durée : un jour férié est isolé, un blocage touche tous les
+jours. Au-delà de MAX_MISSING_DAYS jours ouvrés consécutifs sans index, le
+flux lève une erreur plutôt que de rendre un résultat vide.
 """
 from __future__ import annotations
 
@@ -46,9 +55,16 @@ INDEX_URL = "https://www.sec.gov/Archives/edgar/daily-index/{y}/QTR{q}/form.{ymd
 ARCHIVE_URL = "https://www.sec.gov/Archives/{path}"
 CACHE_DIR = Path("logs/insider_cache/form4")
 
-# Un index absent peut être un jour férié… ou un index pas encore publié. On ne
-# fige donc un index vide qu'une fois ce délai passé.
-_EMPTY_INDEX_GRACE = timedelta(days=3)
+# Codes par lesquels EDGAR signale un fichier absent (voir plus haut).
+_MISSING_CODES = (403, 404)
+
+# Jours fériés boursiers : jamais plus de deux jours ouvrés de suite. Trois
+# jours consécutifs sans index, c'est un blocage ou une panne.
+MAX_MISSING_DAYS = 3
+
+# Un index récent peut simplement ne pas être encore publié : ces jours-là ne
+# comptent pas dans la détection de blocage.
+_SETTLED = timedelta(days=3)
 
 _ISSUER_CIK = re.compile(rb"<issuerCik>\s*0*(\d+)\s*</issuerCik>")
 _OPEN, _CLOSE = b"<ownershipDocument", b"</ownershipDocument>"
@@ -122,27 +138,28 @@ class Form4Feed:
         self._get = get
         self._dir = Path(cache_dir)
         self._today = today
-        self.failures = 0          # dépôts illisibles ce passage — à publier
+        self.fetches = 0           # dépôts téléchargés ce passage (hors cache)
+        self.failures = 0          # dont illisibles — à publier avec le résultat
 
-    def _index(self, day: date) -> List[IndexEntry]:
-        today = self._today or date.today()
+    def _index(self, day: date) -> Optional[List[IndexEntry]]:
+        """Les Form 4 du jour, ou None si EDGAR n'a pas d'index pour ce jour."""
         p = self._dir / "index" / f"{day:%Y%m%d}.json"
         if p.exists():
             return [IndexEntry(**e) for e in json.loads(p.read_text())]
 
         url = INDEX_URL.format(y=day.year, q=(day.month - 1) // 3 + 1, ymd=f"{day:%Y%m%d}")
         try:
-            entries = [e for e in parse_daily_index(self._get(url).decode("latin-1"))
-                       if e.form == "4"]
+            raw = self._get(url)
         except urllib.error.HTTPError as exc:
-            if exc.code != 404:
-                raise          # 403 = la SEC nous bloque : ça doit se voir
-            entries = []
-            if day > today - _EMPTY_INDEX_GRACE:
-                return entries  # peut-être pas encore publié : ne rien figer
+            if exc.code in _MISSING_CODES:
+                # Jamais figé : un index absent aujourd'hui peut n'être qu'en
+                # retard, et un blocage passager ne doit rien effacer pour toujours.
+                return None
+            raise
+        entries = [e for e in parse_daily_index(raw.decode("latin-1")) if e.form == "4"]
 
         # L'index du jour est encore incomplet : on ne le fige qu'une fois passé.
-        if day < today:
+        if day < (self._today or date.today()):
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(json.dumps([asdict(e) for e in entries]))
         return entries
@@ -154,6 +171,7 @@ class Form4Feed:
             d = json.loads(p.read_text())
             return d["issuer_cik"], [InsiderTransaction(**t) for t in d["transactions"]]
 
+        self.fetches += 1
         xml = extract_ownership_xml(self._get(ARCHIVE_URL.format(path=entry.path)))
         issuer: Optional[int] = None
         txns: List[InsiderTransaction] = []
@@ -177,10 +195,25 @@ class Form4Feed:
         Achats sur le marché par des dirigeants ou administrateurs (code P),
         déposés entre `start` et `end` inclus, pour les sociétés demandées.
         """
+        settled = (self._today or date.today()) - _SETTLED
         seen: set[str] = set()
         out: List[InsiderTransaction] = []
+        missing_run = 0
+
         for day in _business_days(start, end):
-            for e in self._index(day):
+            entries = self._index(day)
+            if entries is None:
+                if day <= settled:
+                    missing_run += 1
+                    if missing_run >= MAX_MISSING_DAYS:
+                        raise RuntimeError(
+                            f"EDGAR : aucun index pour {missing_run} jours ouvrés consécutifs "
+                            f"jusqu'au {day} — blocage probable (User-Agent, débit), "
+                            "pas des jours fériés")
+                continue
+            missing_run = 0
+
+            for e in entries:
                 ticker = cik_to_ticker.get(e.cik)
                 if ticker is None or e.accession in seen:
                     continue

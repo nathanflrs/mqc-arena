@@ -69,6 +69,30 @@ aussi des paires vraies. C'est un choix de conception (les paires trop rapides
 coûtent en frais), pas un défaut à corriger — mais il faut le savoir en lisant
 un nombre de paires validées.
 
+## Premier passage réel — 2026-09-13
+
+- **Collecte** : 503 membres sur 503, 67 s en local, aucune série rejetée.
+- **Paires** : 1 453 candidates examinées, **4 validées** — ACGL/CB et
+  ALL/TRV (assurance dommages), MSCI/NDAQ et MSCI/SPGI (indices et données
+  financières). Aucune assez écartée ce jour-là pour une proposition.
+- **Form 4** : le premier passage s'est arrêté au Labor Day (7 septembre).
+  EDGAR répond **403**, et non 404, à un fichier absent : le flux prenait un
+  jour férié pour un blocage. Corrigé — un jour sans index est ignoré, et un
+  vrai blocage se reconnaît à sa durée (trois jours ouvrés consécutifs sans
+  index) ou à plus de 10 % de dépôts illisibles. Dans les deux cas l'agent se
+  déclare en panne au lieu de rendre une liste vide, qui passerait pour un
+  mois sans achat.
+- **InsiderCluster, après correction** : 500 sociétés suivies, 2 111 Form 4
+  lus sur 22 jours ouvrés, aucun illisible. **20 achats sur le marché par des
+  dirigeants, dans 16 sociétés — et aucun groupe** (deux dirigeants distincts
+  à 100 000 $ ou plus). Premier enseignement : sur les grandes capitalisations,
+  l'événement que cherche l'agent est rare. La validation devra mesurer sa
+  fréquence réelle avant son rendement — la littérature trouve d'ailleurs cet
+  effet surtout dans les petites capitalisations.
+- **Isolation vérifiée en production** : pendant cette panne, l'agent des
+  paires a tourné normalement, et le service s'est marqué en échec au lieu
+  de sortir en silence.
+
 ## Changer de fournisseur de prix
 
 yfinance a été retenu « pour le moment ». Le jour où l'équipe paiera un

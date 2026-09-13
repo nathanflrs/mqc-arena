@@ -170,8 +170,14 @@ def _form4(issuer_cik, owner="Jane Doe", code="P", shares=1000, price=150.0) -> 
 
 
 class FakeSEC:
-    def __init__(self, indexes, filings):
+    """
+    EDGAR simulé. `missing_code=403` par défaut : c'est ce que répond la vraie
+    SEC à un fichier absent (constaté le 2026-09-13 sur le Labor Day).
+    """
+
+    def __init__(self, indexes, filings, missing_code=403, default_index=None):
         self.indexes, self.filings, self.calls = indexes, filings, []
+        self.missing_code, self.default_index = missing_code, default_index
 
     def __call__(self, url):
         self.calls.append(url)
@@ -179,11 +185,13 @@ class FakeSEC:
             day = url[-12:-4]
             if day in self.indexes:
                 return self.indexes[day].encode()
+            if self.default_index is not None:
+                return self.default_index.encode()
         else:
             for acc, raw in self.filings.items():
                 if url.endswith(f"{acc}.txt"):
                     return raw
-        raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
+        raise urllib.error.HTTPError(url, self.missing_code, "Forbidden", None, None)
 
 
 def test_index_quotidien_lu_par_la_droite():
@@ -218,10 +226,44 @@ def test_un_depot_n_est_telecharge_qu_une_fois(tmp_path):
 
 def test_index_absent_recent_n_est_pas_fige(tmp_path):
     # Un index manquant d'hier est peut-être seulement en retard de publication.
-    sec = FakeSEC({}, {})
+    sec = FakeSEC({}, {}, missing_code=404)
     feed = Form4Feed(get=sec, cache_dir=tmp_path, today=date(2026, 9, 12))
     assert feed.purchases({100: "ACME"}, AS_OF, AS_OF) == []
     assert not (tmp_path / "index" / "20260911.json").exists()
+
+
+def test_jour_ferie_en_403_n_arrete_pas_le_flux(tmp_path):
+    # Le bug du premier passage réel : le Labor Day (lundi 7) répond 403.
+    empty = _index()
+    sec = FakeSEC({"20260904": empty, "20260908": empty, "20260909": empty,
+                   "20260910": empty, "20260911": _index(LINE_ISSUER)}, {ACC: _form4(100)})
+    feed = Form4Feed(get=sec, cache_dir=tmp_path, today=date(2026, 9, 13))
+    txns = feed.purchases({100: "ACME"}, date(2026, 9, 4), AS_OF)
+    assert [t.ticker for t in txns] == ["ACME"]
+
+
+def test_un_vrai_blocage_leve_au_lieu_de_rendre_vide(tmp_path):
+    feed = Form4Feed(get=FakeSEC({}, {}), cache_dir=tmp_path, today=date(2026, 9, 13))
+    try:
+        feed.purchases({100: "ACME"}, date(2026, 8, 12), AS_OF)
+    except RuntimeError as exc:
+        assert "blocage" in str(exc)
+    else:
+        raise AssertionError("un blocage d'EDGAR est passé pour un mois sans achat")
+
+
+def test_depots_illisibles_font_echouer_l_agent(tmp_path):
+    # Index présents, mais chaque dépôt répond 403 : la liste vide qui en
+    # sortirait ne doit pas passer pour « aucun dirigeant n'a acheté ».
+    sec = FakeSEC({}, {}, default_index=_index(LINE_ISSUER))
+    v = _view({"ACME": _ohlcv(np.linspace(10, 20, 300))}, [("ACME", "Banks", 100)])
+    agent = InsiderClusterAgent(feed=Form4Feed(get=sec, cache_dir=tmp_path, today=date(2026, 9, 13)))
+    try:
+        agent.propose(v)
+    except RuntimeError as exc:
+        assert "illisible" in str(exc)
+    else:
+        raise AssertionError("des dépôts illisibles ont été confondus avec un jour calme")
 
 
 # ── Agents d'univers ──────────────────────────────────────────────────────────
