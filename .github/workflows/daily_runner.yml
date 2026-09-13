@@ -1,22 +1,28 @@
 name: Daily Runner
 
 on:
-  schedule:
-    # Le run quotidien de l'arène a été RETIRÉ d'ici le 2026-08-13 : il tourne
-    # désormais sur le serveur (milan-run.timer), seul à disposer du vrai
-    # portefeuille IBKR.
-    #
-    # Le laisser aurait produit deux historiques contradictoires dans les mêmes
-    # fichiers. Sans broker, le runner en CI reconstruit un portefeuille fictif
-    # de 100 000 $ vide à chaque exécution : ses décisions ne décrivent aucun
-    # compte réel, et mélangées à celles du serveur elles rendaient le track
-    # record inanalysable.
-    # Les trois planifications qui envoyaient sur Telegram — briefing matinal,
-    # tearsheet hebdomadaire, factsheet mensuelle — sont retirées le 2026-08-13.
-    # Le pilotage passe désormais par le dashboard et les notifications web, et
-    # le jeton du bot s'était retrouvé public dans l'historique Git le
-    # 2026-06-03. Les jobs restent déclenchables à la main.
-    - cron: '30 14 * * 1-5'   # Mon–Fri 14:30 UTC (10:30 ET — shadow mode)
+  # Plus aucune planification depuis le 2026-09-13. La dernière, le mode shadow
+  # d'EarningsSentiment (14:30 UTC en semaine), appelait un LLM payant chaque
+  # jour pour un agent retiré : invérifiable, impossible à rejouer, et dont
+  # la mise en observation avait été décidée dès le 2026-08-14. Verdict :
+  # docs/verdicts_agents.md. Tous les jobs restent déclenchables à la main.
+  #
+  # Historique des planifications retirées :
+  #
+  #   Le run quotidien de l'arène a été RETIRÉ d'ici le 2026-08-13 : il tourne
+  #   désormais sur le serveur (milan-run.timer), seul à disposer du vrai
+  #   portefeuille IBKR.
+  #
+  #   Le laisser aurait produit deux historiques contradictoires dans les mêmes
+  #   fichiers. Sans broker, le runner en CI reconstruit un portefeuille fictif
+  #   de 100 000 $ vide à chaque exécution : ses décisions ne décrivent aucun
+  #   compte réel, et mélangées à celles du serveur elles rendaient le track
+  #   record inanalysable.
+  #   Les trois planifications qui envoyaient sur Telegram — briefing matinal,
+  #   tearsheet hebdomadaire, factsheet mensuelle — sont retirées le 2026-08-13.
+  #   Le pilotage passe désormais par le dashboard et les notifications web, et
+  #   le jeton du bot s'était retrouvé public dans l'historique Git le
+  #   2026-06-03.
   workflow_dispatch:            # manual trigger from GitHub UI
 
 jobs:

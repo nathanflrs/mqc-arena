@@ -568,6 +568,80 @@ l'univers composé d'ETF américains.
 
 ---
 
-*Prochains verdicts prévus : la fusion
-Buffett/Citadel/TrendFollowing, Macro et Volatility, DividendArb et InsiderBuy,
-puis Pairs et EarningsSentiment.*
+## 4. Buffett, Citadel, TrendFollowing — **BÊTA DÉGUISÉ**, sortis de l'exécution (2026-09-13)
+
+### Ce qu'ils font réellement
+
+- **Buffett** achète les grandes valeurs proches de leur plus haut annuel, peu
+  volatiles, au-dessus de leur moyenne 200 jours. Aucune donnée fondamentale.
+- **Citadel** : tendance, momentum 3 mois, volume.
+- **TrendFollowing** : moyennes 20/50/200 jours alignées et ADX élevé.
+
+Trois noms, un même filtre de tendance.
+
+### Ce que dit la mesure
+
+`scripts/audit_beta_agents.py`, rejeu 2022-10 → 2026-06 sur les 11 titres :
+
+| Agent | bêta marché | alpha 4 facteurs (an) | alpha contre le panier des 11 (an) | achats aussi faits par Buffett |
+|---|---|---|---|---|
+| Buffett | 1,24 | +11,0 % [+1,2 ; +20,7] | **+1,3 % [−5,8 ; +8,3]** | — |
+| Citadel | 1,42 | +13,1 % [−13,6 ; +39,8] | **−1,1 % [−26,0 ; +23,8]** | 98 % |
+| TrendFollowing | 1,34 | +16,1 % [−5,3 ; +37,5] | **+2,0 % [−17,6 ; +21,6]** | 99 % |
+
+Le panier passif des 11 titres affiche lui-même **+14,1 % [+5,3 ; +22,8]**
+d'alpha 4 facteurs sur la période. L'« alpha » de Buffett est celui de sa
+liste de titres, choisie en connaissant la fin de l'histoire. Face au simple
+fait de la détenir, aucun des trois n'apporte quoi que ce soit de mesurable.
+
+En direct, du 13 août au 11 septembre, Buffett a piloté 66 % des décisions
+gagnantes. Le bêta du livre investi, mesuré sur les positions réelles du
+courtier, vaut 0,70 [0,10 ; 1,30] — vingt séances, trop peu pour trancher
+seul ; c'est le rejeu qui établit le diagnostic.
+
+### Verdict
+
+**Sortis de l'exécution** par le mode observation (commit b252d8b) : ils
+continuent d'émettre des signaux, qui servent de point de comparaison —
+« ce que l'ancien fonds aurait fait » — puis seront retirés du run quand le
+premier agent d'univers sera armé.
+
+---
+
+## 5. EarningsSentimentAgent — **RETIRÉ** (2026-09-13)
+
+**Ce qu'il fait** : un LLM lit cinq titres de presse par action et décide.
+
+**Pourquoi il part** : ses affirmations sont invérifiables et impossibles à
+rejouer — ni les titres de presse ni les réponses du modèle n'existent en
+historique daté. Il coûte un appel payant par titre et par jour.
+
+Sa mise en observation avait été décidée le 2026-08-14 et n'a jamais été
+faite : du 13 août au 11 septembre, il a piloté **24 % des décisions**
+gagnantes du fonds. Retiré de l'arène le 2026-09-13 ; le module reste dans le
+dépôt.
+
+---
+
+## Conditions de réarmement du fonds — fixées le 2026-09-13, avant tout résultat
+
+Le fonds ne retrade que lorsqu'un nouvel agent remplit **les trois** :
+
+1. **Validation hors échantillon, frais déduits**, selon un protocole écrit
+   avant le test.
+2. **Trois mois d'observation en direct cohérents avec le rejeu** — nombre
+   d'événements et sens des résultats. Un contrôle que la machine réelle fait
+   ce que le test supposait, pas une preuve statistique.
+3. **Chaîne d'exécution prête** : lecture des propositions d'univers,
+   dimensionnement, couverture du bêta, ventes à découvert.
+
+Le réarmement se fait **agent par agent**, par une liste d'agents autorisés,
+en commençant petit. Les agents historiques n'y figureront jamais.
+
+---
+
+*Prochains verdicts : Macro et Volatility (paris sur le marché par
+construction : le même signal pour tous les titres), DividendArb (désavantagé
+par la retenue à la source de 15 %) — aucun des trois n'a passé d'ordre en un
+mois. InsiderBuy et Pairs passent à l'univers entier
+(`docs/couche_marche.md`).*

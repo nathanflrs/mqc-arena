@@ -43,7 +43,6 @@ from src.agents.dividend_arbitrage_agent import (
 )
 from src.agents.pairs_trading import PairsTradingAgent
 from src.agents.volatility import VolatilityAgent
-from src.agents.earnings_sentiment import EarningsSentimentAgent
 # Conservé pour le replay historique — retiré de la production le
 # 2026-08-13 (ETF non tradables depuis l'UE). Voir docs/verdicts_agents.md.
 from src.agents.cta_trend_agent import CTATrendAgent, CTA_UNIVERSE  # noqa: F401
@@ -692,7 +691,11 @@ def _run() -> None:
             DividendArbitrageAgent(),
             PairsTradingAgent(),
             VolatilityAgent(),
-            EarningsSentimentAgent(),
+            # EarningsSentimentAgent retiré le 2026-09-13 : un LLM qui lit cinq
+            # titres de presse, invérifiable et impossible à rejouer, payé à
+            # chaque appel. Sa mise en observation, décidée le 2026-08-14,
+            # n'avait jamais été faite — il a piloté 24 % des décisions du
+            # 13 août au 11 septembre. Verdict : docs/verdicts_agents.md
             InsiderBuyAgent(),
             # CrossSectionalMomentumAgent retiré de l'arène le 2026-08-13.
             # Il pilotait 18 % des décisions sans avoir jamais démontré le
