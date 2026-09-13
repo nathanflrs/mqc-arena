@@ -68,6 +68,10 @@ AGENT_PRIORITY = {
 
 # ====== EXECUTION ======
 EXECUTION_ENABLED = os.getenv("EXECUTION_ENABLED", "false").lower() == "true"
+# Mode observation (2026-09-13) : les agents proposent, le fonds solde ses
+# positions et n'en ouvre aucune. Pas un verrou : les ventes de liquidation
+# partent tant qu'EXECUTION_ENABLED est armé.
+OBSERVATION_MODE = os.getenv("OBSERVATION_MODE", "false").lower() == "true"
 MAX_ORDERS_PER_RUN = int(os.getenv("MAX_ORDERS_PER_RUN", "1"))
 MAX_NOTIONAL_PCT = float(os.getenv("MAX_NOTIONAL_PCT", "0.02"))
 LIMIT_BUFFER_BPS = int(os.getenv("LIMIT_BUFFER_BPS", "10"))

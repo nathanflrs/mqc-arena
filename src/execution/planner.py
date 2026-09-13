@@ -173,6 +173,48 @@ def plan_from_signal(
     )
 
 
+def liquidation_plans(
+    positions: Dict[str, float],
+    prices: Dict[str, float],
+    reason: str = "OBSERVATION : liquidation",
+) -> List[OrderPlan]:
+    """
+    Plans qui ramènent chaque position à zéro — et rien d'autre.
+
+    Utilisé par le mode observation : les agents continuent de proposer, mais
+    le fonds ne détient plus rien. Une position longue est vendue, une position
+    courte rachetée. Ce sont des réductions de risque : la garde d'exécution ne
+    les plafonne ni ne les rationne, quel que soit MAX_ORDERS_PER_RUN.
+
+    Une position sans prix de référence est signalée et laissée en place plutôt
+    que liquidée à l'aveugle : le run suivant la retentera.
+    """
+    plans: List[OrderPlan] = []
+    for sym, qty in sorted(positions.items()):
+        qty = float(qty)
+        if abs(qty) < 1e-9:
+            continue
+        px = prices.get(sym)
+        if px is None or not px > 0:   # `not px > 0` écarte aussi NaN
+            logger.warning("liquidation_plans: %s sans prix de référence — position laissée en place", sym)
+            continue
+        delta = -qty
+        plans.append(OrderPlan(
+            symbol=sym,
+            action="SELL" if delta < 0 else "BUY",
+            target_weight=0.0,
+            last_price=float(px),
+            current_qty=qty,
+            target_qty=0.0,
+            delta_qty=delta,
+            est_notional=abs(delta) * float(px),
+            reason=reason,
+            confidence=1.0,
+            est_cost_usd=_compute_tx_cost(delta, px),
+        ))
+    return plans
+
+
 def cta_plan_from_signal(
     signal: AgentSignal,
     net_liquidation: float,
