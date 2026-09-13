@@ -407,6 +407,18 @@ class PairSelector:
                 if t not in self._price_cache:
                     self._price_cache[t] = _fetch_close(t, period)
 
+    def load_prices(self, closes: Dict[str, pd.Series]) -> None:
+        """
+        Injecte des clôtures déjà collectées (couche marché, 2026-09-13).
+        Un ticker chargé ainsi n'est jamais retéléchargé.
+        """
+        for t, s in closes.items():
+            self._price_cache[t] = pd.to_numeric(s, errors="coerce").dropna()
+
+    def validate(self, a: str, b: str) -> Optional[ValidatedPair]:
+        """Validation complète, seuils inchangés : la paire si elle est tradable, sinon None."""
+        return self._test_pair(a, b)
+
     # ── Internals ──────────────────────────────────────────────────────────────
 
     @staticmethod

@@ -83,9 +83,14 @@ log "Services systemd"
 install -m 644 "$APP_DIR/deploy/systemd/milan-dashboard.service" /etc/systemd/system/
 install -m 644 "$APP_DIR/deploy/systemd/milan-run.service"       /etc/systemd/system/
 install -m 644 "$APP_DIR/deploy/systemd/milan-run.timer"         /etc/systemd/system/
+install -m 644 "$APP_DIR/deploy/systemd/milan-market.service"    /etc/systemd/system/
+install -m 644 "$APP_DIR/deploy/systemd/milan-market.timer"      /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable milan-dashboard >/dev/null
-ok "dashboard activé ; le planificateur reste éteint (étape 5)"
+# La collecte nocturne n'importe pas le courtier : aucun ordre ne peut en
+# partir. Elle est donc armée dès l'installation, contrairement au run.
+systemctl enable --now milan-market.timer >/dev/null
+ok "dashboard et collecte nocturne activés ; le run de trading reste éteint (étape 5)"
 
 log "Caddy — HTTPS automatique"
 if ! command -v caddy &>/dev/null; then

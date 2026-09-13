@@ -1,0 +1,26 @@
+[Unit]
+Description=Milan Capital — collecte du S&P 500 et agents d'univers en observation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=milan
+Group=milan
+WorkingDirectory=/opt/milan
+EnvironmentFile=/opt/milan/.env
+
+# N'importe pas le courtier : aucun ordre ne peut partir de ce service.
+ExecStart=/opt/milan/.venv/bin/python -m src.market.observe
+
+# Le premier passage lit un mois de dépôts SEC (~1 700, environ une heure
+# depuis l'Europe) et valide ~1 450 paires. Les passages suivants ne lisent que
+# le jour nouveau : quelques minutes. Un passage interrompu reprend où il en
+# était, chaque dépôt lu étant mis en cache.
+TimeoutStartSec=7200
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/milan

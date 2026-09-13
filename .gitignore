@@ -63,6 +63,10 @@ logs/universe_cache/
 logs/universe_snapshot/*
 !logs/universe_snapshot/manifest.json
 logs/universe_oos_*/*
+# Couche marché (2026-09-13) : données régénérées chaque nuit sur le serveur.
+logs/market/
+logs/insider_cache/
+logs/universe_proposals.csv
 !logs/universe_oos_*/manifest.json
 
 # Comptes EDGAR : volumineux, régénérables. Le manifeste documente la couverture.

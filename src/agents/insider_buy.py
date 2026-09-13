@@ -83,54 +83,69 @@ class InsiderBuyAgent(BaseAgent):
             logger.warning("InsiderBuyAgent: fetch failed for %s — %s", state.symbol, exc)
             transactions = []
 
-        # Filter: officer or director, open-market purchase ≥ min amount
-        qualifying: List[InsiderTransaction] = [
-            t for t in transactions
-            if (t.is_officer or t.is_director)
-            and t.total_value >= cfg.min_purchase_amount
-            and t.transaction_code == "P"
-        ]
+        return evaluate_cluster(self.name, state.symbol, transactions, cfg, regime)
 
-        distinct_insiders = len({t.reporter_name for t in qualifying})
-        total_amount      = sum(t.total_value for t in qualifying)
-        latest_date       = max((t.transaction_date for t in qualifying), default="")
 
-        meta = {
-            "regime":           regime,
-            "n_qualifying":     len(qualifying),
-            "distinct_insiders": distinct_insiders,
-            "total_amount":     round(total_amount, 0),
-            "lookback_days":    cfg.lookback_days,
-            "latest_purchase":  latest_date,
-        }
+def evaluate_cluster(
+    agent_name: str,
+    symbol: str,
+    transactions: List[InsiderTransaction],
+    cfg: InsiderBuyConfig,
+    regime: Optional[str] = None,
+) -> AgentSignal:
+    """
+    La règle d'InsiderBuy, isolée le 2026-09-13 pour être appliquée telle
+    quelle à tout l'univers (InsiderClusterAgent). Aucun seuil ne change en
+    passant de 11 titres à 500 : seul le terrain de pêche s'élargit.
+    """
+    # Filter: officer or director, open-market purchase ≥ min amount
+    qualifying: List[InsiderTransaction] = [
+        t for t in transactions
+        if (t.is_officer or t.is_director)
+        and t.total_value >= cfg.min_purchase_amount
+        and t.transaction_code == "P"
+    ]
 
-        if distinct_insiders >= cfg.min_distinct_insiders:
-            extras = distinct_insiders - cfg.min_distinct_insiders
-            conf   = min(cfg.max_confidence,
-                         cfg.base_confidence + extras * cfg.confidence_per_extra)
-            return AgentSignal(
-                agent_name=self.name,
-                symbol=state.symbol,
-                action="BUY",
-                confidence=round(conf, 3),
-                target_weight=cfg.target_weight,
-                reason=(
-                    f"InsiderBuy: {distinct_insiders} insiders, "
-                    f"${total_amount:,.0f} in {cfg.lookback_days}d "
-                    f"(latest {latest_date})"
-                ),
-                meta=meta,
-            )
+    distinct_insiders = len({t.reporter_name for t in qualifying})
+    total_amount      = sum(t.total_value for t in qualifying)
+    latest_date       = max((t.transaction_date for t in qualifying), default="")
 
+    meta = {
+        "regime":           regime,
+        "n_qualifying":     len(qualifying),
+        "distinct_insiders": distinct_insiders,
+        "total_amount":     round(total_amount, 0),
+        "lookback_days":    cfg.lookback_days,
+        "latest_purchase":  latest_date,
+    }
+
+    if distinct_insiders >= cfg.min_distinct_insiders:
+        extras = distinct_insiders - cfg.min_distinct_insiders
+        conf   = min(cfg.max_confidence,
+                     cfg.base_confidence + extras * cfg.confidence_per_extra)
         return AgentSignal(
-            agent_name=self.name,
-            symbol=state.symbol,
-            action="HOLD",
-            confidence=0.0,
-            target_weight=0.0,
+            agent_name=agent_name,
+            symbol=symbol,
+            action="BUY",
+            confidence=round(conf, 3),
+            target_weight=cfg.target_weight,
             reason=(
-                f"InsiderBuy: {distinct_insiders}/{cfg.min_distinct_insiders} insiders "
-                f"(${total_amount:,.0f}) — threshold not met"
+                f"InsiderBuy: {distinct_insiders} insiders, "
+                f"${total_amount:,.0f} in {cfg.lookback_days}d "
+                f"(latest {latest_date})"
             ),
             meta=meta,
         )
+
+    return AgentSignal(
+        agent_name=agent_name,
+        symbol=symbol,
+        action="HOLD",
+        confidence=0.0,
+        target_weight=0.0,
+        reason=(
+            f"InsiderBuy: {distinct_insiders}/{cfg.min_distinct_insiders} insiders "
+            f"(${total_amount:,.0f}) — threshold not met"
+        ),
+        meta=meta,
+    )

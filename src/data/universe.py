@@ -43,10 +43,10 @@ import io
 import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 import pandas as pd
 import requests
@@ -109,7 +109,8 @@ def _revision_at(as_of: date) -> tuple[int, str]:
     return int(rev["revid"]), str(rev["timestamp"])
 
 
-def _tickers_from_revision(revid: int) -> List[str]:
+def _revision_table(revid: int) -> pd.DataFrame:
+    """La table des constituants telle qu'affichée dans la révision `revid`."""
     time.sleep(_RATE_SLEEP)
     r = requests.get(f"https://en.wikipedia.org/w/index.php?oldid={revid}",
                      headers=_HEADERS, timeout=30)
@@ -117,13 +118,25 @@ def _tickers_from_revision(revid: int) -> List[str]:
     tables = pd.read_html(io.StringIO(r.text))
     if not tables:
         raise ValueError(f"aucune table dans la révision {revid}")
-    t = tables[0]
-    col = "Symbol" if "Symbol" in t.columns else ("Ticker symbol"
-          if "Ticker symbol" in t.columns else t.columns[0])
-    # Wikipédia écrit BRK.B ; les fournisseurs de prix attendent BRK-B.
-    out = sorted({str(x).strip().replace(".", "-") for x in t[col]
-                  if isinstance(x, str) or not pd.isna(x)})
-    return [s for s in out if s and s.isascii() and len(s) <= 6]
+    return tables[0]
+
+
+def _symbol_column(t: pd.DataFrame) -> str:
+    return "Symbol" if "Symbol" in t.columns else ("Ticker symbol"
+           if "Ticker symbol" in t.columns else t.columns[0])
+
+
+def _normalize_symbol(x) -> Optional[str]:
+    """Wikipédia écrit BRK.B ; les fournisseurs de prix attendent BRK-B."""
+    if not isinstance(x, str) and pd.isna(x):
+        return None
+    s = str(x).strip().replace(".", "-")
+    return s if s and s.isascii() and len(s) <= 6 else None
+
+
+def _tickers_from_revision(revid: int) -> List[str]:
+    t = _revision_table(revid)
+    return sorted({s for s in map(_normalize_symbol, t[_symbol_column(t)]) if s})
 
 
 def sp500_at(as_of: date, use_cache: bool = True) -> UniverseSnapshot:
@@ -154,6 +167,74 @@ def sp500_at(as_of: date, use_cache: bool = True) -> UniverseSnapshot:
     except Exception as exc:
         logger.warning("cache univers non écrit : %s", exc)
     return snap
+
+
+@dataclass(frozen=True)
+class Constituent:
+    """
+    Un membre de l'indice, avec ce qu'il faut pour le comparer à ses pairs
+    (sous-industrie GICS) et le retrouver à la SEC (CIK).
+    """
+    ticker: str
+    sector: str
+    sub_industry: str
+    cik: Optional[int]
+
+
+def constituents_at(
+    as_of: date, use_cache: bool = True,
+) -> Tuple[UniverseSnapshot, List[Constituent]]:
+    """
+    Composition de l'indice à `as_of`, avec secteur, sous-industrie et CIK.
+
+    Même source et même cache immuable que `sp500_at()`. Les révisions
+    anciennes n'ont pas toujours la colonne CIK : elle vaut alors None.
+    """
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    p = CACHE_DIR / f"sp500_meta_{as_of.isoformat()}.json"
+    if use_cache and p.exists():
+        try:
+            d = json.loads(p.read_text())
+            members = [Constituent(**c) for c in d["members"]]
+            return UniverseSnapshot(
+                as_of=date.fromisoformat(d["as_of"]),
+                tickers=[c.ticker for c in members],
+                revision_id=d["revision_id"], revision_date=d["revision_date"],
+            ), members
+        except Exception:
+            logger.warning("cache univers illisible : %s", p)
+
+    revid, ts = _revision_at(as_of)
+    t = _revision_table(revid)
+    col = _symbol_column(t)
+
+    def _text(row, name: str) -> str:
+        v = row.get(name)
+        return "" if v is None or (not isinstance(v, str) and pd.isna(v)) else str(v).strip()
+
+    by_ticker: Dict[str, Constituent] = {}
+    for _, row in t.iterrows():
+        sym = _normalize_symbol(row[col])
+        if not sym:
+            continue
+        try:
+            cik = int(row.get("CIK"))
+        except (TypeError, ValueError):
+            cik = None
+        by_ticker[sym] = Constituent(sym, _text(row, "GICS Sector"),
+                                     _text(row, "GICS Sub-Industry"), cik)
+
+    members = [by_ticker[s] for s in sorted(by_ticker)]
+    snap = UniverseSnapshot(as_of=as_of, tickers=[c.ticker for c in members],
+                            revision_id=revid, revision_date=ts)
+    try:
+        p.write_text(json.dumps({
+            "as_of": as_of.isoformat(), "revision_id": revid, "revision_date": ts,
+            "members": [asdict(c) for c in members],
+        }, indent=2))
+    except Exception as exc:
+        logger.warning("cache univers non écrit : %s", exc)
+    return snap, members
 
 
 def ever_members(start: date, end: date, step_days: int = 90) -> Set[str]:

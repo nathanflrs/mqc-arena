@@ -1,0 +1,14 @@
+[Unit]
+Description=Milan Capital — déclenche la collecte nocturne du marché
+
+[Timer]
+# 18:30 à New York, du lundi au vendredi : deux heures et demie après la
+# clôture, le temps que les prix du jour soient définitifs chez le fournisseur.
+# Zone explicite pour la même raison que milan-run.timer : les États-Unis et
+# l'Europe ne changent pas d'heure aux mêmes dates.
+OnCalendar=Mon-Fri 18:30 America/New_York
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target
